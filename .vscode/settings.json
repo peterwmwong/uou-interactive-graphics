@@ -12,7 +12,7 @@
     ],
     "triggerTaskOnSave.tasks": {
         "compile-and-emit-shader-asm": [
-            "shader_src/*",
+            "proj-*/shader_src/*",
         ]
     },
     "git.autoRepositoryDetection": false

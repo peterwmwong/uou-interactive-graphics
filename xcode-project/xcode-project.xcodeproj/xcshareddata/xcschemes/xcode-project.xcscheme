@@ -43,7 +43,7 @@
       allowLocationSimulation = "YES">
       <PathRunnable
          runnableDebuggingMode = "0"
-         FilePath = "/Users/pwong/projects/uou-interactive-graphics/target/debug/uou-interactive-graphics">
+         FilePath = "/Users/pwong/projects/uou-interactive-graphics/target/debug/app_launched_by_xcode">
       </PathRunnable>
    </LaunchAction>
    <ProfileAction
@@ -52,6 +52,10 @@
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
       debugDocumentVersioning = "YES">
+      <PathRunnable
+         runnableDebuggingMode = "0"
+         FilePath = "/Users/pwong/projects/uou-interactive-graphics/target/release/app_launched_by_xcode">
+      </PathRunnable>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
