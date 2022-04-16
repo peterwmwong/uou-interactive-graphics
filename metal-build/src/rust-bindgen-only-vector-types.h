@@ -1,5 +1,5 @@
 // Rust Bindgen Workaround: Polyfill Vector Types
-
+#ifndef __METAL_VERSION__
 #ifndef rust_bindgen_only_vector_types_h
 #define rust_bindgen_only_vector_types_h
 
@@ -71,4 +71,5 @@ typedef struct alignas(4) packed_float4
     float w;
 } packed_float4;
 
-#endif
+#endif // rust_bindgen_only_vector_types_h
+#endif //__METAL_VERSION__

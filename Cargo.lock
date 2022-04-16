@@ -312,6 +312,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "metal-build"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "half",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -365,12 +373,12 @@ dependencies = [
 name = "proj-1-hello-world"
 version = "0.1.0"
 dependencies = [
- "bindgen",
  "cocoa",
  "core-graphics",
  "core-graphics-types",
  "half",
  "metal",
+ "metal-build",
  "objc",
 ]
 

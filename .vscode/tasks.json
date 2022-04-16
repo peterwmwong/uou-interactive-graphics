@@ -45,7 +45,7 @@
             "problemMatcher": [
                 "$gcc"
             ],
-            "command": "xcrun -sdk macosx metal -std=macos-metal2.4 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${file} && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
+            "command": "xcrun -sdk macosx metal -std=macos-metal2.4 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
         },
         {
             "label": "build-release-asm",
@@ -75,5 +75,17 @@
             "command": "touch /tmp/void-renderer-BEFORE.s && touch /tmp/void-renderer-AFTER.s && /usr/local/bin/code-insiders --diff /tmp/void-renderer-BEFORE.s /tmp/void-renderer-AFTER.s",
             "problemMatcher": []
         },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-1-hello-world"
+            ],
+            "label": "Run proj-1-hello-world"
+        }
     ]
 }
