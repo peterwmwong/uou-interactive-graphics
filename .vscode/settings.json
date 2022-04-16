@@ -12,7 +12,7 @@
     ],
     "triggerTaskOnSave.tasks": {
         "compile-and-emit-shader-asm": [
-            "*.metal",
+            "shader_src/*",
         ]
     },
     "git.autoRepositoryDetection": false
