@@ -40,9 +40,8 @@ impl ApplicationManager {
     fn init_and_attach_view(self: &mut Box<Self>, nswindow: *mut Object) {
         use cocoa::appkit::NSView;
         unsafe {
-            let superclass = class!(NSView);
             let mut decl = unwrap_option_dcheck(
-                ClassDecl::new("CustomNSView", superclass),
+                ClassDecl::new("CustomNSView", class!(NSView)),
                 "Unable to create custom NSView (CustomNSView)",
             );
 
@@ -125,7 +124,6 @@ impl ApplicationManager {
     fn init_window_event_handlers(self: &mut Box<Self>, nswindow: *mut Object) {
         let manager_ptr: *mut ApplicationManager = &mut **self;
 
-        #[allow(non_snake_case)]
         extern "C" fn on_nswindow_resize(this: &Object, _: Sel, notification: *mut Object) {
             let NSSize { width, height } = unsafe {
                 // "Discussion: You can retrieve the window object in question by sending object to notification."
@@ -161,7 +159,7 @@ impl ApplicationManager {
 }
 
 pub fn launch_application() {
-    let (app, _component_manager) = autoreleasepool(|| unsafe {
+    autoreleasepool(|| unsafe {
         let app = NSApp();
         app.setActivationPolicy_(
             NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular,
@@ -190,30 +188,29 @@ pub fn launch_application() {
             });
             menubar
         });
-
-        let window = NSWindow::alloc(nil)
-            .initWithContentRect_styleMask_backing_defer_(
-                // NSRect::new(NSPoint::new(0., 0.), NSSize::new(2560.0, 1024.0)),
-                NSRect::new(NSPoint::new(0., 0.), NSSize::new(640.0, 640.0)),
-                // TODO: Consider rendering a custom title or no title bar at all
-                //       To maintain resizability...
-                //       - use NSWindowStyleMask::NSResizableWindowMask | NSWindowStyleMask::NSFullSizeContentViewWindowMask,
-                //       - window.canBecomeKeyWindow();
-                //       - window.canBecomeMainWindow();
-                NSWindowStyleMask::NSTitledWindowMask | NSWindowStyleMask::NSResizableWindowMask,
-                NSBackingStoreBuffered,
-                YES,
-            )
-            .autorelease();
-        window.setAcceptsMouseMovedEvents_(YES);
-        window.setPreservesContentDuringLiveResize_(false);
-        window.setTitle_(NSString::alloc(nil).init_str(APP_NAME).autorelease());
-        window.makeKeyAndOrderFront_(nil);
-
-        (app, ApplicationManager::from_nswindow(window))
-    });
-    unsafe {
+        let _app_manager = ApplicationManager::from_nswindow({
+            let window = NSWindow::alloc(nil)
+                .initWithContentRect_styleMask_backing_defer_(
+                    NSRect::new(NSPoint::new(0., 0.), NSSize::new(640.0, 640.0)),
+                    // TODO: Consider rendering a custom title or no title bar at all
+                    //       To maintain resizability...
+                    //       - use NSWindowStyleMask::NSResizableWindowMask | NSWindowStyleMask::NSFullSizeContentViewWindowMask,
+                    //       - window.canBecomeKeyWindow();
+                    //       - window.canBecomeMainWindow();
+                    NSWindowStyleMask::NSClosableWindowMask
+                        | NSWindowStyleMask::NSTitledWindowMask
+                        | NSWindowStyleMask::NSResizableWindowMask,
+                    NSBackingStoreBuffered,
+                    YES,
+                )
+                .autorelease();
+            window.setAcceptsMouseMovedEvents_(YES);
+            window.setPreservesContentDuringLiveResize_(false);
+            window.setTitle_(NSString::alloc(nil).init_str(APP_NAME).autorelease());
+            window.makeKeyAndOrderFront_(nil);
+            window
+        });
         app.activateIgnoringOtherApps_(true);
         app.run();
-    }
+    });
 }
