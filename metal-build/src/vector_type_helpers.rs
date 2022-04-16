@@ -5,9 +5,9 @@ include!(concat!(
 // APPEND THE FOLLOWING TO `shader_bindings.rs`
 
 /**************************************************************************************************
-Helper methods and trait implementations make it easier to write and read vector types from Metal.
-Below is source included from `metal-build/src/vector_type_helpers.rs`.
-**************************************************************************************************/
+ Helper methods and trait implementations make it easier to write and read vector types from Metal.
+ See `metal-build/src/vector_type_helpers.rs`.
+***************************************************************************************************/
 use half::f16;
 use std::simd::Simd;
 
