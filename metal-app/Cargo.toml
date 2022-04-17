@@ -9,6 +9,8 @@ edition = "2021"
 cocoa = "0.24"
 core-graphics = "0.22.3"
 core-graphics-types = "0.1.1"
+dispatch = "0.2.0"
+display-link = "0.2.0"
 half = "1.8.2"
 metal = { git = "https://github.com/gfx-rs/metal-rs.git", rev = "39c63ab25b16a4f0c2f793dc0ae1ee9298172748" }
 

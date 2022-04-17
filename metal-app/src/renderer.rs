@@ -27,7 +27,8 @@ pub(crate) struct MetalRenderer<R: RendererDelgate> {
 }
 
 impl<R: RendererDelgate> MetalRenderer<R> {
-    pub fn new(backing_scale_factor: Unit) -> MetalRenderer<R> {
+    #[inline]
+    pub(crate) fn new(backing_scale_factor: Unit) -> MetalRenderer<R> {
         let device = unwrap_option_dcheck(Device::system_default(), "No device found");
         let command_queue = device.new_command_queue();
         let layer = MetalLayer::new();
@@ -45,16 +46,22 @@ impl<R: RendererDelgate> MetalRenderer<R> {
         }
     }
 
-    pub(crate) fn render(&mut self, size: Size) {
+    #[inline]
+    pub(crate) fn update_size(&mut self, size: Size) {
+        let size = size * Simd::splat(self.backing_scale_factor);
+        if self.screen_size != size {
+            self.screen_size = size;
+            self.layer
+                .set_drawable_size(CGSize::new(size[0] as CGFloat, size[1] as CGFloat));
+        }
+    }
+
+    #[inline]
+    pub(crate) fn render(&mut self) {
         autoreleasepool(|| {
-            let size = size * Simd::splat(self.backing_scale_factor);
-            if self.screen_size != size {
-                self.screen_size = size;
-                self.layer
-                    .set_drawable_size(CGSize::new(size[0] as CGFloat, size[1] as CGFloat));
-            }
             if let Some(drawable) = self.layer.next_drawable() {
-                self.delegate.draw(&self.command_queue, drawable, size);
+                self.delegate
+                    .draw(&self.command_queue, drawable, self.screen_size);
             };
         });
     }

@@ -2,19 +2,20 @@
 mod shader_bindings;
 use crate::shader_bindings::AttachmentIndex_AttachmentIndexColor;
 use metal_app::{
-    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, RendererDelgate,
-    Size, Unit,
+    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, RendererDelgate, Size,
 };
+use std::time::Instant;
 
 struct Delegate {
-    clear_color_red: Unit,
+    now: Instant,
     render_pipeline_state: RenderPipelineState,
 }
 
 impl RendererDelgate for Delegate {
+    #[inline]
     fn new(device: metal_app::metal::Device) -> Self {
         Self {
-            clear_color_red: 0.0,
+            now: Instant::now(),
             render_pipeline_state: {
                 let library = unwrap_result_dcheck(
                     device.new_library_with_data(include_bytes!(concat!(
@@ -74,6 +75,7 @@ impl RendererDelgate for Delegate {
         }
     }
 
+    #[inline]
     fn draw(
         &mut self,
         command_queue: &CommandQueue,
@@ -83,9 +85,6 @@ impl RendererDelgate for Delegate {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
-            let clear_color: MTLClearColor =
-                MTLClearColor::new(self.clear_color_red.cos() as _, 0.0, 0.0, 0.0);
-            self.clear_color_red += 0.05;
             let desc = RenderPassDescriptor::new();
             let attachment = unwrap_option_dcheck(
                 desc.color_attachments().object_at(0),
@@ -93,7 +92,16 @@ impl RendererDelgate for Delegate {
             );
             attachment.set_texture(Some(drawable.texture()));
             attachment.set_load_action(MTLLoadAction::Clear);
-            attachment.set_clear_color(clear_color);
+            attachment.set_clear_color(MTLClearColor::new(
+                0.0,
+                {
+                    (self.now.elapsed().as_secs_f32() * std::f32::consts::PI / 4.0)
+                        .cos()
+                        .abs() as f64
+                },
+                0.0,
+                0.0,
+            ));
             attachment.set_store_action(MTLStoreAction::Store);
             desc
         });

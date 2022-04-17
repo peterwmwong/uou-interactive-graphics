@@ -12,29 +12,43 @@ use cocoa::{
     base::{id, nil, selector},
     foundation::{NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString},
 };
+use dispatch::Queue;
+use display_link::DisplayLink;
 use objc::{
     declare::ClassDecl,
     rc::autoreleasepool,
     runtime::{Object, Sel, BOOL, YES},
 };
-use std::ffi::c_void;
+use std::{
+    ffi::c_void,
+    sync::{Arc, Mutex},
+};
 
 const APP_NAME: &str = "UOU Interactive Graphics";
 
-pub struct ApplicationManager<R: RendererDelgate> {
+pub struct ApplicationManager<R: RendererDelgate + 'static> {
     renderer: MetalRenderer<R>,
 }
 
-impl<R: RendererDelgate> ApplicationManager<R> {
+unsafe impl<R: RendererDelgate + 'static> Send for ApplicationManager<R> {}
+
+impl<R: RendererDelgate + 'static> ApplicationManager<R> {
     // Important: Call within `autoreleasepool()`.
-    pub fn from_nswindow(nswindow: *mut Object) -> Box<Self> {
+    pub fn from_nswindow(nswindow: *mut Object) -> DisplayLink {
         let nswindow = debug_assert_objc_class(nswindow, &"NSWindow");
         let mut manager = Box::new(Self {
             renderer: MetalRenderer::new(unsafe { nswindow.backingScaleFactor() as Unit }),
         });
         manager.init_window_event_handlers(nswindow);
         manager.init_and_attach_view(nswindow);
-        manager
+
+        let manager = Arc::new(Mutex::new(manager));
+        let main_queue = Queue::main();
+        DisplayLink::new(move |_| {
+            let manager = Arc::clone(&manager);
+            main_queue.exec_async(move || manager.lock().unwrap().renderer.render());
+        })
+        .expect("Could not create Display Link")
     }
 
     fn init_and_attach_view(self: &mut Box<Self>, nswindow: *mut Object) {
@@ -49,7 +63,7 @@ impl<R: RendererDelgate> ApplicationManager<R> {
                 YES
             }
 
-            extern "C" fn on_mouse_moved<R: RendererDelgate>(
+            extern "C" fn on_mouse_moved<R: RendererDelgate + 'static>(
                 this: &Object,
                 _: Sel,
                 event: *mut Object,
@@ -128,7 +142,7 @@ impl<R: RendererDelgate> ApplicationManager<R> {
     fn init_window_event_handlers(self: &mut Box<Self>, nswindow: *mut Object) {
         let manager_ptr: *mut ApplicationManager<R> = &mut **self;
 
-        extern "C" fn on_nswindow_resize<R: RendererDelgate>(
+        extern "C" fn on_nswindow_resize<R: RendererDelgate + 'static>(
             this: &Object,
             _: Sel,
             notification: *mut Object,
@@ -149,7 +163,7 @@ impl<R: RendererDelgate> ApplicationManager<R> {
             };
             manager
                 .renderer
-                .render(Size::from_array([width as Unit, height as Unit]));
+                .update_size(Size::from_array([width as Unit, height as Unit]));
         }
 
         unsafe {
@@ -166,7 +180,7 @@ impl<R: RendererDelgate> ApplicationManager<R> {
     }
 }
 
-pub fn launch_application<R: RendererDelgate>() {
+pub fn launch_application<R: RendererDelgate + 'static>() {
     autoreleasepool(|| unsafe {
         let app = NSApp();
         app.setActivationPolicy_(
@@ -196,7 +210,7 @@ pub fn launch_application<R: RendererDelgate>() {
             });
             menubar
         });
-        let _app_manager = ApplicationManager::<R>::from_nswindow({
+        let mut link = ApplicationManager::<R>::from_nswindow({
             let window = NSWindow::alloc(nil)
                 .initWithContentRect_styleMask_backing_defer_(
                     NSRect::new(NSPoint::new(0., 0.), NSSize::new(640.0, 640.0)),
@@ -219,6 +233,7 @@ pub fn launch_application<R: RendererDelgate>() {
             window
         });
         app.activateIgnoringOtherApps_(true);
+        link.resume().expect("Could not start Display Link");
         app.run();
     });
 }
