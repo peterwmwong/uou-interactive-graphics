@@ -8,4 +8,3 @@ metal-build = { path = "../metal-build" }
 
 [dependencies]
 metal-app = { path = "../metal-app" }
-half = "1.8.2"

@@ -328,7 +328,7 @@ name = "metal-build"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "half",
+ "metal-app",
 ]
 
 [[package]]
@@ -385,7 +385,14 @@ dependencies = [
 name = "proj-1-hello-world"
 version = "0.1.0"
 dependencies = [
- "half",
+ "metal-app",
+ "metal-build",
+]
+
+[[package]]
+name = "proj-2-transformations"
+version = "0.1.0"
+dependencies = [
  "metal-app",
  "metal-build",
 ]

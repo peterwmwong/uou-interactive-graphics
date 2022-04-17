@@ -2,16 +2,19 @@
 mod shader_bindings;
 use crate::shader_bindings::AttachmentIndex_AttachmentIndexColor;
 use metal_app::{
-    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, RendererDelgate, Size,
+    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, RendererDelgate,
+    Size, Unit,
 };
 
 struct Delegate {
+    clear_color_red: Unit,
     render_pipeline_state: RenderPipelineState,
 }
 
 impl RendererDelgate for Delegate {
     fn new(device: metal_app::metal::Device) -> Self {
         Self {
+            clear_color_red: 0.0,
             render_pipeline_state: {
                 let library = unwrap_result_dcheck(
                     device.new_library_with_data(include_bytes!(concat!(
@@ -80,7 +83,9 @@ impl RendererDelgate for Delegate {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
-            let clear_color: MTLClearColor = MTLClearColor::new(0.0, 0.0, 0.0, 0.0);
+            let clear_color: MTLClearColor =
+                MTLClearColor::new(self.clear_color_red.cos() as _, 0.0, 0.0, 0.0);
+            self.clear_color_red += 0.05;
             let desc = RenderPassDescriptor::new();
             let attachment = unwrap_option_dcheck(
                 desc.color_attachments().object_at(0),

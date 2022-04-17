@@ -8,7 +8,7 @@ include!(concat!(
  Helper methods and trait implementations make it easier to write and read vector types from Metal.
  See `metal-build/src/vector_type_helpers.rs`.
 ***************************************************************************************************/
-use half::f16;
+use metal_app::half::f16;
 use std::simd::Simd;
 
 impl From<Simd<f32, 2>> for packed_half2 {
