@@ -3,8 +3,8 @@
 set -e
 
 case "$1" in
-  YES) BUILD_PROFILE="release" ;;
-  NO) BUILD_PROFILE="dev" ;;
+  Release) BUILD_PROFILE="release" ;;
+  Debug) BUILD_PROFILE="dev" ;;
   *) BUILD_PROFILE="unknown" ;;
 esac
 
