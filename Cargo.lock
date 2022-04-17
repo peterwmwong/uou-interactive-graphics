@@ -312,6 +312,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "metal-app"
+version = "0.1.0"
+dependencies = [
+ "cocoa",
+ "core-graphics",
+ "core-graphics-types",
+ "half",
+ "metal",
+ "objc",
+]
+
+[[package]]
 name = "metal-build"
 version = "0.1.0"
 dependencies = [
@@ -373,13 +385,9 @@ dependencies = [
 name = "proj-1-hello-world"
 version = "0.1.0"
 dependencies = [
- "cocoa",
- "core-graphics",
- "core-graphics-types",
  "half",
- "metal",
+ "metal-app",
  "metal-build",
- "objc",
 ]
 
 [[package]]

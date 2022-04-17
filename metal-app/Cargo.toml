@@ -1,0 +1,17 @@
+[package]
+name = "metal-app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cocoa = "0.24"
+core-graphics = "0.22.3"
+core-graphics-types = "0.1.1"
+half = "1.8.2"
+metal = { git = "https://github.com/gfx-rs/metal-rs.git", rev = "39c63ab25b16a4f0c2f793dc0ae1ee9298172748" }
+
+[dependencies.objc]
+version = "0.2.7"
+features = ["objc_exception"]

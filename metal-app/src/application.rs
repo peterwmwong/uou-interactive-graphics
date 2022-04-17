@@ -1,6 +1,6 @@
 use crate::{
     objc_helpers::debug_assert_objc_class,
-    renderer::{MetalRenderer, Size, Unit},
+    renderer::{MetalRenderer, RendererDelgate, Size, Unit},
     unwrap_helpers::unwrap_option_dcheck,
 };
 use cocoa::{
@@ -21,11 +21,11 @@ use std::ffi::c_void;
 
 const APP_NAME: &str = "UOU Interactive Graphics";
 
-pub struct ApplicationManager {
-    renderer: MetalRenderer,
+pub struct ApplicationManager<R: RendererDelgate> {
+    renderer: MetalRenderer<R>,
 }
 
-impl ApplicationManager {
+impl<R: RendererDelgate> ApplicationManager<R> {
     // Important: Call within `autoreleasepool()`.
     pub fn from_nswindow(nswindow: *mut Object) -> Box<Self> {
         let nswindow = debug_assert_objc_class(nswindow, &"NSWindow");
@@ -49,7 +49,11 @@ impl ApplicationManager {
                 YES
             }
 
-            extern "C" fn on_mouse_moved(this: &Object, _: Sel, event: *mut Object) {
+            extern "C" fn on_mouse_moved<R: RendererDelgate>(
+                this: &Object,
+                _: Sel,
+                event: *mut Object,
+            ) {
                 debug_assert_objc_class(event, "NSEvent");
                 // We have to do this to have access to the `NSView` trait...
                 let view: id = this as *const _ as *mut _;
@@ -97,7 +101,7 @@ impl ApplicationManager {
                 };
                 let _manager = unsafe {
                     &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
-                        as *mut ApplicationManager)
+                        as *mut ApplicationManager<R>)
                 };
             }
             decl.add_method(
@@ -106,13 +110,13 @@ impl ApplicationManager {
             );
             decl.add_method(
                 sel!(mouseMoved:),
-                on_mouse_moved as extern "C" fn(&Object, Sel, id),
+                on_mouse_moved::<R> as extern "C" fn(&Object, Sel, id),
             );
             decl.add_ivar::<*mut c_void>(&"applicationManager");
             let viewclass = decl.register();
             let view: id = msg_send![viewclass, alloc];
             let () = msg_send![view, init];
-            let self_ptr: *mut ApplicationManager = &mut **self;
+            let self_ptr: *mut ApplicationManager<R> = &mut **self;
             (&mut *view).set_ivar::<*mut c_void>("applicationManager", self_ptr as *mut c_void);
             view.setWantsLayer(YES);
             view.setLayer(std::mem::transmute(self.renderer.layer.as_ref()));
@@ -122,9 +126,13 @@ impl ApplicationManager {
     }
 
     fn init_window_event_handlers(self: &mut Box<Self>, nswindow: *mut Object) {
-        let manager_ptr: *mut ApplicationManager = &mut **self;
+        let manager_ptr: *mut ApplicationManager<R> = &mut **self;
 
-        extern "C" fn on_nswindow_resize(this: &Object, _: Sel, notification: *mut Object) {
+        extern "C" fn on_nswindow_resize<R: RendererDelgate>(
+            this: &Object,
+            _: Sel,
+            notification: *mut Object,
+        ) {
             let NSSize { width, height } = unsafe {
                 // "Discussion: You can retrieve the window object in question by sending object to notification."
                 //   - https://developer.apple.com/documentation/appkit/nswindowdelegate/1419567-windowdidresize?language=objc
@@ -137,7 +145,7 @@ impl ApplicationManager {
             };
             let manager = unsafe {
                 &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
-                    as *mut ApplicationManager)
+                    as *mut ApplicationManager<R>)
             };
             manager
                 .renderer
@@ -151,14 +159,14 @@ impl ApplicationManager {
                 // Instance Variables (Retrieved using `this.get_ivar()`)
                 applicationManager: *mut c_void = manager_ptr as *mut c_void,
                 // Callback Functions
-                (windowDidResize:) => on_nswindow_resize as extern fn(&Object, Sel, *mut Object),
-                (windowDidBecomeMain:) => on_nswindow_resize as extern fn(&Object, Sel, *mut Object)
+                (windowDidResize:) => on_nswindow_resize::<R> as extern fn(&Object, Sel, *mut Object),
+                (windowDidBecomeMain:) => on_nswindow_resize::<R> as extern fn(&Object, Sel, *mut Object)
             }));
         }
     }
 }
 
-pub fn launch_application() {
+pub fn launch_application<R: RendererDelgate>() {
     autoreleasepool(|| unsafe {
         let app = NSApp();
         app.setActivationPolicy_(
@@ -188,7 +196,7 @@ pub fn launch_application() {
             });
             menubar
         });
-        let _app_manager = ApplicationManager::from_nswindow({
+        let _app_manager = ApplicationManager::<R>::from_nswindow({
             let window = NSWindow::alloc(nil)
                 .initWithContentRect_styleMask_backing_defer_(
                     NSRect::new(NSPoint::new(0., 0.), NSSize::new(640.0, 640.0)),

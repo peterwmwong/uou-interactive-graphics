@@ -1,5 +1,5 @@
-use proj_1_hello_world::application::launch_application;
+use proj_1_hello_world::run;
 
 fn main() {
-    launch_application();
+    run();
 }
