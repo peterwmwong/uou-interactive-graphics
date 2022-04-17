@@ -20,11 +20,9 @@ use objc::{
     runtime::{Object, Sel, BOOL, YES},
 };
 use std::{
-    ffi::c_void,
+    os::raw::c_void,
     sync::{Arc, Mutex},
 };
-
-const APP_NAME: &str = "UOU Interactive Graphics";
 
 pub struct ApplicationManager<R: RendererDelgate + 'static> {
     renderer: MetalRenderer<R>,
@@ -118,6 +116,18 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         as *mut ApplicationManager<R>)
                 };
             }
+            extern "C" fn on_key_down<R: RendererDelgate + 'static>(
+                _: &Object,
+                _: Sel,
+                event: *mut Object,
+            ) {
+                unsafe {
+                    /* Escape Key */
+                    if NSEvent::keyCode(event) == 53 {
+                        let () = msg_send![NSApp(), terminate: nil];
+                    }
+                }
+            }
             decl.add_method(
                 sel!(acceptsFirstResponder),
                 accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL,
@@ -125,6 +135,10 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
             decl.add_method(
                 sel!(mouseMoved:),
                 on_mouse_moved::<R> as extern "C" fn(&Object, Sel, id),
+            );
+            decl.add_method(
+                sel!(keyDown:),
+                on_key_down::<R> as extern "C" fn(&Object, Sel, id),
             );
             decl.add_ivar::<*mut c_void>(&"applicationManager");
             let viewclass = decl.register();
@@ -180,7 +194,7 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
     }
 }
 
-pub fn launch_application<R: RendererDelgate + 'static>() {
+pub fn launch_application<R: RendererDelgate + 'static>(app_name: &'static str) {
     autoreleasepool(|| unsafe {
         let app = NSApp();
         app.setActivationPolicy_(
@@ -198,7 +212,7 @@ pub fn launch_application<R: RendererDelgate + 'static>() {
                     NSMenuItem::alloc(nil)
                         .initWithTitle_action_keyEquivalent_(
                             NSString::alloc(nil)
-                                .init_str(&format!("Quit {APP_NAME}"))
+                                .init_str(&format!("Quit {app_name}"))
                                 .autorelease(),
                             selector("terminate:"),
                             NSString::alloc(nil).init_str("q").autorelease(),
@@ -228,7 +242,7 @@ pub fn launch_application<R: RendererDelgate + 'static>() {
                 .autorelease();
             window.setAcceptsMouseMovedEvents_(YES);
             window.setPreservesContentDuringLiveResize_(false);
-            window.setTitle_(NSString::alloc(nil).init_str(APP_NAME).autorelease());
+            window.setTitle_(NSString::alloc(nil).init_str(app_name).autorelease());
             window.makeKeyAndOrderFront_(nil);
             window
         });
