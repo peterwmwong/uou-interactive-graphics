@@ -5,37 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in library 'void-renderer'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=void-renderer",
-                ],
-                "filter": {
-                    "name": "void-renderer",
-                    "kind": "lib"
-                }
-            },
-            "args": [
-                // "layout::tests::hbox::single_child::expanded"
-            ],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Debug 'void-renderer'",
+            "name": "Debug 'proj-2-transformations'",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "build",
-                    "--package=void-renderer",
+                    "--package=proj-2-transformations",
                 ],
                 "filter": {
-                    "name": "void-renderer",
+                    "name": "proj-2-transformations",
                     "kind": "bin"
                 }
             },

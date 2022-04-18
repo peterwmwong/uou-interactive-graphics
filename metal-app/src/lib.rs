@@ -14,6 +14,7 @@ mod unwrap_helpers;
 pub use application::launch_application;
 pub use half;
 pub use metal;
+pub use metal_helpers::*;
 pub use objc_helpers::*;
 pub use renderer::*;
 pub use unwrap_helpers::*;

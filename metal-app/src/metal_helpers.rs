@@ -1,9 +1,8 @@
 use metal::*;
 use std::ffi::c_void;
 
-#[allow(dead_code)]
 #[inline]
-pub(crate) fn allocate_new_buffer(
+pub fn allocate_new_buffer(
     device: &DeviceRef,
     label: &'static str,
     bytes: usize,
