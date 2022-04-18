@@ -7,3 +7,8 @@
 
 - Look at Apple Developer Sample Code projects on how a scheme's executable is referenced in a non-absolute path way
     - Currently `/Users/pwong` shows for Run and Profile schemes.
+
+# tasks.json
+
+- Could saving a metal file, auto restart a running application (based on the crate directory)?
+    - Would make fiddling shaders alot faster, but maybe it's not any faster than doing it in xcode shader debugger?
