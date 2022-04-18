@@ -12,7 +12,7 @@ esac
 
 [ $BUILD_PROFILE == "release" ] && TARGET_DIR="release" || TARGET_DIR="debug"
 
-rm target/$TARGET_DIR/app_launched_by_xcode
+rm -f target/$TARGET_DIR/app_launched_by_xcode
 cp target/$TARGET_DIR/$2 target/$TARGET_DIR/app_launched_by_xcode
 
 rm -f /tmp/tmp.entitlements
