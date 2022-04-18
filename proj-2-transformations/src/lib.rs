@@ -1,24 +1,25 @@
 #![feature(portable_simd)]
+#![feature(slice_as_chunks)]
 mod shader_bindings;
-use std::{os::raw::c_void, path::PathBuf};
+use std::{os::raw::c_void, path::PathBuf, time::Instant};
 
 use crate::shader_bindings::VertexBufferIndex_VertexBufferIndexPositions;
 use metal_app::{
     allocate_new_buffer, launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck,
     RendererDelgate, Size,
 };
-use shader_bindings::VertexBufferIndex_VertexBufferIndexMaxPositionValue;
+use shader_bindings::{
+    packed_float4, VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+    VertexBufferIndex_VertexBufferIndexTime,
+};
 use tobj::LoadOptions;
 
 struct Delegate {
     num_vertices: usize,
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // - Instead of doing a basic normalization (divide by max), this should be Projection View Matrix (to Canonicalized View)
-    max_position_value: f32,
+    mins_maxs: [packed_float4; 2],
     vertex_buffer_positions: Buffer,
     render_pipeline_state: RenderPipelineState,
+    now: Instant,
 }
 
 impl RendererDelgate for Delegate {
@@ -44,10 +45,19 @@ impl RendererDelgate for Delegate {
             r#"`mesh.positions` should contain triples (3D position)"#
         );
 
-        let &max_position_value = positions
-            .iter()
-            .reduce(|a, b| if a > b { a } else { b })
-            .unwrap();
+        let mins_maxs = {
+            let (positions3, ..) = positions.as_chunks::<3>();
+            let mut mins = (f32::MAX, f32::MAX, f32::MAX);
+            let mut maxs = (f32::MIN, f32::MIN, f32::MIN);
+            for &[x, y, z] in positions3 {
+                mins = (mins.0.min(x), mins.1.min(y), mins.2.min(z));
+                maxs = (maxs.0.max(x), maxs.1.max(y), maxs.2.max(z));
+            }
+            [
+                packed_float4::new(mins.0, mins.1, mins.2, 1.0),
+                packed_float4::new(maxs.0, maxs.1, maxs.2, 1.0),
+            ]
+        };
 
         let (contents, vertex_buffer_positions) = allocate_new_buffer(
             &device,
@@ -62,7 +72,7 @@ impl RendererDelgate for Delegate {
             );
         }
         Self {
-            max_position_value,
+            mins_maxs,
             num_vertices: positions.len() / 3,
             vertex_buffer_positions,
             render_pipeline_state: {
@@ -126,6 +136,7 @@ impl RendererDelgate for Delegate {
                     "Failed to create render pipeline",
                 )
             },
+            now: Instant::now(),
         }
     }
 
@@ -151,10 +162,10 @@ impl RendererDelgate for Delegate {
             desc
         });
         {
-            let max_value_ptr: *const f32 = &self.max_position_value;
+            let max_value_ptr: *const [packed_float4; 2] = &self.mins_maxs;
             encoder.set_vertex_bytes(
                 VertexBufferIndex_VertexBufferIndexMaxPositionValue as _,
-                std::mem::size_of::<f32>() as _,
+                std::mem::size_of::<[packed_float4; 2]>() as _,
                 max_value_ptr as *const c_void,
             );
         }
@@ -163,6 +174,14 @@ impl RendererDelgate for Delegate {
             Some(&self.vertex_buffer_positions),
             0,
         );
+        {
+            let time: *const f32 = &self.now.elapsed().as_secs_f32();
+            encoder.set_vertex_bytes(
+                VertexBufferIndex_VertexBufferIndexTime as _,
+                std::mem::size_of::<f32>() as _,
+                time as *const c_void,
+            );
+        }
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.draw_primitives_instanced(MTLPrimitiveType::Point, 0, 1, self.num_vertices as _);
         encoder.end_encoding();

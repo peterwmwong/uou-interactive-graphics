@@ -7,7 +7,8 @@
 enum VertexBufferIndex
 {
     VertexBufferIndexMaxPositionValue = 0,
-    VertexBufferIndexPositions
+    VertexBufferIndexPositions,
+    VertexBufferIndexTime
 };
 
 #endif

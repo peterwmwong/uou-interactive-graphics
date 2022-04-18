@@ -227,7 +227,7 @@ pub fn launch_application<R: RendererDelgate + 'static>(app_name: &'static str) 
         let mut link = ApplicationManager::<R>::from_nswindow({
             let window = NSWindow::alloc(nil)
                 .initWithContentRect_styleMask_backing_defer_(
-                    NSRect::new(NSPoint::new(0., 0.), NSSize::new(640.0, 640.0)),
+                    NSRect::new(NSPoint::new(0., 0.), NSSize::new(512.0, 512.0)),
                     // TODO: Consider rendering a custom title or no title bar at all
                     //       To maintain resizability...
                     //       - use NSWindowStyleMask::NSResizableWindowMask | NSWindowStyleMask::NSFullSizeContentViewWindowMask,

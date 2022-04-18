@@ -394,6 +394,7 @@ fn bindgen_test_layout_packed_float4() {
 }
 pub const VertexBufferIndex_VertexBufferIndexMaxPositionValue: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 1;
+pub const VertexBufferIndex_VertexBufferIndexTime: VertexBufferIndex = 2;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************
