@@ -42,8 +42,7 @@ main_vertex(         uint           vertex_id   [[instance_id]],
         {0, 0, 0, 1}
     );
     const float    PI              = 3.1415926535897932384626433832795;
-    const float    a_deg           = time_s * 180.0;
-    const float    a               = PI * (a_deg / 180.0);
+    const float    a               = time_s * ((PI * /* speed */ 8.0) / 180.0);
     const float4x4 rotate_matrix   = float4x4_row_major(
         {1,       0,      0, 0},
         {0,  cos(a), sin(a), 0},
@@ -55,21 +54,20 @@ main_vertex(         uint           vertex_id   [[instance_id]],
 
     // Place the teapot into world space infront of the camera (assumed to be (0,0,0)).
     const float    distance_from_camera_to_screen = 10.0;
-    const float    distance_from_camera           = bounding_radius + distance_from_camera_to_screen;
     const float4x4 view_matrix = float4x4_row_major(
         {1, 0, 0, 0},
         {0, 1, 0, 0},
-        {0, 0, 1, distance_from_camera},
+        {0, 0, 1, bounding_radius + distance_from_camera_to_screen},
         {0, 0, 0, 1}
     );
     const float    r = maxs.x;
     const float    l = mins.x;
     const float    t = maxs.y;
     const float    b = mins.y;
-    const float    f = 50.0;
+    const float    f = (2.0 * bounding_radius) + distance_from_camera_to_screen;
     const float    n = distance_from_camera_to_screen;
     const float4x4 perspective_matrix = float4x4_row_major(
-        {n, 0,   0,    0},
+        {n, 0,   0,    0}, // TODO: We shouldn't need to `* 4.0` to zoom into the teapot.
         {0, n,   0,    0},
         {0, 0, n+f, -n*f},
         {0, 0,   1,    0}
@@ -77,10 +75,11 @@ main_vertex(         uint           vertex_id   [[instance_id]],
     const float4x4 orthographic_matrix = float4x4_row_major(
         { 2/(r-l),     0.0,     0.0, -(r+l)/(r-l) },
         {     0.0, 2/(t-b),     0.0, -(t+b)/(t-b) },
-        {     0.0,     0.0, 2/(f-n), -(f+n)/(f-n) },
+        {     0.0,     0.0, 1/(f-n),     -n/(f-n) },
         {     0.0,     0.0,     0.0,          1.0 }
     );
-    const float4 position = orthographic_matrix * perspective_matrix * view_matrix * model_matrix * model_position;
+    // const float4 position = orthographic_matrix * perspective_matrix * view_matrix * model_matrix * model_position;
+    const float4 position = orthographic_matrix * view_matrix * model_matrix * model_position;
     return {
         .position = position,
         .size     = 5.0

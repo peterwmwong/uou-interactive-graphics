@@ -53,6 +53,8 @@ impl RendererDelgate for Delegate {
                 mins = (mins.0.min(x), mins.1.min(y), mins.2.min(z));
                 maxs = (maxs.0.max(x), maxs.1.max(y), maxs.2.max(z));
             }
+            dbg!((mins.0, mins.1, mins.2));
+            dbg!((maxs.0, maxs.1, maxs.2));
             [
                 packed_float4::new(mins.0, mins.1, mins.2, 1.0),
                 packed_float4::new(maxs.0, maxs.1, maxs.2, 1.0),
