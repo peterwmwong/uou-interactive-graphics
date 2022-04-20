@@ -32,25 +32,30 @@ get_orthographic_matrix(const float l, const float r, const float b, const float
 }
 
 vertex VertexOut
-main_vertex(         uint           vertex_id   [[instance_id]],
-            constant packed_float4* mins_maxs   [[buffer(VertexBufferIndexMaxPositionValue)]],
-            constant packed_float3* positions   [[buffer(VertexBufferIndexPositions)]],
-            constant float&         time_s      [[buffer(VertexBufferIndexTime)]])
+main_vertex(         uint           vertex_id    [[instance_id]],
+            constant packed_float4* mins_maxs    [[buffer(VertexBufferIndexMaxPositionValue)]],
+            constant packed_float3* positions    [[buffer(VertexBufferIndexPositions)]],
+            constant float&         aspect_ratio [[buffer(VertexBufferIndexAspectRatio)]],
+            constant float&         time_s       [[buffer(VertexBufferIndexTime)]])
 {
     const float4        model_position = float4(positions[vertex_id], 1.0); // Make homogenous coordinate
     const packed_float4 mins           = mins_maxs[0];
     const packed_float4 maxs           = mins_maxs[1];
 
-    // Given that the model is oriented such that the z-axis runs along the "bottom" to the "top" of
-    // the teapot.
+    // The input model file actually orients the z-axis runs along the "bottom" to the "top" of the
+    // teapot.
     const float height_of_teapot = maxs.z - mins.z;
     const float depth_of_teapot  = maxs.y - mins.y;
+    const float width_of_teapot  = maxs.x - mins.x;
 
     // Estimate the "widest" part of the teapot in the z and y-axis directions.
-    const float bounding_width   = length(float2(max(height_of_teapot, depth_of_teapot)));
+    // `length()` is used to account for the teapot rotating around the x-axis and that the "widest"
+    // part is pessimestically in the corner, requiring distance/length calculation.
+    const float model_width   = length(float2(max(height_of_teapot, depth_of_teapot)));
 
-    // Translate the teapot where the origin is in the middle of the teapot.
     // From the asset file (teapot.obj), the center bottom of the teapot is the origin (0,0,0).
+    // Translate the teapot where the z-coordinate origin is the centered between the top and bottom
+    // of the teapot.
     const float4x4 translate_matrix  = float4x4_row_major(
         {1, 0, 0, 0},
         {0, 1, 0, 0},
@@ -69,22 +74,24 @@ main_vertex(         uint           vertex_id   [[instance_id]],
     const float4x4 model_matrix    = scale_matrix * rotate_matrix * translate_matrix;
 
     // Place the near plane somewhere in front of the camera (0,0,0).
-    // TODO: Figure out why turning this up (>10.0) seems to have a more pleasing look.
     const float n = 20.0;
-    const float f = bounding_width + n;
+    const float f = model_width + n;
 
     // Place the teapot in front of the near plane close enough that the widest part of the teapot
     // just touches it.
     // TODO: Add user control (mouse) of the camera (angle and distance)
+    const float camera_position_z = -((model_width / 2.0) + n);
     const float4x4 view_matrix = float4x4_row_major(
         {1, 0, 0, 0},
         {0, 1, 0, 0},
-        {0, 0, 1, (bounding_width / 2.0) + n},
+        {0, 0, 1, -camera_position_z},
         {0, 0, 0, 1}
     );
 
     // TODO: Make this toggleable (keyDown?)
-    const bool use_perspective = true;
+    const bool  use_perspective         = true;
+    const float model_aspect_ratio      = width_of_teapot    / height_of_teapot;
+    const float aspect_ratio_correction = model_aspect_ratio / aspect_ratio;
     float4x4 projection_matrix;
     if (use_perspective) {
         // TODO: This isn't quite correct, even for the teapot.
@@ -92,11 +99,11 @@ main_vertex(         uint           vertex_id   [[instance_id]],
         //   offscreen
         // - To keep the keep the teapot's spout in view, we need to find the actual z-coordinate
         //   where the tip of the spout (max y) actually resides.
-        const float assumed_z_when_xy_are_at_max = (bounding_width / 2.0) + n;
+        const float assumed_z_when_xy_are_at_max = -camera_position_z;
         const float r = (maxs.x * n) / assumed_z_when_xy_are_at_max;
         const float l = (mins.x * n) / assumed_z_when_xy_are_at_max;
-        const float t = (maxs.y * n) / assumed_z_when_xy_are_at_max;
-        const float b = (mins.y * n) / assumed_z_when_xy_are_at_max;
+        const float t = aspect_ratio_correction * (maxs.y * n) / assumed_z_when_xy_are_at_max;
+        const float b = aspect_ratio_correction * (mins.y * n) / assumed_z_when_xy_are_at_max;
         const float4x4 perspective_matrix = float4x4_row_major(
             {n, 0,   0,    0},
             {0, n,   0,    0},
@@ -106,18 +113,20 @@ main_vertex(         uint           vertex_id   [[instance_id]],
         const float4x4 orthographic_matrix = get_orthographic_matrix(l, r, b, t, n, f);
         projection_matrix = orthographic_matrix * perspective_matrix;
     } else {
-        projection_matrix = get_orthographic_matrix(mins.x, maxs.x, mins.y, maxs.y, n, f);
+        projection_matrix = get_orthographic_matrix(
+            mins.x, maxs.x,
+            mins.y * aspect_ratio_correction,
+            maxs.y * aspect_ratio_correction,
+            n, f
+        );
     }
 
-    const float4 world_position = view_matrix * model_matrix * model_position;
-    const float4 position = projection_matrix * world_position;
-
+    const float4 position = projection_matrix * view_matrix * model_matrix * model_position;
     return {
         .position = position,
         // Give a slight visual difference between points close vs far away
-        // TODO: This calculation doesn't seem to exactly cover [0,1], figure out why...
-        .size     = 10.0 * (1.0 - (length(world_position.xyz) - n) / (f - n)),
-        .color    = false ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
+        .size     = 10.0 * (1.0 - position.z / position.w),
+        .color    = use_perspective ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
     };
 }
 

@@ -8,6 +8,7 @@ enum VertexBufferIndex
 {
     VertexBufferIndexMaxPositionValue = 0,
     VertexBufferIndexPositions,
+    VertexBufferIndexAspectRatio,
     VertexBufferIndexTime
 };
 

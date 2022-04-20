@@ -9,8 +9,8 @@ use metal_app::{
     RendererDelgate, Size,
 };
 use shader_bindings::{
-    packed_float4, VertexBufferIndex_VertexBufferIndexMaxPositionValue,
-    VertexBufferIndex_VertexBufferIndexTime,
+    packed_float4, VertexBufferIndex_VertexBufferIndexAspectRatio,
+    VertexBufferIndex_VertexBufferIndexMaxPositionValue, VertexBufferIndex_VertexBufferIndexTime,
 };
 use tobj::LoadOptions;
 
@@ -146,7 +146,7 @@ impl RendererDelgate for Delegate {
         &mut self,
         command_queue: &CommandQueue,
         drawable: &MetalDrawableRef,
-        _screen_size: Size,
+        screen_size: Size,
     ) {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
@@ -176,6 +176,14 @@ impl RendererDelgate for Delegate {
             Some(&self.vertex_buffer_positions),
             0,
         );
+        {
+            let aspect_ratio: *const f32 = &(screen_size[0] / screen_size[1]);
+            encoder.set_vertex_bytes(
+                VertexBufferIndex_VertexBufferIndexAspectRatio as _,
+                std::mem::size_of::<f32>() as _,
+                aspect_ratio as *const c_void,
+            );
+        }
         {
             let time: *const f32 = &self.now.elapsed().as_secs_f32();
             encoder.set_vertex_bytes(
