@@ -1,0 +1,190 @@
+#wrapper {
+	width: 928px !important;
+	min-width: 0px !important;
+}
+
+#innerWrapper {
+	min-width: 0px !important;
+}
+
+html {
+	overflow-y:scroll;
+}
+
+.evenrow{
+	background-color:#f4f4f4;
+}
+
+.heading{
+	font-weight:bold;
+	color:#666;
+	font-size:140%;
+	margin:30px 0 10px 0;
+}
+
+h1 {
+	font-size:30px;
+}
+
+.policies{
+	font-size:70%;
+}
+
+.schedule {
+	width: 100%;
+}
+
+.codeblock{
+	border:1px solid black;
+	background-color:#eee;
+	padding:5px 10px 5px 10px;
+	font-size:1.1em;
+}
+
+.syntaxhighlighter {
+	border: 1px solid black;
+	background-color: #eee;
+}
+
+#bottomnav{width:100%;font-size:80%}
+
+#preview {
+	position:relative;
+	width: 100%;
+	padding-top: 0.5em;
+	margin-bottom: 1em;
+}
+#preview img {
+	width: 100%;
+	border-top: 1px solid #ccc;
+	border-bottom: 1px solid #ccc;
+}
+#preview p {
+	font-size: 0.7em;
+	margin: 0 1em 0 0;
+	text-align: right;
+	font-style: italic;
+	color: gray;
+}
+
+
+
+#cemmenu {
+	position: absolute;
+	left: -130px;
+	top: 10px;
+	width: 120px;
+	background: white;
+	border: 1px solid #888;
+}
+
+a.main-menu-title {
+	display:				block;
+	padding:				5px 10px 5px 0px;
+	align:				right;
+	text-align:			right;
+}
+
+a.main-menu-item, a.main-menu-item-sel {
+	display:				block;
+	padding-right:		10px;
+	align:				right;
+	text-align:			right;
+	font-family:		Tahoma;
+	font-size:			12pt;
+	text-decoration:	none;
+}
+
+a.main-menu-item {
+	/*color:				#375184 !important;*/
+	color:				#832B3D !important;
+	font-weight:		normal;
+}
+
+a.main-menu-item:hover, a.main-menu-item-sel:hover {
+	background:			#a82641;
+	color:				white !important;
+	text-decoration:	none;
+}
+
+a.main-menu-item-sel {
+	/*background:			#375184;*/
+	background:			#832B3D;
+	color:				white !important;
+	font-weight:		bold;
+}
+
+.tba {
+	color:		#777;
+	font-style:	italic;
+}
+
+.nextCourse {
+	outline: 3px solid RGBA(255,0,0,0.7);
+   outline-offset: 2px;
+}
+
+
+
+table {
+	border-collapse:collapse;
+	margin-bottom:1em;	
+	background-color: #fff;
+}
+
+td, th {
+	border:1px solid #999;
+	padding:.25em .75em;
+	vertical-align:top;
+	text-align:left;
+	}
+th {
+	background-color:#ccc;
+	color:#333;
+	}
+
+
+.nav {
+	font-family: 'Open Sans', sans-serif;
+	font-size: .8em;
+	line-height: 2.75em;
+	border-bottom: 1px solid #ccc;
+}
+.nav ul {
+	list-style: none;
+	padding: 0px;
+	margin: 0;
+}
+.nav ul li {
+	display: inline-block;
+}
+.nav ul li+li:before {
+	content: "|\00a0";
+	padding: 0 5px;
+	color: #ccc;
+}
+
+.semester-list-container {
+	float: right;
+	margin-top: 0px;
+	position: relative;
+}
+
+.semester-list {
+	position: relative;
+	top: -26px;
+}
+
+@media only screen and (max-width: 768px) {
+	.semester-list {
+		top: 0px;
+		margin: 8px;
+	}
+	.weekcolumn {
+		display: none;
+	}
+	.schedule td, .schedule th {
+		padding-left: 0.5em;
+		padding-right: 0.5em;
+	}
+}
