@@ -6,7 +6,35 @@ use objc::{rc::autoreleasepool, runtime::YES};
 use std::simd::*;
 
 pub type Unit = f32;
+// TODO: Rename to indicate 2D-ness
 pub type Size = Simd<Unit, 2>;
+pub type Position = Simd<Unit, 2>;
+
+#[derive(Copy, Clone, PartialEq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum MouseButton {
+    Left,
+    Right,
+}
+
+#[derive(Copy, Clone, PartialEq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum UserEvent {
+    MouseDown {
+        button: MouseButton,
+        position: Position,
+    },
+    MouseUp {
+        button: MouseButton,
+        position: Position,
+        down_position: Position,
+    },
+    MouseDrag {
+        button: MouseButton,
+        position: Position,
+        down_position: Position,
+    },
+}
 
 pub trait RendererDelgate {
     fn new(device: Device) -> Self;
@@ -16,6 +44,7 @@ pub trait RendererDelgate {
         drawable: &MetalDrawableRef,
         screen_size: Size,
     );
+    fn on_event(&mut self, _event: UserEvent) {}
 }
 
 pub(crate) struct MetalRenderer<R: RendererDelgate> {
@@ -64,6 +93,11 @@ impl<R: RendererDelgate> MetalRenderer<R> {
                     .draw(&self.command_queue, drawable, self.screen_size);
             };
         });
+    }
+
+    #[inline]
+    pub(crate) fn on_event(&mut self, event: UserEvent) {
+        self.delegate.on_event(event);
     }
 }
 

@@ -2,12 +2,13 @@ use crate::{
     objc_helpers::debug_assert_objc_class,
     renderer::{MetalRenderer, RendererDelgate, Size, Unit},
     unwrap_helpers::unwrap_option_dcheck,
+    MouseButton, Position, UserEvent,
 };
 use cocoa::{
     appkit::{
         NSApp, NSApplication, NSApplicationActivationPolicy,
-        NSBackingStoreType::NSBackingStoreBuffered, NSEvent, NSMenu, NSMenuItem, NSWindow,
-        NSWindowStyleMask,
+        NSBackingStoreType::NSBackingStoreBuffered, NSEvent, NSEventType, NSMenu, NSMenuItem,
+        NSWindow, NSWindowStyleMask,
     },
     base::{id, nil, selector},
     foundation::{NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString},
@@ -50,96 +51,141 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
     }
 
     fn init_and_attach_view(self: &mut Box<Self>, nswindow: *mut Object) {
-        use cocoa::appkit::NSView;
         unsafe {
+            use cocoa::appkit::NSView;
             let mut decl = unwrap_option_dcheck(
                 ClassDecl::new("CustomNSView", class!(NSView)),
                 "Unable to create custom NSView (CustomNSView)",
             );
+            decl.add_method(sel!(acceptsFirstResponder), {
+                extern "C" fn accepts_first_responder(_this: &Object, _sel: Sel) -> BOOL {
+                    YES
+                }
+                accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL
+            });
+            for selector in [
+                sel!(mouseDown:),
+                sel!(mouseDragged:),
+                sel!(mouseUp:),
+                sel!(rightMouseDown:),
+                sel!(rightMouseDragged:),
+                sel!(rightMouseUp:),
+            ] {
+                decl.add_method(selector, {
+                    extern "C" fn on_mouse_event<R: RendererDelgate + 'static>(
+                        this: &mut Object,
+                        _: Sel,
+                        event: *mut Object,
+                    ) {
+                        use MouseButton::*;
+                        use NSEventType::*;
+                        use UserEvent::*;
+                        static mut LEFT_MOUSE_DOWN_POSITION: Position = Position::splat(0.0);
+                        static mut RIGHT_MOUSE_DOWN_POSITION: Position = Position::splat(0.0);
 
-            extern "C" fn accepts_first_responder(_this: &Object, _sel: Sel) -> BOOL {
-                YES
-            }
+                        // We have to do this to have access to the `NSView` trait...
+                        let view: id = this;
+                        let position = unsafe {
+                            let view_rect = NSView::frame(view);
+                            let NSPoint { x, y } =
+                                view.convertPoint_fromView_(event.locationInWindow(), nil);
+                            if x < 0.0
+                                || y < 0.0
+                                || x > view_rect.size.width
+                                || y > view_rect.size.height
+                            {
+                                return;
+                            }
 
-            extern "C" fn on_mouse_moved<R: RendererDelgate + 'static>(
-                this: &Object,
-                _: Sel,
-                event: *mut Object,
-            ) {
-                debug_assert_objc_class(event, "NSEvent");
-                // We have to do this to have access to the `NSView` trait...
-                let view: id = this as *const _ as *mut _;
-                let view_rect = unsafe { NSView::frame(view) };
-                let NSPoint { x: _x, y: _y } = unsafe {
-                    let NSPoint { x, y } =
-                        view.convertPoint_fromView_(event.locationInWindow(), nil);
-                    if x.is_sign_negative()
-                        || y.is_sign_negative()
-                        || x > view_rect.size.width
-                        || y > view_rect.size.height
-                    {
-                        return;
+                            let point = view
+                                .convertRectToBacking(NSRect::new(
+                                    NSPoint {
+                                        x,
+                                        /*
+
+                                        IMPORTANT: Flips y coordinate to match application coordinate system...
+
+                                        BEFORE: OS coordinate system
+                                        ========================================================================
+
+                                            (0,height)
+                                            ^
+                                            |
+                                            (0,0) -> (width, 0)
+
+                                        AFTER: Application coordinate system. Also matches Metal Viewport
+                                               Coordinate system, see "Metal Coordinate System"
+                                               https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+                                        ========================================================================
+
+                                            (0,0) -> (width, 0)
+                                            |
+                                            v
+                                            (0,height)
+
+                                        */
+                                        y: view_rect.size.height - y,
+                                    },
+                                    NSSize::new(0.0, 0.0),
+                                ))
+                                .origin;
+                            Position::from_array([point.x as Unit, point.y as Unit])
+                        };
+                        let ns_event_type = unsafe { NSEvent::eventType(event) };
+                        let (button, down_position) = match ns_event_type {
+                            NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => {
+                                (Left, unsafe { &mut LEFT_MOUSE_DOWN_POSITION })
+                            }
+
+                            NSRightMouseDown | NSRightMouseDragged | NSRightMouseUp => {
+                                (Right, unsafe { &mut RIGHT_MOUSE_DOWN_POSITION })
+                            }
+                            unknown_nseventtype @ _ => {
+                                dbg!(unknown_nseventtype);
+                                return;
+                            }
+                        };
+                        let user_event = match ns_event_type {
+                            NSLeftMouseDown | NSRightMouseDown => {
+                                *down_position = position;
+                                MouseDown { button, position }
+                            }
+                            NSLeftMouseDragged | NSRightMouseDragged => MouseDrag {
+                                button,
+                                position,
+                                down_position: *down_position,
+                            },
+                            NSLeftMouseUp | NSRightMouseUp => MouseUp {
+                                button,
+                                position,
+                                down_position: std::mem::replace(
+                                    down_position,
+                                    Position::splat(0.0),
+                                ),
+                            },
+                            _ => return, // Should never get here, preceding match should have early exited
+                                         // in the case.
+                        };
+                        let manager = unsafe {
+                            &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
+                                as *mut ApplicationManager<R>)
+                        };
+                        manager.renderer.on_event(user_event);
                     }
-
-                    view.convertRectToBacking(NSRect::new(
-                        NSPoint {
-                            x,
-                            /*
-
-                            IMPORTANT: Flips y coordinate to match application coordinate system...
-
-                            BEFORE: OS coordinate system
-                            =============================
-
-                                (0,height)
-                                ^
-                                |
-                                (0,0) -> (width, 0)
-
-                            AFTER: Application coordinate system
-                            ====================================
-
-                                (0,0) -> (width, 0)
-                                |
-                                v
-                                (0,height)
-
-                            */
-                            y: view_rect.size.height - y,
-                        },
-                        NSSize::new(0.0, 0.0),
-                    ))
-                    .origin
-                };
-                let _manager = unsafe {
-                    &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
-                        as *mut ApplicationManager<R>)
-                };
+                    on_mouse_event::<R> as extern "C" fn(&mut Object, Sel, id)
+                });
             }
-            extern "C" fn on_key_down<R: RendererDelgate + 'static>(
-                _: &Object,
-                _: Sel,
-                event: *mut Object,
-            ) {
-                unsafe {
-                    /* Escape Key */
-                    if NSEvent::keyCode(event) == 53 {
-                        let () = msg_send![NSApp(), terminate: nil];
+            decl.add_method(sel!(keyDown:), {
+                extern "C" fn on_key_down(_: &Object, _: Sel, event: *mut Object) {
+                    unsafe {
+                        /* Escape Key */
+                        if NSEvent::keyCode(event) == 53 {
+                            let () = msg_send![NSApp(), terminate: nil];
+                        }
                     }
                 }
-            }
-            decl.add_method(
-                sel!(acceptsFirstResponder),
-                accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL,
-            );
-            decl.add_method(
-                sel!(mouseMoved:),
-                on_mouse_moved::<R> as extern "C" fn(&Object, Sel, id),
-            );
-            decl.add_method(
-                sel!(keyDown:),
-                on_key_down::<R> as extern "C" fn(&Object, Sel, id),
-            );
+                on_key_down as extern "C" fn(&Object, Sel, id)
+            });
             decl.add_ivar::<*mut c_void>(&"applicationManager");
             let viewclass = decl.register();
             let view: id = msg_send![viewclass, alloc];

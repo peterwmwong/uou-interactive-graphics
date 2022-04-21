@@ -1,25 +1,41 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use std::{os::raw::c_void, path::PathBuf, time::Instant};
+use std::{f32::consts::PI, os::raw::c_void, path::PathBuf, simd::Simd, time::Instant};
 
 use crate::shader_bindings::VertexBufferIndex_VertexBufferIndexPositions;
 use metal_app::{
     allocate_new_buffer, launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck,
-    RendererDelgate, Size,
+    Position, RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
     packed_float4, VertexBufferIndex_VertexBufferIndexAspectRatio,
+    VertexBufferIndex_VertexBufferIndexCameraRotationDistance,
     VertexBufferIndex_VertexBufferIndexMaxPositionValue, VertexBufferIndex_VertexBufferIndexTime,
 };
 use tobj::LoadOptions;
 
 struct Delegate {
     num_vertices: usize,
+    camera_distance_offset: Unit,
+    camera_rotation_offset: Simd<Unit, 2>,
+    camera_rotation_distance: packed_float4,
     mins_maxs: [packed_float4; 2],
     vertex_buffer_positions: Buffer,
     render_pipeline_state: RenderPipelineState,
     now: Instant,
+}
+
+impl Delegate {
+    fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
+        let adjacent = Simd::splat(self.camera_rotation_distance.z);
+        let offsets = position - down_position;
+        let ratio = offsets / adjacent;
+        Simd::from_array([
+            ratio[1].atan(), // Rotation on x-axis
+            ratio[0].atan(), // Rotation on y-axis
+        ])
+    }
 }
 
 impl RendererDelgate for Delegate {
@@ -53,8 +69,6 @@ impl RendererDelgate for Delegate {
                 mins = (mins.0.min(x), mins.1.min(y), mins.2.min(z));
                 maxs = (maxs.0.max(x), maxs.1.max(y), maxs.2.max(z));
             }
-            dbg!((mins.0, mins.1, mins.2));
-            dbg!((maxs.0, maxs.1, maxs.2));
             [
                 packed_float4::new(mins.0, mins.1, mins.2, 1.0),
                 packed_float4::new(maxs.0, maxs.1, maxs.2, 1.0),
@@ -74,6 +88,14 @@ impl RendererDelgate for Delegate {
             );
         }
         Self {
+            camera_distance_offset: 0.0,
+            camera_rotation_offset: Simd::splat(0.0),
+            camera_rotation_distance: packed_float4 {
+                x: -PI / 4.0,
+                y: 0.0,
+                z: -50.0,
+                w: 1.0,
+            },
             mins_maxs,
             num_vertices: positions.len() / 3,
             vertex_buffer_positions,
@@ -177,6 +199,18 @@ impl RendererDelgate for Delegate {
             0,
         );
         {
+            let mut cam_rot_pos = self.camera_rotation_distance;
+            cam_rot_pos.x += self.camera_rotation_offset[0];
+            cam_rot_pos.y += self.camera_rotation_offset[1];
+            cam_rot_pos.z += self.camera_distance_offset;
+            let camera_rotation_distance: *const packed_float4 = &cam_rot_pos;
+            encoder.set_vertex_bytes(
+                VertexBufferIndex_VertexBufferIndexCameraRotationDistance as _,
+                std::mem::size_of::<packed_float4>() as _,
+                camera_rotation_distance as *const c_void,
+            );
+        }
+        {
             let aspect_ratio: *const f32 = &(screen_size[0] / screen_size[1]);
             encoder.set_vertex_bytes(
                 VertexBufferIndex_VertexBufferIndexAspectRatio as _,
@@ -197,6 +231,52 @@ impl RendererDelgate for Delegate {
         encoder.end_encoding();
         command_buffer.present_drawable(drawable);
         command_buffer.commit();
+    }
+
+    fn on_event(&mut self, event: UserEvent) {
+        fn calc_distance_offset(down_position: Position, position: Position) -> Unit {
+            // Dragging up   => zooms in  (-offset)
+            // Dragging down => zooms out (+offset)
+            let screen_offset = down_position[1] - position[1];
+
+            // TODO: Probably need some type of scaling, it zooms to fast... dragging up one pixel zooms to much.
+            // - Simple ratio?
+            // - Ratio based world space camera distance?
+            screen_offset / 8.0
+        }
+        match event {
+            UserEvent::MouseDrag {
+                button,
+                position,
+                down_position,
+            } => match button {
+                metal_app::MouseButton::Left => {
+                    self.camera_rotation_offset =
+                        self.calc_rotation_offset(down_position, position);
+                }
+                metal_app::MouseButton::Right => {
+                    self.camera_distance_offset = calc_distance_offset(down_position, position);
+                }
+            },
+            UserEvent::MouseUp {
+                button,
+                position,
+                down_position,
+            } => match button {
+                metal_app::MouseButton::Left => {
+                    self.camera_rotation_offset = Simd::default();
+                    let rot = self.calc_rotation_offset(down_position, position);
+                    self.camera_rotation_distance.x += rot[0];
+                    self.camera_rotation_distance.y += rot[1];
+                }
+                metal_app::MouseButton::Right => {
+                    self.camera_distance_offset = 0.0;
+                    self.camera_rotation_distance.z +=
+                        calc_distance_offset(down_position, position);
+                }
+            },
+            _ => return,
+        }
     }
 }
 
