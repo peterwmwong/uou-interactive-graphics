@@ -16,11 +16,11 @@ float4x4_row_major(const float4 r1, const float4 r2, const float4 r3, const floa
 inline float4x4
 get_orthographic_matrix(const float l, const float r, const float b, const float t, const float n, const float f) {
     return float4x4_row_major(
-        { 2/(r-l),     0.0,     0.0, -(r+l)/(r-l) },
-        {     0.0, 2/(t-b),     0.0, -(t+b)/(t-b) },
+        { 2/(r-l),       0,       0, -(r+l)/(r-l) },
+        {       0, 2/(t-b),       0, -(t+b)/(t-b) },
         // IMPORTANT: Metal's NDC coordinate space has a z range of [0,1], **NOT [-1,1]** (OpenGL).
-        {     0.0,     0.0, 1/(f-n),     -n/(f-n) },
-        {     0.0,     0.0,     0.0,          1.0 }
+        {       0,       0, 1/(f-n),     -n/(f-n) },
+        {       0,       0,       0,            1 }
     );
 }
 
@@ -47,17 +47,16 @@ struct VertexOut
 };
 
 vertex VertexOut
-main_vertex(         uint           vertex_id    [[instance_id]],
-            constant packed_float4* mins_maxs    [[buffer(VertexBufferIndexMaxPositionValue)]],
-            constant packed_float3* positions    [[buffer(VertexBufferIndexPositions)]],
-            // TODO: Split up camera_rotation and camera_distance for clarity.
-            constant packed_float4& cam_rot_pos  [[buffer(VertexBufferIndexCameraRotationDistance)]],
-            constant float&         aspect_ratio [[buffer(VertexBufferIndexAspectRatio)]],
-            constant float&         time_s       [[buffer(VertexBufferIndexTime)]])
+main_vertex(         uint           vertex_id        [[instance_id]],
+            constant packed_float4* mins_maxs        [[buffer(VertexBufferIndexMaxPositionValue)]],
+            constant packed_float3* positions        [[buffer(VertexBufferIndexPositions)]],
+            constant float2&        screen_size      [[buffer(VertexBufferIndexScreenSize)]],
+            constant float2&        camera_rotation  [[buffer(VertexBufferIndexCameraRotation)]],
+            constant float&         camera_distance  [[buffer(VertexBufferIndexCameraDistance)]])
 {
-    const float4        model_position = float4(positions[vertex_id], 1.0); // Make homogenous coordinate
-    const packed_float4 mins           = mins_maxs[0];
-    const packed_float4 maxs           = mins_maxs[1];
+    const float4 model_position = float4(positions[vertex_id], 1.0); // Make homogenous coordinate
+    const float4 mins           = mins_maxs[0];
+    const float4 maxs           = mins_maxs[1];
 
     // The input model file actually orients the z-axis runs along the "bottom" to the "top" of the
     // teapot.
@@ -82,16 +81,17 @@ main_vertex(         uint           vertex_id    [[instance_id]],
     const float4x4 view_matrix = float4x4_row_major(
         {1, 0, 0, 0},
         {0, 1, 0, 0},
-        {0, 0, 1, -cam_rot_pos.z},
+        {0, 0, 1, -camera_distance},
         {0, 0, 0, 1}
-    ) * get_rotation_matrix(-cam_rot_pos.xy);
+    ) * get_rotation_matrix(-camera_rotation);
 
     // TODO: Make this toggleable (keyDown?)
     const bool  use_perspective         = true;
     const float n                       = 0.1;
     const float f                       = 1000.0;
     const float model_aspect_ratio      = width_of_teapot    / height_of_teapot;
-    const float aspect_ratio_correction = model_aspect_ratio / aspect_ratio;
+    const float screen_aspect_ratio     = screen_size.x      / screen_size.y;
+    const float aspect_ratio_correction = model_aspect_ratio / screen_aspect_ratio;
     float4x4 projection_matrix;
     if (use_perspective) {
 
@@ -129,9 +129,7 @@ main_vertex(         uint           vertex_id    [[instance_id]],
     return {
         .position = position,
         // Give a slight visual difference between points close vs far away
-        // TODO: This should somehow be based on the size of the screen aswell, it's way too small when
-        //       the window is expanded.
-        .size     = 200.0 / position.w,
+        .size     = (screen_size.x * 200.0 / 1280.0) / position.w,
         .color    = use_perspective ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
     };
 }

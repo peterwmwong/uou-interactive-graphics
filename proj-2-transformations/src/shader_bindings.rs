@@ -394,9 +394,9 @@ fn bindgen_test_layout_packed_float4() {
 }
 pub const VertexBufferIndex_VertexBufferIndexMaxPositionValue: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 1;
-pub const VertexBufferIndex_VertexBufferIndexAspectRatio: VertexBufferIndex = 2;
-pub const VertexBufferIndex_VertexBufferIndexCameraRotationDistance: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndexTime: VertexBufferIndex = 4;
+pub const VertexBufferIndex_VertexBufferIndexScreenSize: VertexBufferIndex = 2;
+pub const VertexBufferIndex_VertexBufferIndexCameraRotation: VertexBufferIndex = 3;
+pub const VertexBufferIndex_VertexBufferIndexCameraDistance: VertexBufferIndex = 4;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************

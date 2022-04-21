@@ -1,17 +1,18 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use std::{f32::consts::PI, os::raw::c_void, path::PathBuf, simd::Simd, time::Instant};
+use std::{f32::consts::PI, path::PathBuf, simd::Simd};
 
 use crate::shader_bindings::VertexBufferIndex_VertexBufferIndexPositions;
 use metal_app::{
-    allocate_new_buffer, launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck,
-    Position, RendererDelgate, Size, Unit, UserEvent,
+    allocate_new_buffer, encode_vertex_bytes, launch_application, metal::*, unwrap_option_dcheck,
+    unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    packed_float4, VertexBufferIndex_VertexBufferIndexAspectRatio,
-    VertexBufferIndex_VertexBufferIndexCameraRotationDistance,
-    VertexBufferIndex_VertexBufferIndexMaxPositionValue, VertexBufferIndex_VertexBufferIndexTime,
+    packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
+    VertexBufferIndex_VertexBufferIndexCameraRotation,
+    VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+    VertexBufferIndex_VertexBufferIndexScreenSize,
 };
 use tobj::LoadOptions;
 
@@ -19,16 +20,16 @@ struct Delegate {
     num_vertices: usize,
     camera_distance_offset: Unit,
     camera_rotation_offset: Simd<Unit, 2>,
-    camera_rotation_distance: packed_float4,
+    camera_distance: Unit,
+    camera_rotation: Simd<Unit, 2>,
     mins_maxs: [packed_float4; 2],
     vertex_buffer_positions: Buffer,
     render_pipeline_state: RenderPipelineState,
-    now: Instant,
 }
 
 impl Delegate {
     fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
-        let adjacent = Simd::splat(self.camera_rotation_distance.z);
+        let adjacent = Simd::splat(self.camera_distance);
         let offsets = position - down_position;
         let ratio = offsets / adjacent;
         Simd::from_array([
@@ -90,12 +91,8 @@ impl RendererDelgate for Delegate {
         Self {
             camera_distance_offset: 0.0,
             camera_rotation_offset: Simd::splat(0.0),
-            camera_rotation_distance: packed_float4 {
-                x: -PI / 4.0,
-                y: 0.0,
-                z: -50.0,
-                w: 1.0,
-            },
+            camera_rotation: Simd::from_array([-PI / 4.0, 0.0]),
+            camera_distance: -50.0,
             mins_maxs,
             num_vertices: positions.len() / 3,
             vertex_buffer_positions,
@@ -160,7 +157,6 @@ impl RendererDelgate for Delegate {
                     "Failed to create render pipeline",
                 )
             },
-            now: Instant::now(),
         }
     }
 
@@ -185,47 +181,31 @@ impl RendererDelgate for Delegate {
             attachment.set_store_action(MTLStoreAction::Store);
             desc
         });
-        {
-            let max_value_ptr: *const [packed_float4; 2] = &self.mins_maxs;
-            encoder.set_vertex_bytes(
-                VertexBufferIndex_VertexBufferIndexMaxPositionValue as _,
-                std::mem::size_of::<[packed_float4; 2]>() as _,
-                max_value_ptr as *const c_void,
-            );
-        }
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+            &self.mins_maxs,
+        );
         encoder.set_vertex_buffer(
             VertexBufferIndex_VertexBufferIndexPositions as _,
             Some(&self.vertex_buffer_positions),
             0,
         );
-        {
-            let mut cam_rot_pos = self.camera_rotation_distance;
-            cam_rot_pos.x += self.camera_rotation_offset[0];
-            cam_rot_pos.y += self.camera_rotation_offset[1];
-            cam_rot_pos.z += self.camera_distance_offset;
-            let camera_rotation_distance: *const packed_float4 = &cam_rot_pos;
-            encoder.set_vertex_bytes(
-                VertexBufferIndex_VertexBufferIndexCameraRotationDistance as _,
-                std::mem::size_of::<packed_float4>() as _,
-                camera_rotation_distance as *const c_void,
-            );
-        }
-        {
-            let aspect_ratio: *const f32 = &(screen_size[0] / screen_size[1]);
-            encoder.set_vertex_bytes(
-                VertexBufferIndex_VertexBufferIndexAspectRatio as _,
-                std::mem::size_of::<f32>() as _,
-                aspect_ratio as *const c_void,
-            );
-        }
-        {
-            let time: *const f32 = &self.now.elapsed().as_secs_f32();
-            encoder.set_vertex_bytes(
-                VertexBufferIndex_VertexBufferIndexTime as _,
-                std::mem::size_of::<f32>() as _,
-                time as *const c_void,
-            );
-        }
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexCameraRotation,
+            &(self.camera_rotation + self.camera_rotation_offset),
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexCameraDistance,
+            &(self.camera_distance + self.camera_distance_offset),
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexScreenSize,
+            &screen_size,
+        );
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.draw_primitives_instanced(MTLPrimitiveType::Point, 0, 1, self.num_vertices as _);
         encoder.end_encoding();
@@ -265,14 +245,11 @@ impl RendererDelgate for Delegate {
             } => match button {
                 metal_app::MouseButton::Left => {
                     self.camera_rotation_offset = Simd::default();
-                    let rot = self.calc_rotation_offset(down_position, position);
-                    self.camera_rotation_distance.x += rot[0];
-                    self.camera_rotation_distance.y += rot[1];
+                    self.camera_rotation += self.calc_rotation_offset(down_position, position);
                 }
                 metal_app::MouseButton::Right => {
                     self.camera_distance_offset = 0.0;
-                    self.camera_rotation_distance.z +=
-                        calc_distance_offset(down_position, position);
+                    self.camera_distance += calc_distance_offset(down_position, position);
                 }
             },
             _ => return,
