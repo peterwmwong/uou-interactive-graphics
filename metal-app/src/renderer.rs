@@ -3,7 +3,7 @@ use cocoa::appkit::CGFloat;
 use core_graphics::display::CGSize;
 use metal::*;
 use objc::{rc::autoreleasepool, runtime::YES};
-use std::simd::*;
+use std::{os::raw::c_ushort, simd::*};
 
 pub type Unit = f32;
 // TODO: Rename to indicate 2D-ness
@@ -33,6 +33,9 @@ pub enum UserEvent {
         button: MouseButton,
         position: Position,
         down_position: Position,
+    },
+    KeyDown {
+        key_code: c_ushort,
     },
 }
 

@@ -176,15 +176,24 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                 });
             }
             decl.add_method(sel!(keyDown:), {
-                extern "C" fn on_key_down(_: &Object, _: Sel, event: *mut Object) {
+                extern "C" fn on_key_down<R: RendererDelgate + 'static>(
+                    this: &Object,
+                    _: Sel,
+                    event: *mut Object,
+                ) {
                     unsafe {
                         /* Escape Key */
-                        if NSEvent::keyCode(event) == 53 {
+                        let key_code = NSEvent::keyCode(event);
+                        if key_code == 53 {
                             let () = msg_send![NSApp(), terminate: nil];
+                        } else {
+                            let manager = &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
+                                as *mut ApplicationManager<R>);
+                            manager.renderer.on_event(UserEvent::KeyDown { key_code });
                         }
                     }
                 }
-                on_key_down as extern "C" fn(&Object, Sel, id)
+                on_key_down::<R> as extern "C" fn(&Object, Sel, id)
             });
             decl.add_ivar::<*mut c_void>(&"applicationManager");
             let viewclass = decl.register();
