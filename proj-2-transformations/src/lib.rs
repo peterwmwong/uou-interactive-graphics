@@ -3,7 +3,9 @@
 mod shader_bindings;
 use std::{f32::consts::PI, path::PathBuf, simd::Simd};
 
-use crate::shader_bindings::VertexBufferIndex_VertexBufferIndexPositions;
+use crate::shader_bindings::{
+    VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
+};
 use metal_app::{
     allocate_new_buffer, encode_vertex_bytes, launch_application, metal::*, unwrap_option_dcheck,
     unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
@@ -13,24 +15,27 @@ use shader_bindings::{
     VertexBufferIndex_VertexBufferIndexCameraRotation,
     VertexBufferIndex_VertexBufferIndexMaxPositionValue,
     VertexBufferIndex_VertexBufferIndexScreenSize,
+    VertexBufferIndex_VertexBufferIndexUsePerspective,
 };
 use tobj::LoadOptions;
 
 struct Delegate {
-    num_vertices: usize,
     camera_distance_offset: Unit,
-    camera_rotation_offset: Simd<Unit, 2>,
     camera_distance: Unit,
+    camera_rotation_offset: Simd<Unit, 2>,
     camera_rotation: Simd<Unit, 2>,
     mins_maxs: [packed_float4; 2],
-    vertex_buffer_positions: Buffer,
+    num_vertices: usize,
     render_pipeline_state: RenderPipelineState,
+    use_perspective: bool,
+    vertex_buffer_positions: Buffer,
 }
 
 impl Delegate {
+    // TODO: This doesn't allow for a full 360 degree rotation in one drag (atan is [-90, 90]).
     fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
         let adjacent = Simd::splat(self.camera_distance);
-        let offsets = position - down_position;
+        let offsets = down_position - position;
         let ratio = offsets / adjacent;
         Simd::from_array([
             ratio[1].atan(), // Rotation on x-axis
@@ -90,12 +95,11 @@ impl RendererDelgate for Delegate {
         }
         Self {
             camera_distance_offset: 0.0,
+            camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation_offset: Simd::splat(0.0),
-            camera_rotation: Simd::from_array([-PI / 4.0, 0.0]),
-            camera_distance: -50.0,
+            camera_rotation: Simd::from_array([-PI / 6.0, 0.0]),
             mins_maxs,
             num_vertices: positions.len() / 3,
-            vertex_buffer_positions,
             render_pipeline_state: {
                 let library = device
                     .new_library_with_data(include_bytes!(concat!(
@@ -157,6 +161,8 @@ impl RendererDelgate for Delegate {
                     "Failed to create render pipeline",
                 )
             },
+            use_perspective: true,
+            vertex_buffer_positions,
         }
     }
 
@@ -206,6 +212,11 @@ impl RendererDelgate for Delegate {
             VertexBufferIndex_VertexBufferIndexScreenSize,
             &screen_size,
         );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexUsePerspective,
+            &self.use_perspective,
+        );
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.draw_primitives_instanced(MTLPrimitiveType::Point, 0, 1, self.num_vertices as _);
         encoder.end_encoding();
@@ -214,44 +225,49 @@ impl RendererDelgate for Delegate {
     }
 
     fn on_event(&mut self, event: UserEvent) {
+        use metal_app::MouseButton::*;
+        use UserEvent::*;
         fn calc_distance_offset(down_position: Position, position: Position) -> Unit {
             // Dragging up   => zooms in  (-offset)
             // Dragging down => zooms out (+offset)
-            let screen_offset = down_position[1] - position[1];
-
-            // TODO: Probably need some type of scaling, it zooms to fast... dragging up one pixel zooms to much.
-            // - Simple ratio?
-            // - Ratio based world space camera distance?
+            let screen_offset = position[1] - down_position[1];
             screen_offset / 8.0
         }
         match event {
-            UserEvent::MouseDrag {
+            MouseDrag {
                 button,
                 position,
                 down_position,
             } => match button {
-                metal_app::MouseButton::Left => {
+                Left => {
                     self.camera_rotation_offset =
                         self.calc_rotation_offset(down_position, position);
                 }
-                metal_app::MouseButton::Right => {
+                Right => {
                     self.camera_distance_offset = calc_distance_offset(down_position, position);
                 }
             },
-            UserEvent::MouseUp {
+            MouseUp {
                 button,
                 position,
                 down_position,
             } => match button {
-                metal_app::MouseButton::Left => {
+                Left => {
                     self.camera_rotation_offset = Simd::default();
                     self.camera_rotation += self.calc_rotation_offset(down_position, position);
                 }
-                metal_app::MouseButton::Right => {
+                Right => {
                     self.camera_distance_offset = 0.0;
                     self.camera_distance += calc_distance_offset(down_position, position);
                 }
             },
+            UserEvent::KeyDown { key_code } => {
+                // Space Bar Key Code
+                if key_code == 49 {
+                    // Toggle between orthographic and perspective
+                    self.use_perspective = !self.use_perspective;
+                }
+            }
             _ => return,
         }
     }

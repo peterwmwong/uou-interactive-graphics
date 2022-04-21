@@ -4,13 +4,22 @@
 #ifndef common_h
 #define common_h
 
+#ifdef __METAL_VERSION__
+#define DEF_CONSTANT constant
+#else
+#define DEF_CONSTANT
+#endif
+
+DEF_CONSTANT const float INITIAL_CAMERA_DISTANCE = 50.0;
+
 enum VertexBufferIndex
 {
     VertexBufferIndexMaxPositionValue = 0,
     VertexBufferIndexPositions,
     VertexBufferIndexScreenSize,
     VertexBufferIndexCameraRotation,
-    VertexBufferIndexCameraDistance
+    VertexBufferIndexCameraDistance,
+    VertexBufferIndexUsePerspective,
 };
 
 #endif
