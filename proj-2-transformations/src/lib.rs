@@ -69,16 +69,14 @@ impl RendererDelgate for Delegate {
 
         let mins_maxs = {
             let (positions3, ..) = positions.as_chunks::<3>();
-            let mut mins = (f32::MAX, f32::MAX, f32::MAX);
-            let mut maxs = (f32::MIN, f32::MIN, f32::MIN);
+            let mut mins: Simd<Unit, 4> = Simd::splat(f32::MAX);
+            let mut maxs: Simd<Unit, 4> = Simd::splat(f32::MIN);
             for &[x, y, z] in positions3 {
-                mins = (mins.0.min(x), mins.1.min(y), mins.2.min(z));
-                maxs = (maxs.0.max(x), maxs.1.max(y), maxs.2.max(z));
+                let input = Simd::from_array([x, y, z, 0.0]);
+                mins = mins.min(input);
+                maxs = maxs.max(input);
             }
-            [
-                packed_float4::new(mins.0, mins.1, mins.2, 1.0),
-                packed_float4::new(maxs.0, maxs.1, maxs.2, 1.0),
-            ]
+            [mins.into(), maxs.into()]
         };
 
         let (contents, vertex_buffer_positions) = allocate_new_buffer(
@@ -262,8 +260,8 @@ impl RendererDelgate for Delegate {
                 }
             },
             UserEvent::KeyDown { key_code } => {
-                // Space Bar Key Code
-                if key_code == 49 {
+                // "P" Key Code
+                if key_code == 35 {
                     // Toggle between orthographic and perspective
                     self.use_perspective = !self.use_perspective;
                 }

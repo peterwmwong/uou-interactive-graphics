@@ -52,6 +52,10 @@ struct VertexOut
     half4  color;
 };
 
+// IMPORTANT: Normally you would **NOT** calculate the model-view-projection matrix in the Vertex
+// Shader. For performance, this should be done once (not for every vertex) on the CPU and passed to
+// the Vertex Shader as a constant space buffer. It is done in the Vertex Shader for this project as
+// a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
 main_vertex(         uint           vertex_id        [[instance_id]],
             constant packed_float4* mins_maxs        [[buffer(VertexBufferIndexMaxPositionValue)]],
@@ -66,21 +70,19 @@ main_vertex(         uint           vertex_id        [[instance_id]],
     const float4 maxs           = mins_maxs[1];
 
     // The input model file actually orients the z-axis runs along the "bottom" to the "top" of the
-    // teapot.
-    const float height_of_teapot = maxs.z - mins.z;
-    const float width_of_teapot  = maxs.x - mins.x;
-
-    // From the asset file (teapot.obj), the center bottom of the teapot is the origin (0,0,0).
+    // teapot and the center bottom of the teapot is the origin (0,0,0).
     // Translate the teapot where the z-coordinate origin is the centered between the top and bottom
     // of the teapot...
-    const float4x4 translate_matrix  = float4x4_row_major(
+    const float height_of_teapot    = maxs.z - mins.z;
+    const float4x4 translate_matrix = float4x4_row_major(
         {1, 0, 0, 0},
         {0, 1, 0, 0},
         {0, 0, 1, -height_of_teapot / 2.0},
         {0, 0, 0, 1}
     );
+    // ... and rotate it... so it... you know... sits normally... instead of looking like it toppled
+    // over, spilling tea all over the place...
     const float    PI              = 3.1415926535897932384626433832795;
-    // ... and rotate it... so it... you know... sits normally... instead of looking like it toppled over.
     const float4x4 rotate_matrix   = get_rotation_matrix({ PI / 2, 0.0 });
     const float4x4 scale_matrix    = float4x4(1);
     const float4x4 model_matrix    = scale_matrix * rotate_matrix * translate_matrix;
@@ -93,27 +95,28 @@ main_vertex(         uint           vertex_id        [[instance_id]],
         {0, 0, 0, 1}
     ) * get_rotation_matrix(-camera_rotation);
 
-    const float n                       = 0.1;
-    const float f                       = 1000.0;
-
-    // TODO: I'm not sure this is the correct way to maintain the screen aspect ratio.
-    // I don't have a "ground truth" image to compare with, but it seems... just sligthly flatten.
-    // This is handled ad-hoc with the 0.8 multiplier.
-    const float model_aspect_ratio      =       width_of_teapot    / height_of_teapot;
-    const float screen_aspect_ratio     =       screen_size.x      / screen_size.y;
-    const float aspect_ratio_correction = 0.8 * model_aspect_ratio / screen_aspect_ratio;
-
-    // I think normally you'd just have perspective projection. As such, that would normally be
+    // I think normally you'd just use perspective projection. As such, that would normally be
     // based on FOV (Field Of View degrees: 60, 90, or 120).
     //
-    // For this project, we want to easily switch/compare perspective vs orthographic (space bar key).
+    // For this project, we want to easily switch/compare perspective vs orthographic ("P" key).
     // To ensure perspective and orthographic projections are "in-sync", the view volume is
     // calculated based on the bounding bounding box (mins, maxs) of the teapot.
-    const float l = mins.x / INITIAL_CAMERA_DISTANCE;
-    const float r = maxs.x / INITIAL_CAMERA_DISTANCE;
-    const float b = aspect_ratio_correction * mins.y / INITIAL_CAMERA_DISTANCE;
-    const float t = aspect_ratio_correction * maxs.y / INITIAL_CAMERA_DISTANCE;
-
+    const float n                   = 0.1;
+    const float f                   = 1000.0;
+    const float screen_aspect_ratio = screen_size.x / screen_size.y;
+    const float max_bound =
+        max(
+            max(
+                max(abs(mins.x), abs(maxs.x)),
+                max(abs(mins.y), abs(maxs.y))
+            ),
+            max(abs(mins.z), abs(maxs.z))
+        )
+        + 2.0 /* screen padding */;
+    const float l = screen_aspect_ratio * -max_bound / INITIAL_CAMERA_DISTANCE;
+    const float r = screen_aspect_ratio *  max_bound / INITIAL_CAMERA_DISTANCE;
+    const float b =                       -max_bound / INITIAL_CAMERA_DISTANCE;
+    const float t =                        max_bound / INITIAL_CAMERA_DISTANCE;
     float4x4 projection_matrix;
     if (use_perspective) {
         const float4x4 perspective_matrix = float4x4_row_major(
@@ -149,16 +152,22 @@ main_vertex(         uint           vertex_id        [[instance_id]],
     const float4 projection_position = projection_matrix * view_position;
     return {
         .position = projection_position,
-        // Slight differentiation between points close to the camera from those far away.
-        .size     = (200 * screen_size.x / 1280.0)
-                        / (use_perspective ? projection_position.w : view_position.z),
-        // Differentiate perspective (green) from orthographic (red).
-        .color    = use_perspective ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
+
+        // OPTIONAL: Slight differentiation between points close to the camera from those far away.
+        // TODO: Replace 1024.0 with a common.h "INITIAL_SCREEN_SIZE"
+        .size = (200.0 * screen_size.y / 1024.0)
+                    / (use_perspective ? projection_position.w : view_position.z),
+
+        // OPTIONAL: Differentiate perspective (green) from orthographic (red).
+        .color = use_perspective ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
     };
 }
 
 fragment half4
-main_fragment(VertexOut in [[stage_in]])
+main_fragment(      VertexOut in          [[stage_in]],
+              const float2    point_coord [[point_coord]])
 {
-    return in.color;
+    // OPTIONAL: Metal renders Point primitives as... squares, instead render them as un-shaded
+    // spheres.
+    return in.color * round(1.0 - length(point_coord - float2(0.5)));
 };
