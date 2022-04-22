@@ -2,8 +2,8 @@
 #![feature(slice_as_chunks)]
 mod shader_bindings;
 use metal_app::{
-    allocate_new_buffer, encode_vertex_bytes, launch_application, metal::*, unwrap_option_dcheck,
-    unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
+    allocate_new_buffer_with_data, encode_vertex_bytes, launch_application, metal::*,
+    unwrap_option_dcheck, unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
     packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
@@ -45,16 +45,20 @@ impl RendererDelgate for Delegate {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("teapot.obj");
-        let (mut models, ..) =
-            tobj::load_obj(teapot_file, &LoadOptions::default()).expect("Failed to load OBJ file");
+        let (mut models, ..) = tobj::load_obj(
+            teapot_file,
+            &LoadOptions {
+                single_index: false,
+                triangulate: true,
+                ignore_points: true,
+                ignore_lines: true,
+            },
+        )
+        .expect("Failed to load OBJ file");
 
-        debug_assert_eq!(
-            models.len(),
-            1,
-            "Model object file (`teapot.obj`) should only contain one model."
-        );
-
-        let model = models.pop().expect("Failed to parse model");
+        let model = models
+            .pop()
+            .expect("Failed to parse model, expecting atleast one model (teapot)");
         let positions = model.mesh.positions;
 
         debug_assert_eq!(
@@ -65,8 +69,8 @@ impl RendererDelgate for Delegate {
 
         let mins_maxs = {
             let (positions3, ..) = positions.as_chunks::<3>();
-            let mut mins: Simd<Unit, 4> = Simd::splat(f32::MAX);
-            let mut maxs: Simd<Unit, 4> = Simd::splat(f32::MIN);
+            let mut mins = Simd::splat(f32::MAX);
+            let mut maxs = Simd::splat(f32::MIN);
             for &[x, y, z] in positions3 {
                 let input = Simd::from_array([x, y, z, 0.0]);
                 mins = mins.min(input);
@@ -75,18 +79,6 @@ impl RendererDelgate for Delegate {
             [mins.into(), maxs.into()]
         };
 
-        let (contents, vertex_buffer_positions) = allocate_new_buffer(
-            &device,
-            "Vertex Buffer Positions",
-            std::mem::size_of::<f32>() * positions.len(),
-        );
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                positions.as_ptr(),
-                contents as *mut f32,
-                positions.len(),
-            );
-        }
         Self {
             camera_distance_offset: 0.0,
             camera_distance: INITIAL_CAMERA_DISTANCE,
@@ -165,7 +157,11 @@ impl RendererDelgate for Delegate {
                 )
             },
             use_perspective: true,
-            vertex_buffer_positions,
+            vertex_buffer_positions: allocate_new_buffer_with_data(
+                &device,
+                "Vertex Buffer Positions",
+                &positions,
+            ),
         }
     }
 

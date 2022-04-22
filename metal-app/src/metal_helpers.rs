@@ -16,6 +16,20 @@ pub fn allocate_new_buffer(
 }
 
 #[inline]
+pub fn allocate_new_buffer_with_data<T: Sized>(
+    device: &DeviceRef,
+    label: &'static str,
+    data: &[T],
+) -> Buffer {
+    let (contents, buffer) =
+        allocate_new_buffer(&device, label, std::mem::size_of::<T>() * data.len());
+    unsafe {
+        std::ptr::copy_nonoverlapping(data.as_ptr(), contents as *mut T, data.len());
+    }
+    buffer
+}
+
+#[inline]
 pub fn encode_vertex_bytes<I: Into<u64>, T: Sized + Copy + Clone>(
     encoder: &RenderCommandEncoderRef,
     buffer_index: I,
