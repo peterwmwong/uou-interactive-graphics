@@ -1,14 +1,19 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use std::{f32::consts::PI, path::PathBuf, simd::Simd};
-
 use metal_app::{
-    allocate_new_buffer, encode_vertex_bytes, launch_application, metal::*, unwrap_option_dcheck,
-    unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
+    allocate_new_buffer_with_data, encode_vertex_bytes, launch_application, metal::*,
+    unwrap_option_dcheck, unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
 };
-use shader_bindings::{packed_float4, INITIAL_CAMERA_DISTANCE};
-use tobj::LoadOptions;
+use shader_bindings::{
+    packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
+    VertexBufferIndex_VertexBufferIndexCameraRotation, VertexBufferIndex_VertexBufferIndexIndices,
+    VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+    VertexBufferIndex_VertexBufferIndexPositions, VertexBufferIndex_VertexBufferIndexScreenSize,
+    INITIAL_CAMERA_DISTANCE,
+};
+use std::{f32::consts::PI, path::PathBuf, simd::Simd};
+use tobj::{LoadOptions, Mesh};
 
 struct Delegate {
     camera_distance_offset: Unit,
@@ -16,8 +21,9 @@ struct Delegate {
     camera_rotation_offset: Simd<Unit, 2>,
     camera_rotation: Simd<Unit, 2>,
     mins_maxs: [packed_float4; 2],
-    num_vertices: usize,
+    num_triangles: usize,
     render_pipeline_state: RenderPipelineState,
+    vertex_buffer_indices: Buffer,
     vertex_buffer_positions: Buffer,
 }
 
@@ -39,18 +45,29 @@ impl RendererDelgate for Delegate {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("teapot.obj");
-        let (mut models, ..) =
-            tobj::load_obj(teapot_file, &LoadOptions::default()).expect("Failed to load OBJ file");
+        let (mut models, ..) = tobj::load_obj(
+            teapot_file,
+            &LoadOptions {
+                single_index: false,
+                triangulate: true,
+                ignore_points: true,
+                ignore_lines: true,
+            },
+        )
+        .expect("Failed to load OBJ file");
+
+        let model = models
+            .pop()
+            .expect("Failed to parse model, expecting atleast one model (teapot)");
+        let Mesh {
+            positions, indices, ..
+        } = model.mesh;
 
         debug_assert_eq!(
-            models.len(),
-            1,
-            "Model object file (`teapot.obj`) should only contain one model."
+            indices.len() % 3,
+            0,
+            r#"`mesh.indices` should contain triples (triangle vertices). Model should have been loaded with `triangulate`, guaranteeing all faces have 3 vertices."#
         );
-
-        let model = models.pop().expect("Failed to parse model");
-        let positions = model.mesh.positions;
-
         debug_assert_eq!(
             positions.len() % 3,
             0,
@@ -59,37 +76,23 @@ impl RendererDelgate for Delegate {
 
         let mins_maxs = {
             let (positions3, ..) = positions.as_chunks::<3>();
-            let mut mins = (f32::MAX, f32::MAX, f32::MAX);
-            let mut maxs = (f32::MIN, f32::MIN, f32::MIN);
+            let mut mins = Simd::splat(f32::MAX);
+            let mut maxs = Simd::splat(f32::MIN);
             for &[x, y, z] in positions3 {
-                mins = (mins.0.min(x), mins.1.min(y), mins.2.min(z));
-                maxs = (maxs.0.max(x), maxs.1.max(y), maxs.2.max(z));
+                let input = Simd::from_array([x, y, z, 0.0]);
+                mins = mins.min(input);
+                maxs = maxs.max(input);
             }
-            [
-                packed_float4::new(mins.0, mins.1, mins.2, 1.0),
-                packed_float4::new(maxs.0, maxs.1, maxs.2, 1.0),
-            ]
+            [mins.into(), maxs.into()]
         };
 
-        let (contents, vertex_buffer_positions) = allocate_new_buffer(
-            &device,
-            "Vertex Buffer Positions",
-            std::mem::size_of::<f32>() * positions.len(),
-        );
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                positions.as_ptr(),
-                contents as *mut f32,
-                positions.len(),
-            );
-        }
         Self {
             camera_distance_offset: 0.0,
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation_offset: Simd::splat(0.0),
             camera_rotation: Simd::from_array([-PI / 6.0, 0.0]),
             mins_maxs,
-            num_vertices: positions.len() / 3,
+            num_triangles: indices.len() / 3,
             render_pipeline_state: {
                 let library = device
                     .new_library_with_data(include_bytes!(concat!(
@@ -107,6 +110,24 @@ impl RendererDelgate for Delegate {
                         .get_function(&"main_vertex", None)
                         .expect("Failed to access vertex shader function from metal library");
                     pipeline_state_desc.set_vertex_function(Some(&fun));
+
+                    let buffers = pipeline_state_desc
+                        .vertex_buffers()
+                        .expect("Failed to access vertex buffers");
+                    for &buffer_index in &[
+                        VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+                        VertexBufferIndex_VertexBufferIndexIndices,
+                        VertexBufferIndex_VertexBufferIndexPositions,
+                        VertexBufferIndex_VertexBufferIndexScreenSize,
+                        VertexBufferIndex_VertexBufferIndexCameraRotation,
+                        VertexBufferIndex_VertexBufferIndexCameraDistance,
+                    ] {
+                        unwrap_option_dcheck(
+                            buffers.object_at(buffer_index as _),
+                            "Failed to access vertex buffer",
+                        )
+                        .set_mutability(MTLMutability::Immutable);
+                    }
                 }
 
                 // Setup Fragment Shader
@@ -142,7 +163,16 @@ impl RendererDelgate for Delegate {
                     "Failed to create render pipeline",
                 )
             },
-            vertex_buffer_positions,
+            vertex_buffer_indices: allocate_new_buffer_with_data(
+                &device,
+                "Vertex Buffer Indices",
+                &indices,
+            ),
+            vertex_buffer_positions: allocate_new_buffer_with_data(
+                &device,
+                "Vertex Buffer Positions",
+                &positions,
+            ),
         }
     }
 
@@ -168,12 +198,87 @@ impl RendererDelgate for Delegate {
             desc
         });
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+            &self.mins_maxs,
+        );
+        encoder.set_vertex_buffer(
+            VertexBufferIndex_VertexBufferIndexIndices as _,
+            Some(&self.vertex_buffer_indices),
+            0,
+        );
+        encoder.set_vertex_buffer(
+            VertexBufferIndex_VertexBufferIndexPositions as _,
+            Some(&self.vertex_buffer_positions),
+            0,
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexCameraRotation,
+            &(self.camera_rotation + self.camera_rotation_offset),
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexCameraDistance,
+            &(self.camera_distance + self.camera_distance_offset),
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexScreenSize,
+            &screen_size,
+        );
+        encoder.draw_primitives_instanced(
+            MTLPrimitiveType::TriangleStrip,
+            0,
+            3,
+            self.num_triangles as _,
+        );
         encoder.end_encoding();
         command_buffer.present_drawable(drawable);
         command_buffer.commit();
     }
 
-    fn on_event(&mut self, event: UserEvent) {}
+    fn on_event(&mut self, event: UserEvent) {
+        use metal_app::MouseButton::*;
+        use UserEvent::*;
+        fn calc_distance_offset(down_position: Position, position: Position) -> Unit {
+            // Dragging up   => zooms in  (-offset)
+            // Dragging down => zooms out (+offset)
+            let screen_offset = position[1] - down_position[1];
+            screen_offset / 8.0
+        }
+        match event {
+            MouseDrag {
+                button,
+                position,
+                down_position,
+            } => match button {
+                Left => {
+                    self.camera_rotation_offset =
+                        self.calc_rotation_offset(down_position, position);
+                }
+                Right => {
+                    self.camera_distance_offset = calc_distance_offset(down_position, position);
+                }
+            },
+            MouseUp {
+                button,
+                position,
+                down_position,
+            } => match button {
+                Left => {
+                    self.camera_rotation_offset = Simd::default();
+                    self.camera_rotation += self.calc_rotation_offset(down_position, position);
+                }
+                Right => {
+                    self.camera_distance_offset = 0.0;
+                    self.camera_distance += calc_distance_offset(down_position, position);
+                }
+            },
+            _ => return,
+        }
+    }
 }
 
 pub fn run() {

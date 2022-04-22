@@ -5,21 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug 'proj-2-transformations'",
+            "name": "Debug 'proj-3-shading'",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "build",
-                    "--package=proj-2-transformations",
+                    "--package=proj-3-shading"
                 ],
                 "filter": {
-                    "name": "proj-2-transformations",
+                    "name": "proj-3-shading",
                     "kind": "bin"
                 }
             },
             "args": [],
             "cwd": "${workspaceFolder}"
-        },
+        }
     ]
 }

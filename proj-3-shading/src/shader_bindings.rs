@@ -393,6 +393,13 @@ fn bindgen_test_layout_packed_float4() {
     );
 }
 pub const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
+pub const VertexBufferIndex_VertexBufferIndexMaxPositionValue: VertexBufferIndex = 0;
+pub const VertexBufferIndex_VertexBufferIndexIndices: VertexBufferIndex = 1;
+pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 2;
+pub const VertexBufferIndex_VertexBufferIndexScreenSize: VertexBufferIndex = 3;
+pub const VertexBufferIndex_VertexBufferIndexCameraRotation: VertexBufferIndex = 4;
+pub const VertexBufferIndex_VertexBufferIndexCameraDistance: VertexBufferIndex = 5;
+pub type VertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.
