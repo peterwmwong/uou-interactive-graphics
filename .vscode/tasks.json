@@ -98,6 +98,18 @@
                 "proj-2-transformations"
             ],
             "label": "Run proj-2-transformations"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-3-shading"
+            ],
+            "label": "Run proj-3-shading"
         }
     ]
 }
