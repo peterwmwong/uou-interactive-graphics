@@ -115,11 +115,20 @@ impl RendererDelgate for Delegate {
                     let buffers = pipeline_state_desc
                         .vertex_buffers()
                         .expect("Failed to access vertex buffers");
-                    unwrap_option_dcheck(
-                        buffers.object_at(VertexBufferIndex_VertexBufferIndexPositions as u64),
-                        "Failed to access vertex buffer",
-                    )
-                    .set_mutability(MTLMutability::Immutable);
+                    for &buffer_index in &[
+                        VertexBufferIndex_VertexBufferIndexCameraDistance,
+                        VertexBufferIndex_VertexBufferIndexCameraRotation,
+                        VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+                        VertexBufferIndex_VertexBufferIndexPositions,
+                        VertexBufferIndex_VertexBufferIndexScreenSize,
+                        VertexBufferIndex_VertexBufferIndexUsePerspective,
+                    ] {
+                        unwrap_option_dcheck(
+                            buffers.object_at(buffer_index as _),
+                            "Failed to access vertex buffer",
+                        )
+                        .set_mutability(MTLMutability::Immutable);
+                    }
                 }
 
                 // Setup Fragment Shader
