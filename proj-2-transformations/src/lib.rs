@@ -1,11 +1,6 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use std::{f32::consts::PI, path::PathBuf, simd::Simd};
-
-use crate::shader_bindings::{
-    VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
-};
 use metal_app::{
     allocate_new_buffer, encode_vertex_bytes, launch_application, metal::*, unwrap_option_dcheck,
     unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
@@ -14,9 +9,10 @@ use shader_bindings::{
     packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
     VertexBufferIndex_VertexBufferIndexCameraRotation,
     VertexBufferIndex_VertexBufferIndexMaxPositionValue,
-    VertexBufferIndex_VertexBufferIndexScreenSize,
-    VertexBufferIndex_VertexBufferIndexUsePerspective,
+    VertexBufferIndex_VertexBufferIndexPositions, VertexBufferIndex_VertexBufferIndexScreenSize,
+    VertexBufferIndex_VertexBufferIndexUsePerspective, INITIAL_CAMERA_DISTANCE,
 };
+use std::{f32::consts::PI, path::PathBuf, simd::Simd};
 use tobj::LoadOptions;
 
 struct Delegate {
