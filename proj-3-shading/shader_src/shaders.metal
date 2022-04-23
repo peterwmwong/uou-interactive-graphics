@@ -9,10 +9,6 @@ struct VertexOut
     // TOOD: Add normal
 };
 
-// IMPORTANT: Normally you would **NOT** calculate the model-view-projection matrix in the Vertex
-// Shader. For performance, this should be done once (not for every vertex) on the CPU and passed to
-// the Vertex Shader as a constant space buffer. It is done in the Vertex Shader for this project as
-// a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
 main_vertex(         uint           inst_id          [[instance_id]],
                      uint           vertex_id        [[vertex_id]],
