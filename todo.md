@@ -1,5 +1,11 @@
+# metal-app
+
+- Should `RenderDelegate::on_resize` just be an event passed to `on_event`?
+
 # metal-build
 
+- Switching between release/dev build doesn't seem to rebuild shader_bindings.
+    - Wish we could add `#[cfg_attr(debug_assertions), derive(Debug)]` to bindgen
 - Can bindgen replace vector types (ex. float2) with SIMD<?,?> equivalents?
     - This should remove/reduce the need for vector_type_helpers
 

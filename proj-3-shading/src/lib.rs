@@ -19,12 +19,12 @@ use std::{
 use tobj::{LoadOptions, Mesh};
 
 struct Delegate {
-    camera_distance_offset: Unit,
+    aspect_ratio: f32,
     camera_distance: Unit,
-    camera_rotation_offset: f32x2,
     camera_rotation: f32x2,
     max_bound: f32,
     model_matrix: f32x4x4,
+    model_view_projection_matrix: f32x4x4,
     num_triangles: usize,
     render_pipeline_state: RenderPipelineState,
     vertex_buffer_indices: Buffer,
@@ -73,15 +73,21 @@ impl Delegate {
     }
 
     #[inline]
-    fn view_matrix(&self) -> f32x4x4 {
-        let rot = self.camera_rotation + self.camera_rotation_offset;
-        f32x4x4::translate(0., 0., self.camera_distance + self.camera_distance_offset)
+    fn view_matrix(&self, camera_rotation_offset: Size, camera_distance_offset: Unit) -> f32x4x4 {
+        let rot = self.camera_rotation + camera_rotation_offset;
+        f32x4x4::translate(0., 0., self.camera_distance + camera_distance_offset)
             * f32x4x4::rotate(-rot[0], -rot[1], 0.)
     }
 
     #[inline]
-    fn model_view_projection_matrix(&self, aspect_ratio: f32) -> f32x4x4 {
-        self.projection_matrix(aspect_ratio) * self.view_matrix() * self.model_matrix
+    fn update_model_view_projection_matrix(
+        &mut self,
+        camera_rotation_offset: Size,
+        camera_distance_offset: Unit,
+    ) {
+        self.model_view_projection_matrix = self.projection_matrix(self.aspect_ratio)
+            * self.view_matrix(camera_rotation_offset, camera_distance_offset)
+            * self.model_matrix;
     }
 }
 
@@ -136,14 +142,13 @@ impl RendererDelgate for Delegate {
             r * t
         };
 
-        let camera_distance = INITIAL_CAMERA_DISTANCE;
         Self {
-            camera_distance_offset: 0.0,
-            camera_distance,
-            camera_rotation_offset: Simd::splat(0.0),
+            aspect_ratio: 1.0,
+            camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: Simd::from_array([-PI / 6.0, 0.0]),
             max_bound,
             model_matrix,
+            model_view_projection_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
                 let library = device
@@ -225,12 +230,8 @@ impl RendererDelgate for Delegate {
         }
     }
 
-    fn draw(
-        &mut self,
-        command_queue: &CommandQueue,
-        drawable: &MetalDrawableRef,
-        screen_size: Size,
-    ) {
+    #[inline]
+    fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
@@ -247,11 +248,6 @@ impl RendererDelgate for Delegate {
             desc
         });
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex_VertexBufferIndexModelViewProjection,
-            &self.model_view_projection_matrix(screen_size[0] / screen_size[1]),
-        );
         encoder.set_vertex_buffer(
             VertexBufferIndex_VertexBufferIndexIndices as _,
             Some(&self.vertex_buffer_indices),
@@ -261,6 +257,11 @@ impl RendererDelgate for Delegate {
             VertexBufferIndex_VertexBufferIndexPositions as _,
             Some(&self.vertex_buffer_positions),
             0,
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexModelViewProjection,
+            &self.model_view_projection_matrix,
         );
         encoder.draw_primitives_instanced(
             MTLPrimitiveType::TriangleStrip,
@@ -282,6 +283,8 @@ impl RendererDelgate for Delegate {
             let screen_offset = position[1] - down_position[1];
             screen_offset / 8.0
         }
+        let mut camera_rotation_offset = Size::splat(0.);
+        let mut camera_distance_offset = 0.;
         match event {
             MouseDrag {
                 button,
@@ -289,11 +292,10 @@ impl RendererDelgate for Delegate {
                 down_position,
             } => match button {
                 Left => {
-                    self.camera_rotation_offset =
-                        self.calc_rotation_offset(down_position, position);
+                    camera_rotation_offset = self.calc_rotation_offset(down_position, position);
                 }
                 Right => {
-                    self.camera_distance_offset = calc_distance_offset(down_position, position);
+                    camera_distance_offset = calc_distance_offset(down_position, position);
                 }
             },
             MouseUp {
@@ -302,16 +304,23 @@ impl RendererDelgate for Delegate {
                 down_position,
             } => match button {
                 Left => {
-                    self.camera_rotation_offset = Simd::default();
+                    camera_rotation_offset = Simd::default();
                     self.camera_rotation += self.calc_rotation_offset(down_position, position);
                 }
                 Right => {
-                    self.camera_distance_offset = 0.0;
+                    camera_distance_offset = 0.0;
                     self.camera_distance += calc_distance_offset(down_position, position);
                 }
             },
             _ => return,
         }
+        self.update_model_view_projection_matrix(camera_rotation_offset, camera_distance_offset);
+    }
+
+    #[inline]
+    fn on_resize(&mut self, size: Size) {
+        self.aspect_ratio = size[0] / size[1];
+        self.update_model_view_projection_matrix(Size::splat(0.), 0.);
     }
 }
 

@@ -23,6 +23,7 @@ struct Delegate {
     mins_maxs: [packed_float4; 2],
     num_vertices: usize,
     render_pipeline_state: RenderPipelineState,
+    screen_size: Size,
     use_perspective: bool,
     vertex_buffer_positions: Buffer,
 }
@@ -162,15 +163,12 @@ impl RendererDelgate for Delegate {
                 "Vertex Buffer Positions",
                 &positions,
             ),
+            screen_size: Size::splat(0.),
         }
     }
 
-    fn draw(
-        &mut self,
-        command_queue: &CommandQueue,
-        drawable: &MetalDrawableRef,
-        screen_size: Size,
-    ) {
+    #[inline]
+    fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
@@ -209,7 +207,7 @@ impl RendererDelgate for Delegate {
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex_VertexBufferIndexScreenSize,
-            &screen_size,
+            &self.screen_size,
         );
         encode_vertex_bytes(
             &encoder,
@@ -269,6 +267,11 @@ impl RendererDelgate for Delegate {
             }
             _ => return,
         }
+    }
+
+    #[inline]
+    fn on_resize(&mut self, size: Size) {
+        self.screen_size = size;
     }
 }
 
