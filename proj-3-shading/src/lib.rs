@@ -7,11 +7,9 @@ use metal_app::{
     unwrap_option_dcheck, unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    VertexBufferIndex_VertexBufferIndexCameraDistance,
-    VertexBufferIndex_VertexBufferIndexCameraRotation, VertexBufferIndex_VertexBufferIndexIndices,
+    VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
-    VertexBufferIndex_VertexBufferIndexPositions, VertexBufferIndex_VertexBufferIndexScreenSize,
-    INITIAL_CAMERA_DISTANCE,
+    VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
 };
 use std::{
     f32::consts::PI,
@@ -25,9 +23,9 @@ struct Delegate {
     camera_distance: Unit,
     camera_rotation_offset: f32x2,
     camera_rotation: f32x2,
+    max_bound: f32,
     model_matrix: f32x4x4,
     num_triangles: usize,
-    projection_matrix: f32x4x4,
     render_pipeline_state: RenderPipelineState,
     vertex_buffer_indices: Buffer,
     vertex_buffer_positions: Buffer,
@@ -35,6 +33,7 @@ struct Delegate {
 
 impl Delegate {
     // TODO: This doesn't allow for a full 360 degree rotation in one drag (atan is [-90, 90]).
+    #[inline]
     fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
         let adjacent = Simd::splat(self.camera_distance);
         let offsets = down_position - position;
@@ -43,6 +42,46 @@ impl Delegate {
             ratio[1].atan(), // Rotation on x-axis
             ratio[0].atan(), // Rotation on y-axis
         ])
+    }
+
+    #[inline]
+    fn projection_matrix(&self, aspect_ratio: f32) -> f32x4x4 {
+        let n = 0.1;
+        let f = 1000.0;
+        let camera_distance = INITIAL_CAMERA_DISTANCE;
+
+        let perspective_matrix = f32x4x4::new(
+            [n, 0., 0., 0.],
+            [0., n, 0., 0.],
+            [0., 0., n + f, -n * f],
+            [0., 0., 1., 0.],
+        );
+        let b = n * -self.max_bound / camera_distance;
+        let t = n * self.max_bound / camera_distance;
+        let l = aspect_ratio * b;
+        let r = aspect_ratio * t;
+        let orthographic_matrix = {
+            f32x4x4::new(
+                [2. / (r - l), 0., 0., -(r + l) / (r - l)],
+                [0., 2. / (t - b), 0., -(t + b) / (t - b)],
+                // IMPORTANT: Metal's NDC coordinate space has a z range of [0.,1], **NOT [-1,1]** (OpenGL).
+                [0., 0., 1. / (f - n), -n / (f - n)],
+                [0., 0., 0., 1.],
+            )
+        };
+        orthographic_matrix * perspective_matrix
+    }
+
+    #[inline]
+    fn view_matrix(&self) -> f32x4x4 {
+        let rot = self.camera_rotation + self.camera_rotation_offset;
+        f32x4x4::translate(0., 0., self.camera_distance + self.camera_distance_offset)
+            * f32x4x4::rotate(-rot[0], -rot[1], 0.)
+    }
+
+    #[inline]
+    fn model_view_projection_matrix(&self, aspect_ratio: f32) -> f32x4x4 {
+        self.projection_matrix(aspect_ratio) * self.view_matrix() * self.model_matrix
     }
 }
 
@@ -98,45 +137,14 @@ impl RendererDelgate for Delegate {
         };
 
         let camera_distance = INITIAL_CAMERA_DISTANCE;
-        // TODO: move this into the draw or in on_event
-        // let view_matrix = f32x4x4::translate(0., 0., camera_distance, 0.)
-        //     * f32x4x4::rotate(camera_rotation[0], camera_rotation[1], 0.);
-
-        let n = 0.1;
-        let f = 1000.0;
-        let initial_screen_ratio = 1.0;
-        let b = n * -max_bound / camera_distance;
-        let t = n * max_bound / camera_distance;
-        let l = initial_screen_ratio * b;
-        let r = initial_screen_ratio * t;
-
-        let projection_matrix = {
-            let perspective_matrix = f32x4x4::new(
-                [n, 0., 0., 0.],
-                [0., n, 0., 0.],
-                [0., 0., n + f, -n * f],
-                [0., 0., 1., 0.],
-            );
-            let orthographic_matrix = {
-                f32x4x4::new(
-                    [2. / (r - l), 0., 0., -(r + l) / (r - l)],
-                    [0., 2. / (t - b), 0., -(t + b) / (t - b)],
-                    // IMPORTANT: Metal's NDC coordinate space has a z range of [0.,1], **NOT [-1,1]** (OpenGL).
-                    [0., 0., 1. / (f - n), -n / (f - n)],
-                    [0., 0., 0., 1.],
-                )
-            };
-            orthographic_matrix * perspective_matrix
-        };
-
         Self {
             camera_distance_offset: 0.0,
-            camera_distance: INITIAL_CAMERA_DISTANCE,
+            camera_distance,
             camera_rotation_offset: Simd::splat(0.0),
             camera_rotation: Simd::from_array([-PI / 6.0, 0.0]),
+            max_bound,
             model_matrix,
             num_triangles: indices.len() / 3,
-            projection_matrix,
             render_pipeline_state: {
                 let library = device
                     .new_library_with_data(include_bytes!(concat!(
@@ -162,9 +170,6 @@ impl RendererDelgate for Delegate {
                         VertexBufferIndex_VertexBufferIndexIndices,
                         VertexBufferIndex_VertexBufferIndexPositions,
                         VertexBufferIndex_VertexBufferIndexModelViewProjection,
-                        VertexBufferIndex_VertexBufferIndexScreenSize,
-                        VertexBufferIndex_VertexBufferIndexCameraRotation,
-                        VertexBufferIndex_VertexBufferIndexCameraDistance,
                     ] {
                         unwrap_option_dcheck(
                             buffers.object_at(buffer_index as _),
@@ -245,12 +250,7 @@ impl RendererDelgate for Delegate {
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex_VertexBufferIndexModelViewProjection,
-            // TODO: START HERE
-            // TODO: START HERE
-            // TODO: START HERE
-            // 1. The shader is receiving this matrix as columns instead of rows!!!
-            // 2. This should be: projection_matrix * view_matrix * model_matrix
-            &self.model_matrix,
+            &self.model_view_projection_matrix(screen_size[0] / screen_size[1]),
         );
         encoder.set_vertex_buffer(
             VertexBufferIndex_VertexBufferIndexIndices as _,
@@ -261,21 +261,6 @@ impl RendererDelgate for Delegate {
             VertexBufferIndex_VertexBufferIndexPositions as _,
             Some(&self.vertex_buffer_positions),
             0,
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex_VertexBufferIndexCameraRotation,
-            &(self.camera_rotation + self.camera_rotation_offset),
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex_VertexBufferIndexCameraDistance,
-            &(self.camera_distance + self.camera_distance_offset),
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex_VertexBufferIndexScreenSize,
-            &screen_size,
         );
         encoder.draw_primitives_instanced(
             MTLPrimitiveType::TriangleStrip,

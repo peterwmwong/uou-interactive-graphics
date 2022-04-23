@@ -1,6 +1,7 @@
 use std::ops::Mul;
 use std::simd::f32x4;
 
+#[inline]
 fn dot_product(lhs: f32x4, rhs: f32x4) -> f32 {
     lhs.mul(rhs).reduce_sum()
 }

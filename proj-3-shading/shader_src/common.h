@@ -17,9 +17,6 @@ enum VertexBufferIndex
     VertexBufferIndexIndices = 0,
     VertexBufferIndexPositions,
     VertexBufferIndexModelViewProjection,
-    VertexBufferIndexScreenSize,
-    VertexBufferIndexCameraRotation,
-    VertexBufferIndexCameraDistance,
 };
 
 #endif
