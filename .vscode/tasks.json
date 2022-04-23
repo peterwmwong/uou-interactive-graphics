@@ -48,20 +48,6 @@
             "command": "xcrun -sdk macosx metal -std=macos-metal2.4 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
         },
         {
-            "label": "build-release-asm",
-            "type": "shell",
-            "presentation": {
-                "echo": true,
-                "reveal": "silent",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": true
-            },
-            "command": "RUSTFLAGS=\"--emit asm -C target-cpu=native\" cargo build --release -p void-renderer --bin void-renderer && cat target/release/deps/void_renderer-*.s > /tmp/void-renderer-AFTER.s",
-            "problemMatcher": []
-        },
-        {
             "label": "diff-release-asm",
             "type": "shell",
             "presentation": {
@@ -110,6 +96,20 @@
                 "proj-3-shading"
             ],
             "label": "Run proj-3-shading"
-        }
+        },
+        {
+            "label": "asm proj-3-shading",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "${workspaceFolder}/build-release-asm.sh proj-3-shading",
+            "problemMatcher": []
+        },
     ]
 }
