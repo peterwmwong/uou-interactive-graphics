@@ -58,17 +58,18 @@ struct VertexOut
 vertex VertexOut
 main_vertex(         uint           inst_id          [[instance_id]],
                      uint           vertex_id        [[vertex_id]],
-            constant packed_float4* mins_maxs        [[buffer(VertexBufferIndexMaxPositionValue)]],
             constant uint*          indices          [[buffer(VertexBufferIndexIndices)]],
             constant packed_float3* positions        [[buffer(VertexBufferIndexPositions)]],
+            constant float4x4&      mvp              [[buffer(VertexBufferIndexModelViewProjection)]],
             constant float2&        screen_size      [[buffer(VertexBufferIndexScreenSize)]],
             constant float2&        camera_rotation  [[buffer(VertexBufferIndexCameraRotation)]],
             constant float&         camera_distance  [[buffer(VertexBufferIndexCameraDistance)]])
 {
     const uint   position_idx   = indices[inst_id * 3 + vertex_id];
     const float4 model_position = float4(positions[position_idx], 1.0); // Make homogenous coordinate
-    const float4 mins           = mins_maxs[0];
-    const float4 maxs           = mins_maxs[1];
+    const float4x4 yolo = mvp;
+    const float4 mins = float4(yolo[0]);
+    const float4 maxs = float4(yolo[1]);
 
     // The input model file actually orients the z-axis runs along the "bottom" to the "top" of the
     // teapot and the center bottom of the teapot is the origin (0,0,0).
