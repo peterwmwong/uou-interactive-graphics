@@ -14,7 +14,7 @@ pub struct f32x4x4 {
 
 impl f32x4x4 {
     #[inline]
-    pub fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
+    pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
         f32x4x4 {
             rows: [
                 f32x4::from_array(row1),
@@ -26,7 +26,17 @@ impl f32x4x4 {
     }
 
     #[inline]
-    pub fn scale(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub const fn translate(x: f32, y: f32, z: f32) -> Self {
+        Self::new(
+            [1., 0., 0., x],
+            [0., 1., 0., y],
+            [0., 0., 1., z],
+            [0., 0., 0., 1.],
+        )
+    }
+
+    #[inline]
+    pub const fn scale(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self::new(
             [x, 0., 0., 0.],
             [0., y, 0., 0.],
@@ -36,7 +46,42 @@ impl f32x4x4 {
     }
 
     #[inline]
-    pub fn identity() -> Self {
+    pub fn z_rotate(zrot: f32) -> Self {
+        Self::new(
+            [zrot.cos(), zrot.sin(), 0., 0.],
+            [-zrot.sin(), zrot.cos(), 0., 0.],
+            [0., 0., 1., 0.],
+            [0., 0., 0., 1.],
+        )
+    }
+
+    #[inline]
+    pub fn y_rotate(yrot: f32) -> Self {
+        Self::new(
+            [yrot.cos(), 0., -yrot.sin(), 0.],
+            [0., 1., 0., 0.],
+            [yrot.sin(), 0., yrot.cos(), 0.],
+            [0., 0., 0., 1.],
+        )
+    }
+
+    #[inline]
+    pub fn x_rotate(xrot: f32) -> Self {
+        Self::new(
+            [1., 0., 0., 0.],
+            [0., xrot.cos(), xrot.sin(), 0.],
+            [0., -xrot.sin(), xrot.cos(), 0.],
+            [0., 0., 0., 1.],
+        )
+    }
+
+    #[inline]
+    pub fn rotate(xrot: f32, yrot: f32, zrot: f32) -> Self {
+        Self::x_rotate(xrot) * Self::y_rotate(yrot) * Self::z_rotate(zrot)
+    }
+
+    #[inline]
+    pub const fn identity() -> Self {
         Self::scale(1., 1., 1., 1.)
     }
 
@@ -44,9 +89,9 @@ impl f32x4x4 {
     pub fn column<const N: usize>(&self) -> f32x4 {
         f32x4::from_array([
             self.rows[0][N],
-            self.rows[0][N],
-            self.rows[0][N],
-            self.rows[0][N],
+            self.rows[1][N],
+            self.rows[2][N],
+            self.rows[3][N],
         ])
     }
 }
@@ -60,6 +105,8 @@ impl Mul<f32x4> for f32x4x4 {
     }
 }
 
+// TODO: Figure out how to make this a `impl const`.
+// - Start by looking at how to make dot_product() a `const fn`.
 impl Mul<f32x4x4> for f32x4x4 {
     type Output = f32x4x4;
 
@@ -83,6 +130,21 @@ mod test {
     use std::simd::f32x4;
 
     use super::*;
+
+    #[test]
+    fn test_column() {
+        let m = f32x4x4::new(
+            [5., 6., 7., 8.],
+            [9., 10., 11., 12.],
+            [13., 14., 15., 16.],
+            [17., 18., 19., 20.],
+        );
+
+        assert_eq!(m.column::<0>(), f32x4::from_array([5., 9., 13., 17.]));
+        assert_eq!(m.column::<1>(), f32x4::from_array([6., 10., 14., 18.]));
+        assert_eq!(m.column::<2>(), f32x4::from_array([7., 11., 15., 19.]));
+        assert_eq!(m.column::<3>(), f32x4::from_array([8., 12., 16., 20.]));
+    }
 
     #[test]
     fn test_mul_with_f32x4() {
