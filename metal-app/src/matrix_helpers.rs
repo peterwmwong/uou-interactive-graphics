@@ -9,18 +9,31 @@ fn dot_product(lhs: f32x4, rhs: f32x4) -> f32 {
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[allow(non_camel_case_types)]
 pub struct f32x4x4 {
-    rows: [f32x4; 4],
+    columns: [f32x4; 4],
 }
 
 impl f32x4x4 {
     #[inline]
     pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
         f32x4x4 {
-            rows: [
-                f32x4::from_array(row1),
-                f32x4::from_array(row2),
-                f32x4::from_array(row3),
-                f32x4::from_array(row4),
+            columns: [
+                // TODO: Compare with using f32x4::gather()
+                f32x4::from_array([row1[0], row2[0], row3[0], row4[0]]),
+                f32x4::from_array([row1[1], row2[1], row3[1], row4[1]]),
+                f32x4::from_array([row1[2], row2[2], row3[2], row4[2]]),
+                f32x4::from_array([row1[3], row2[3], row3[3], row4[3]]),
+            ],
+        }
+    }
+
+    pub fn transpose(&self) -> Self {
+        let c = self.columns;
+        f32x4x4 {
+            columns: [
+                f32x4::from_array([c[0][0], c[1][0], c[2][0], c[3][0]]),
+                f32x4::from_array([c[0][1], c[1][1], c[2][1], c[3][1]]),
+                f32x4::from_array([c[0][2], c[1][2], c[2][2], c[3][2]]),
+                f32x4::from_array([c[0][3], c[1][3], c[2][3], c[3][3]]),
             ],
         }
     }
@@ -86,12 +99,12 @@ impl f32x4x4 {
     }
 
     #[inline]
-    pub fn column<const N: usize>(&self) -> f32x4 {
+    pub fn row<const N: usize>(&self) -> f32x4 {
         f32x4::from_array([
-            self.rows[0][N],
-            self.rows[1][N],
-            self.rows[2][N],
-            self.rows[3][N],
+            self.columns[0][N],
+            self.columns[1][N],
+            self.columns[2][N],
+            self.columns[3][N],
         ])
     }
 }
@@ -101,7 +114,7 @@ impl Mul<f32x4> for f32x4x4 {
 
     #[inline]
     fn mul(self, rhs: f32x4) -> Self::Output {
-        f32x4::from_array(self.rows.map(|r| dot_product(r, rhs)))
+        f32x4::from_array(self.transpose().columns.map(|r| dot_product(r, rhs)))
     }
 }
 
@@ -113,12 +126,12 @@ impl Mul<f32x4x4> for f32x4x4 {
     #[inline]
     fn mul(self, rhs: f32x4x4) -> Self::Output {
         Self {
-            rows: self.rows.map(|r| {
+            columns: rhs.columns.map(|col| {
                 f32x4::from_array([
-                    dot_product(r, rhs.column::<0>()),
-                    dot_product(r, rhs.column::<1>()),
-                    dot_product(r, rhs.column::<2>()),
-                    dot_product(r, rhs.column::<3>()),
+                    dot_product(self.row::<0>(), col),
+                    dot_product(self.row::<1>(), col),
+                    dot_product(self.row::<2>(), col),
+                    dot_product(self.row::<3>(), col),
                 ])
             }),
         }
@@ -132,7 +145,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_column() {
+    fn test_row() {
         let m = f32x4x4::new(
             [5., 6., 7., 8.],
             [9., 10., 11., 12.],
@@ -140,10 +153,10 @@ mod test {
             [17., 18., 19., 20.],
         );
 
-        assert_eq!(m.column::<0>(), f32x4::from_array([5., 9., 13., 17.]));
-        assert_eq!(m.column::<1>(), f32x4::from_array([6., 10., 14., 18.]));
-        assert_eq!(m.column::<2>(), f32x4::from_array([7., 11., 15., 19.]));
-        assert_eq!(m.column::<3>(), f32x4::from_array([8., 12., 16., 20.]));
+        assert_eq!(m.row::<0>(), f32x4::from_array([5., 6., 7., 8.]));
+        assert_eq!(m.row::<1>(), f32x4::from_array([9., 10., 11., 12.]));
+        assert_eq!(m.row::<2>(), f32x4::from_array([13., 14., 15., 16.]));
+        assert_eq!(m.row::<3>(), f32x4::from_array([17., 18., 19., 20.]));
     }
 
     #[test]
@@ -188,28 +201,28 @@ mod test {
             result,
             f32x4x4::new(
                 [
-                    (left.rows[0] * right.column::<0>()).reduce_sum(),
-                    (left.rows[0] * right.column::<1>()).reduce_sum(),
-                    (left.rows[0] * right.column::<2>()).reduce_sum(),
-                    (left.rows[0] * right.column::<3>()).reduce_sum(),
+                    (left.row::<0>() * right.columns[0]).reduce_sum(),
+                    (left.row::<0>() * right.columns[1]).reduce_sum(),
+                    (left.row::<0>() * right.columns[2]).reduce_sum(),
+                    (left.row::<0>() * right.columns[3]).reduce_sum(),
                 ],
                 [
-                    (left.rows[1] * right.column::<0>()).reduce_sum(),
-                    (left.rows[1] * right.column::<1>()).reduce_sum(),
-                    (left.rows[1] * right.column::<2>()).reduce_sum(),
-                    (left.rows[1] * right.column::<3>()).reduce_sum(),
+                    (left.row::<1>() * right.columns[0]).reduce_sum(),
+                    (left.row::<1>() * right.columns[1]).reduce_sum(),
+                    (left.row::<1>() * right.columns[2]).reduce_sum(),
+                    (left.row::<1>() * right.columns[3]).reduce_sum(),
                 ],
                 [
-                    (left.rows[2] * right.column::<0>()).reduce_sum(),
-                    (left.rows[2] * right.column::<1>()).reduce_sum(),
-                    (left.rows[2] * right.column::<2>()).reduce_sum(),
-                    (left.rows[2] * right.column::<3>()).reduce_sum(),
+                    (left.row::<2>() * right.columns[0]).reduce_sum(),
+                    (left.row::<2>() * right.columns[1]).reduce_sum(),
+                    (left.row::<2>() * right.columns[2]).reduce_sum(),
+                    (left.row::<2>() * right.columns[3]).reduce_sum(),
                 ],
                 [
-                    (left.rows[3] * right.column::<0>()).reduce_sum(),
-                    (left.rows[3] * right.column::<1>()).reduce_sum(),
-                    (left.rows[3] * right.column::<2>()).reduce_sum(),
-                    (left.rows[3] * right.column::<3>()).reduce_sum(),
+                    (left.row::<3>() * right.columns[0]).reduce_sum(),
+                    (left.row::<3>() * right.columns[1]).reduce_sum(),
+                    (left.row::<3>() * right.columns[2]).reduce_sum(),
+                    (left.row::<3>() * right.columns[3]).reduce_sum(),
                 ]
             )
         );
