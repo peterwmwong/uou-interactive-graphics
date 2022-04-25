@@ -40,6 +40,15 @@ impl f32x4x4 {
     }
 
     #[inline]
+    pub fn zero_translate(&self) -> Self {
+        let mut other = self.clone();
+        other.columns[3][0] = 0.;
+        other.columns[3][1] = 0.;
+        other.columns[3][2] = 0.;
+        other
+    }
+
+    #[inline]
     pub const fn translate(x: f32, y: f32, z: f32) -> Self {
         Self::new(
             [1., 0., 0., x],
@@ -144,6 +153,24 @@ mod test {
     use std::simd::f32x4;
 
     use super::*;
+
+    #[test]
+    fn test_translate() {
+        let t = f32x4x4::translate(40., 50., 60.);
+        let p = f32x4::from_array([1., 2., 3., 1.]);
+
+        let result = t * p;
+        assert_eq!(result, f32x4::from_array([41., 52., 63., 1.]));
+    }
+
+    #[test]
+    fn test_zero_translate() {
+        let r = f32x4x4::rotate(1., 2., 3.);
+        let m = r * f32x4x4::translate(40., 50., 60.);
+
+        let result = m.zero_translate();
+        assert_eq!(result, r);
+    }
 
     #[test]
     fn test_row() {
