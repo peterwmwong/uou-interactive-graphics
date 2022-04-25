@@ -395,7 +395,9 @@ fn bindgen_test_layout_packed_float4() {
 pub const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
 pub const VertexBufferIndex_VertexBufferIndexIndices: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 1;
-pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 2;
+pub const VertexBufferIndex_VertexBufferIndexNormals: VertexBufferIndex = 2;
+pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex = 3;
+pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 4;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************

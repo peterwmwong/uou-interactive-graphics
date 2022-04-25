@@ -16,6 +16,8 @@ enum VertexBufferIndex
 {
     VertexBufferIndexIndices = 0,
     VertexBufferIndexPositions,
+    VertexBufferIndexNormals,
+    VertexBufferIndexNormalTransform,
     VertexBufferIndexModelViewProjection,
 };
 

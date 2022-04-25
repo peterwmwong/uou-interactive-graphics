@@ -9,6 +9,7 @@ use metal_app::{
 use shader_bindings::{
     VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
+    VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
     VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
 };
 use std::{
@@ -18,21 +19,39 @@ use std::{
 };
 use tobj::{LoadOptions, Mesh};
 
+const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
+
 struct Delegate {
     aspect_ratio: f32,
     camera_distance: Unit,
     camera_rotation: f32x2,
+    depth_state: DepthStencilState,
+    depth_texture: Option<Texture>,
+    device: Device,
     max_bound: f32,
     model_matrix: f32x4x4,
     model_view_projection_matrix: f32x4x4,
+    normal_transform_matrix: f32x4x4,
     num_triangles: usize,
     render_pipeline_state: RenderPipelineState,
     vertex_buffer_indices: Buffer,
+    vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
+    view_matrix: f32x4x4,
 }
 
 impl Delegate {
-    // TODO: This doesn't allow for a full 360 degree rotation in one drag (atan is [-90, 90]).
+    fn update_depth_texture_size(&mut self, size: Size) {
+        let desc = TextureDescriptor::new();
+        desc.set_width(size[0] as _);
+        desc.set_height(size[1] as _);
+        desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
+        desc.set_storage_mode(MTLStorageMode::Memoryless);
+        desc.set_usage(MTLTextureUsage::RenderTarget);
+        self.depth_texture = Some(self.device.new_texture(&desc));
+    }
+
+    // // TODO: This doesn't allow for a full 360 degree rotation in one drag (atan is [-90, 90]).
     #[inline]
     fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
         let adjacent = Simd::splat(self.camera_distance);
@@ -45,7 +64,34 @@ impl Delegate {
     }
 
     #[inline]
-    fn projection_matrix(&self, aspect_ratio: f32) -> f32x4x4 {
+    fn on_camera_change(
+        &mut self,
+        camera_rotation: Size,
+        camera_rotation_offset: Size,
+        camera_distance: Unit,
+        camera_distance_offset: Unit,
+    ) {
+        self.camera_rotation = camera_rotation;
+        self.camera_distance = camera_distance;
+
+        let rot = self.camera_rotation + camera_rotation_offset;
+        let view_rotation_matrix = f32x4x4::rotate(-rot[0], -rot[1], 0.);
+        let view_translate_matrix =
+            f32x4x4::translate(0., 0., self.camera_distance + camera_distance_offset);
+
+        self.normal_transform_matrix = view_rotation_matrix * self.model_matrix.zero_translate();
+        self.view_matrix = view_translate_matrix * view_rotation_matrix;
+
+        self.update_model_view_projection_matrix();
+    }
+
+    fn on_screen_size_change(&mut self, size: Size) {
+        self.aspect_ratio = size[0] / size[1];
+        self.update_model_view_projection_matrix();
+    }
+
+    #[inline]
+    fn calc_projection_matrix(&self, aspect_ratio: f32) -> f32x4x4 {
         let n = 0.1;
         let f = 1000.0;
         let camera_distance = INITIAL_CAMERA_DISTANCE;
@@ -73,21 +119,9 @@ impl Delegate {
     }
 
     #[inline]
-    fn view_matrix(&self, camera_rotation_offset: Size, camera_distance_offset: Unit) -> f32x4x4 {
-        let rot = self.camera_rotation + camera_rotation_offset;
-        f32x4x4::translate(0., 0., self.camera_distance + camera_distance_offset)
-            * f32x4x4::rotate(-rot[0], -rot[1], 0.)
-    }
-
-    #[inline]
-    fn update_model_view_projection_matrix(
-        &mut self,
-        camera_rotation_offset: Size,
-        camera_distance_offset: Unit,
-    ) {
-        self.model_view_projection_matrix = self.projection_matrix(self.aspect_ratio)
-            * self.view_matrix(camera_rotation_offset, camera_distance_offset)
-            * self.model_matrix;
+    fn update_model_view_projection_matrix(&mut self) {
+        self.model_view_projection_matrix =
+            self.calc_projection_matrix(self.aspect_ratio) * self.view_matrix * self.model_matrix;
     }
 }
 
@@ -99,7 +133,7 @@ impl RendererDelgate for Delegate {
         let (mut models, ..) = tobj::load_obj(
             teapot_file,
             &LoadOptions {
-                single_index: false,
+                single_index: true,
                 triangulate: true,
                 ignore_points: true,
                 ignore_lines: true,
@@ -111,7 +145,10 @@ impl RendererDelgate for Delegate {
             .pop()
             .expect("Failed to parse model, expecting atleast one model (teapot)");
         let Mesh {
-            positions, indices, ..
+            positions,
+            indices,
+            normals,
+            ..
         } = model.mesh;
 
         debug_assert_eq!(
@@ -123,6 +160,11 @@ impl RendererDelgate for Delegate {
             positions.len() % 3,
             0,
             r#"`mesh.positions` should contain triples (3D position)"#
+        );
+        debug_assert_eq!(
+            normals.len(),
+            positions.len(),
+            r#"`mesh.normals` should contain triples (3D vector)"#
         );
 
         let (positions3, ..) = positions.as_chunks::<3>();
@@ -142,12 +184,23 @@ impl RendererDelgate for Delegate {
             r * t
         };
 
-        Self {
+        let camera_distance = INITIAL_CAMERA_DISTANCE;
+        let camera_rotation = Simd::from_array([-PI / 6.0, 0.0]);
+        let mut delegate = Self {
             aspect_ratio: 1.0,
-            camera_distance: INITIAL_CAMERA_DISTANCE,
-            camera_rotation: Simd::from_array([-PI / 6.0, 0.0]),
+            camera_distance,
+            camera_rotation,
+            depth_state: {
+                let desc = DepthStencilDescriptor::new();
+                desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                desc.set_depth_write_enabled(true);
+                device.new_depth_stencil_state(&desc)
+            },
+            depth_texture: None,
             max_bound,
             model_matrix,
+            normal_transform_matrix: f32x4x4::identity(),
+            view_matrix: f32x4x4::identity(),
             model_view_projection_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
@@ -174,6 +227,7 @@ impl RendererDelgate for Delegate {
                     for &buffer_index in &[
                         VertexBufferIndex_VertexBufferIndexIndices,
                         VertexBufferIndex_VertexBufferIndexPositions,
+                        VertexBufferIndex_VertexBufferIndexNormals,
                         VertexBufferIndex_VertexBufferIndexModelViewProjection,
                     ] {
                         unwrap_option_dcheck(
@@ -183,6 +237,8 @@ impl RendererDelgate for Delegate {
                         .set_mutability(MTLMutability::Immutable);
                     }
                 }
+
+                pipeline_state_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
 
                 // Setup Fragment Shader
                 {
@@ -227,7 +283,22 @@ impl RendererDelgate for Delegate {
                 "Vertex Buffer Positions",
                 &positions,
             ),
-        }
+            vertex_buffer_normals: allocate_new_buffer_with_data(
+                &device,
+                "Vertex Buffer Normals",
+                &normals,
+            ),
+            device,
+        };
+
+        delegate.on_camera_change(
+            delegate.camera_rotation,
+            Simd::splat(0.),
+            delegate.camera_distance,
+            0.,
+        );
+        delegate.on_resize(Size::splat(1.));
+        delegate
     }
 
     #[inline]
@@ -235,19 +306,28 @@ impl RendererDelgate for Delegate {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
-            let clear_color: MTLClearColor = MTLClearColor::new(0.0, 0.0, 0.0, 0.0);
             let desc = RenderPassDescriptor::new();
-            let attachment = unwrap_option_dcheck(
-                desc.color_attachments().object_at(0),
-                "Failed to access color attachment on render pass descriptor",
-            );
-            attachment.set_texture(Some(drawable.texture()));
-            attachment.set_load_action(MTLLoadAction::Clear);
-            attachment.set_clear_color(clear_color);
-            attachment.set_store_action(MTLStoreAction::Store);
+            {
+                let a = unwrap_option_dcheck(
+                    desc.color_attachments().object_at(0),
+                    "Failed to access color attachment on render pass descriptor",
+                );
+                a.set_texture(Some(drawable.texture()));
+                a.set_load_action(MTLLoadAction::Clear);
+                a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
+                a.set_store_action(MTLStoreAction::Store);
+            }
+            {
+                let a = desc.depth_attachment().unwrap();
+                a.set_clear_depth(1.);
+                a.set_load_action(MTLLoadAction::Clear);
+                a.set_store_action(MTLStoreAction::DontCare);
+                a.set_texture(self.depth_texture.as_deref());
+            }
             desc
         });
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
+        encoder.set_depth_stencil_state(&self.depth_state);
         encoder.set_vertex_buffer(
             VertexBufferIndex_VertexBufferIndexIndices as _,
             Some(&self.vertex_buffer_indices),
@@ -257,6 +337,16 @@ impl RendererDelgate for Delegate {
             VertexBufferIndex_VertexBufferIndexPositions as _,
             Some(&self.vertex_buffer_positions),
             0,
+        );
+        encoder.set_vertex_buffer(
+            VertexBufferIndex_VertexBufferIndexNormals as _,
+            Some(&self.vertex_buffer_normals),
+            0,
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexNormalTransform,
+            &self.normal_transform_matrix,
         );
         encode_vertex_bytes(
             &encoder,
@@ -283,7 +373,9 @@ impl RendererDelgate for Delegate {
             let screen_offset = position[1] - down_position[1];
             screen_offset / 8.0
         }
+        let mut camera_rotation = self.camera_rotation;
         let mut camera_rotation_offset = Size::splat(0.);
+        let mut camera_distance = self.camera_distance;
         let mut camera_distance_offset = 0.;
         match event {
             MouseDrag {
@@ -305,22 +397,28 @@ impl RendererDelgate for Delegate {
             } => match button {
                 Left => {
                     camera_rotation_offset = Simd::default();
-                    self.camera_rotation += self.calc_rotation_offset(down_position, position);
+                    camera_rotation += self.calc_rotation_offset(down_position, position);
                 }
                 Right => {
                     camera_distance_offset = 0.0;
-                    self.camera_distance += calc_distance_offset(down_position, position);
+                    camera_distance += calc_distance_offset(down_position, position);
                 }
             },
             _ => return,
         }
-        self.update_model_view_projection_matrix(camera_rotation_offset, camera_distance_offset);
+        self.on_camera_change(
+            camera_rotation,
+            camera_rotation_offset,
+            camera_distance,
+            camera_distance_offset,
+        );
     }
 
     #[inline]
     fn on_resize(&mut self, size: Size) {
-        self.aspect_ratio = size[0] / size[1];
-        self.update_model_view_projection_matrix(Size::splat(0.), 0.);
+        self.update_depth_texture_size(size);
+        self.on_screen_size_change(size);
+        // self.update_model_view_projection_matrix();
     }
 }
 
