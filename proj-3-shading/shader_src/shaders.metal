@@ -6,6 +6,9 @@ using namespace metal;
 struct VertexOut
 {
     float4 position [[position]];
+    // TODO(perf): Can we calculate `view_dir` from `position`?
+    // - Try passing an "inverse perspective" transform matrix
+    // - `position` has already been mapped to screen space, so it will need to be converted to NDC (view space, [-1,1])
     float3 view_dir;
     float3 normal_dir;
 };
