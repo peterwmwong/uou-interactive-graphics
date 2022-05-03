@@ -42,3 +42,17 @@ pub fn encode_vertex_bytes<I: Into<u64>, T: Sized + Copy + Clone>(
         max_value_ptr as *const c_void,
     );
 }
+
+#[inline]
+pub fn encode_fragment_bytes<I: Into<u64>, T: Sized + Copy + Clone>(
+    encoder: &RenderCommandEncoderRef,
+    buffer_index: I,
+    v: &T,
+) {
+    let max_value_ptr: *const T = v;
+    encoder.set_fragment_bytes(
+        buffer_index.into(),
+        std::mem::size_of::<T>() as _,
+        max_value_ptr as *const c_void,
+    );
+}

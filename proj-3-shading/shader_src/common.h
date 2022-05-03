@@ -22,4 +22,10 @@ enum VertexBufferIndex
     VertexBufferIndexModelViewProjection,
 };
 
+enum FragBufferIndex
+{
+    FragBufferIndexInverseModelViewProjection = 0,
+    FragBufferIndexScreenSize,
+};
+
 #endif

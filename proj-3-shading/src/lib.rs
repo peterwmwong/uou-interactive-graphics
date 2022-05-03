@@ -3,11 +3,14 @@
 mod shader_bindings;
 
 use metal_app::{
-    allocate_new_buffer_with_data, encode_vertex_bytes, f32x4x4, launch_application, metal::*,
-    unwrap_option_dcheck, unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
+    allocate_new_buffer_with_data, encode_fragment_bytes, encode_vertex_bytes, f32x4x4,
+    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, Position,
+    RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    VertexBufferIndex_VertexBufferIndexIndices, VertexBufferIndex_VertexBufferIndexModelView,
+    FragBufferIndex_FragBufferIndexInverseModelViewProjection,
+    FragBufferIndex_FragBufferIndexScreenSize, VertexBufferIndex_VertexBufferIndexIndices,
+    VertexBufferIndex_VertexBufferIndexModelView,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
     VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
@@ -31,10 +34,12 @@ struct Delegate {
     max_bound: f32,
     model_matrix: f32x4x4,
     model_view_matrix: f32x4x4,
+    model_view_projection_inv_matrix: f32x4x4,
     model_view_projection_matrix: f32x4x4,
     normal_transform_matrix: f32x4x4,
     num_triangles: usize,
     render_pipeline_state: RenderPipelineState,
+    screen_size: Size,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
@@ -87,6 +92,7 @@ impl Delegate {
     }
 
     fn on_screen_size_change(&mut self, size: Size) {
+        self.screen_size = size;
         self.aspect_ratio = size[0] / size[1];
         self.update_model_view_projection_matrix();
     }
@@ -122,8 +128,9 @@ impl Delegate {
     #[inline]
     fn update_model_view_projection_matrix(&mut self) {
         self.model_view_matrix = self.view_matrix * self.model_matrix;
-        self.model_view_projection_matrix =
-            self.calc_projection_matrix(self.aspect_ratio) * self.model_view_matrix;
+        let projection_matrix = self.calc_projection_matrix(self.aspect_ratio);
+        self.model_view_projection_matrix = projection_matrix * self.model_view_matrix;
+        self.model_view_projection_inv_matrix = projection_matrix.inverse();
     }
 }
 
@@ -205,6 +212,7 @@ impl RendererDelgate for Delegate {
             view_matrix: f32x4x4::identity(),
             model_view_matrix: f32x4x4::identity(),
             model_view_projection_matrix: f32x4x4::identity(),
+            model_view_projection_inv_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
                 let library = device
@@ -276,6 +284,7 @@ impl RendererDelgate for Delegate {
                     "Failed to create render pipeline",
                 )
             },
+            screen_size: Size::default(),
             vertex_buffer_indices: allocate_new_buffer_with_data(
                 &device,
                 "Vertex Buffer Indices",
@@ -354,12 +363,22 @@ impl RendererDelgate for Delegate {
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex_VertexBufferIndexModelView,
-            &self.model_view_projection_matrix,
+            &self.model_view_matrix,
         );
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex_VertexBufferIndexModelViewProjection,
             &self.model_view_projection_matrix,
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex_FragBufferIndexInverseModelViewProjection,
+            &self.model_view_projection_inv_matrix,
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex_FragBufferIndexScreenSize,
+            &self.screen_size,
         );
         encoder.draw_primitives_instanced(
             MTLPrimitiveType::TriangleStrip,

@@ -1,9 +1,9 @@
-use std::ops::Mul;
+use std::ops::{Mul, Sub};
 use std::simd::f32x4;
 
 #[inline]
-fn dot_product(lhs: f32x4, rhs: f32x4) -> f32 {
-    lhs.mul(rhs).reduce_sum()
+fn dot(lhs: f32x4, rhs: f32x4) -> f32 {
+    (lhs * rhs).reduce_sum()
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -37,6 +37,64 @@ impl f32x4x4 {
                 f32x4::from_array([c[0][3], c[1][3], c[2][3], c[3][3]]),
             ],
         }
+    }
+
+    #[inline]
+    pub fn inverse(&self) -> Self {
+        // Based on https://stackoverflow.com/questions/1148309/inverting-a-4x4-matrix/44446912#44446912
+        let c = self.columns;
+        let a2323 = c[2][2] * c[3][3] - c[3][2] * c[2][3];
+        let a1323 = c[1][2] * c[3][3] - c[3][2] * c[1][3];
+        let a1223 = c[1][2] * c[2][3] - c[2][2] * c[1][3];
+        let a0323 = c[0][2] * c[3][3] - c[3][2] * c[0][3];
+        let a0223 = c[0][2] * c[2][3] - c[2][2] * c[0][3];
+        let a0123 = c[0][2] * c[1][3] - c[1][2] * c[0][3];
+        let a2313 = c[2][1] * c[3][3] - c[3][1] * c[2][3];
+        let a1313 = c[1][1] * c[3][3] - c[3][1] * c[1][3];
+        let a1213 = c[1][1] * c[2][3] - c[2][1] * c[1][3];
+        let a2312 = c[2][1] * c[3][2] - c[3][1] * c[2][2];
+        let a1312 = c[1][1] * c[3][2] - c[3][1] * c[1][2];
+        let a1212 = c[1][1] * c[2][2] - c[2][1] * c[1][2];
+        let a0313 = c[0][1] * c[3][3] - c[3][1] * c[0][3];
+        let a0213 = c[0][1] * c[2][3] - c[2][1] * c[0][3];
+        let a0312 = c[0][1] * c[3][2] - c[3][1] * c[0][2];
+        let a0212 = c[0][1] * c[2][2] - c[2][1] * c[0][2];
+        let a0113 = c[0][1] * c[1][3] - c[1][1] * c[0][3];
+        let a0112 = c[0][1] * c[1][2] - c[1][1] * c[0][2];
+        let det = f32x4::splat(
+            c[0][0] * (c[1][1] * a2323 - c[2][1] * a1323 + c[3][1] * a1223)
+                - c[1][0] * (c[0][1] * a2323 - c[2][1] * a0323 + c[3][1] * a0223)
+                + c[2][0] * (c[0][1] * a1323 - c[1][1] * a0323 + c[3][1] * a0123)
+                - c[3][0] * (c[0][1] * a1223 - c[1][1] * a0223 + c[2][1] * a0123),
+        );
+        return Self {
+            columns: [
+                f32x4::from_array([
+                    (c[1][1] * a2323 - c[2][1] * a1323 + c[3][1] * a1223),
+                    -(c[0][1] * a2323 - c[2][1] * a0323 + c[3][1] * a0223),
+                    (c[0][1] * a1323 - c[1][1] * a0323 + c[3][1] * a0123),
+                    -(c[0][1] * a1223 - c[1][1] * a0223 + c[2][1] * a0123),
+                ]) / det,
+                f32x4::from_array([
+                    -(c[1][0] * a2323 - c[2][0] * a1323 + c[3][0] * a1223),
+                    (c[0][0] * a2323 - c[2][0] * a0323 + c[3][0] * a0223),
+                    -(c[0][0] * a1323 - c[1][0] * a0323 + c[3][0] * a0123),
+                    (c[0][0] * a1223 - c[1][0] * a0223 + c[2][0] * a0123),
+                ]) / det,
+                f32x4::from_array([
+                    (c[1][0] * a2313 - c[2][0] * a1313 + c[3][0] * a1213),
+                    -(c[0][0] * a2313 - c[2][0] * a0313 + c[3][0] * a0213),
+                    (c[0][0] * a1313 - c[1][0] * a0313 + c[3][0] * a0113),
+                    -(c[0][0] * a1213 - c[1][0] * a0213 + c[2][0] * a0113),
+                ]) / det,
+                f32x4::from_array([
+                    -(c[1][0] * a2312 - c[2][0] * a1312 + c[3][0] * a1212),
+                    (c[0][0] * a2312 - c[2][0] * a0312 + c[3][0] * a0212),
+                    -(c[0][0] * a1312 - c[1][0] * a0312 + c[3][0] * a0112),
+                    (c[0][0] * a1212 - c[1][0] * a0212 + c[2][0] * a0112),
+                ]) / det,
+            ],
+        };
     }
 
     #[inline]
@@ -124,12 +182,12 @@ impl Mul<f32x4> for f32x4x4 {
 
     #[inline]
     fn mul(self, rhs: f32x4) -> Self::Output {
-        f32x4::from_array(self.transpose().columns.map(|r| dot_product(r, rhs)))
+        f32x4::from_array(self.transpose().columns.map(|r| dot(r, rhs)))
     }
 }
 
 // TODO: Figure out how to make this a `impl const`.
-// - Start by looking at how to make dot_product() a `const fn`.
+// - Start by looking at how to make dot() a `const fn`.
 impl Mul<f32x4x4> for f32x4x4 {
     type Output = f32x4x4;
 
@@ -138,21 +196,45 @@ impl Mul<f32x4x4> for f32x4x4 {
         Self {
             columns: rhs.columns.map(|col| {
                 f32x4::from_array([
-                    dot_product(self.row::<0>(), col),
-                    dot_product(self.row::<1>(), col),
-                    dot_product(self.row::<2>(), col),
-                    dot_product(self.row::<3>(), col),
+                    dot(self.row::<0>(), col),
+                    dot(self.row::<1>(), col),
+                    dot(self.row::<2>(), col),
+                    dot(self.row::<3>(), col),
                 ])
             }),
         }
     }
 }
 
+impl Sub<f32x4x4> for f32x4x4 {
+    type Output = f32x4x4;
+
+    #[inline]
+    fn sub(self, rhs: f32x4x4) -> Self::Output {
+        let columns = self.columns.zip(rhs.columns).map(|(l, r)| l - r);
+        Self { columns }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use super::*;
     use std::simd::f32x4;
 
-    use super::*;
+    #[test]
+    fn test_inverse() {
+        let m = f32x4x4::rotate(1., 2., 3.) * f32x4x4::translate(40., 50., 60.);
+        let inv_m = m.inverse();
+
+        let expected = f32x4x4::identity();
+        let actual = inv_m * m;
+        let diff = actual - expected;
+
+        const TOLERANCE: f32x4 = f32x4::splat(3.82e-6);
+        for c in diff.columns {
+            assert!(c.abs().lanes_lt(TOLERANCE).all());
+        }
+    }
 
     #[test]
     fn test_translate() {

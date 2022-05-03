@@ -1,4 +1,5 @@
 #![feature(portable_simd)]
+#![feature(array_zip)]
 
 #[macro_use]
 pub extern crate objc;
