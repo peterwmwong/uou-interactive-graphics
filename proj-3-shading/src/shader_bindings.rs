@@ -397,7 +397,8 @@ pub const VertexBufferIndex_VertexBufferIndexIndices: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 1;
 pub const VertexBufferIndex_VertexBufferIndexNormals: VertexBufferIndex = 2;
 pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 4;
+pub const VertexBufferIndex_VertexBufferIndexModelView: VertexBufferIndex = 4;
+pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 5;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************

@@ -18,6 +18,7 @@ enum VertexBufferIndex
     VertexBufferIndexPositions,
     VertexBufferIndexNormals,
     VertexBufferIndexNormalTransform,
+    VertexBufferIndexModelView,
     VertexBufferIndexModelViewProjection,
 };
 

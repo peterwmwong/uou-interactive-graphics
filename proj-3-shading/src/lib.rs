@@ -7,7 +7,7 @@ use metal_app::{
     unwrap_option_dcheck, unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    VertexBufferIndex_VertexBufferIndexIndices,
+    VertexBufferIndex_VertexBufferIndexIndices, VertexBufferIndex_VertexBufferIndexModelView,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
     VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
@@ -30,6 +30,7 @@ struct Delegate {
     device: Device,
     max_bound: f32,
     model_matrix: f32x4x4,
+    model_view_matrix: f32x4x4,
     model_view_projection_matrix: f32x4x4,
     normal_transform_matrix: f32x4x4,
     num_triangles: usize,
@@ -120,8 +121,9 @@ impl Delegate {
 
     #[inline]
     fn update_model_view_projection_matrix(&mut self) {
+        self.model_view_matrix = self.view_matrix * self.model_matrix;
         self.model_view_projection_matrix =
-            self.calc_projection_matrix(self.aspect_ratio) * self.view_matrix * self.model_matrix;
+            self.calc_projection_matrix(self.aspect_ratio) * self.model_view_matrix;
     }
 }
 
@@ -201,6 +203,7 @@ impl RendererDelgate for Delegate {
             model_matrix,
             normal_transform_matrix: f32x4x4::identity(),
             view_matrix: f32x4x4::identity(),
+            model_view_matrix: f32x4x4::identity(),
             model_view_projection_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
@@ -347,6 +350,11 @@ impl RendererDelgate for Delegate {
             &encoder,
             VertexBufferIndex_VertexBufferIndexNormalTransform,
             &self.normal_transform_matrix,
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex_VertexBufferIndexModelView,
+            &self.model_view_projection_matrix,
         );
         encode_vertex_bytes(
             &encoder,
