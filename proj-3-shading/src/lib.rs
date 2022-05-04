@@ -356,17 +356,17 @@ impl RendererDelgate for Delegate {
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex_VertexBufferIndexNormalTransform,
-            &self.normal_transform_matrix,
+            &self.normal_transform_matrix.metal_float3x3_upper_left(),
         );
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex_VertexBufferIndexModelViewProjection,
-            &self.model_view_projection_matrix,
+            self.model_view_projection_matrix.metal_float4x4(),
         );
         encode_fragment_bytes(
             &encoder,
             FragBufferIndex_FragBufferIndexInverseProjection,
-            &self.projection_inverse_matrix,
+            self.projection_inverse_matrix.metal_float4x4(),
         );
         encode_fragment_bytes(
             &encoder,

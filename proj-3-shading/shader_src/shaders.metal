@@ -15,19 +15,18 @@ main_vertex(         uint            inst_id          [[instance_id]],
             constant uint          * indices          [[buffer(VertexBufferIndexIndices)]],
             constant packed_float3 * positions        [[buffer(VertexBufferIndexPositions)]],
             constant packed_float3 * normals          [[buffer(VertexBufferIndexNormals)]],
-            constant float4x4      & normal_transform [[buffer(VertexBufferIndexNormalTransform)]],
-            constant float4x4      & mvp_transform    [[buffer(VertexBufferIndexModelViewProjection)]])
+            constant float4x4      & mvp_transform    [[buffer(VertexBufferIndexModelViewProjection)]],
+            constant float3x3      & normal_transform [[buffer(VertexBufferIndexNormalTransform)]])
 {
     const uint   idx            = indices[inst_id * 3 + vertex_id];
     const float4 model_position = float4(positions[idx], 1.0);
     const float4 position       = mvp_transform * model_position;
 
     // Assumptions:
-    // 1. normal_transform does NOT produce a `w` component (no perspective).
+    // 1. model_normal is a unit vector.
     // 2. normal_transform does NOT translate nor scale.
-    // 3. model_normal is a unit vector.
-    const float4 model_normal   = float4(normals[idx], 1.0);
-    const float3 normal         = (normal_transform * model_normal).xyz;
+    const float3 model_normal   = normals[idx];
+    const float3 normal         = normal_transform * model_normal;
     return {
         .position = position,
         .normal   = normal

@@ -9,8 +9,8 @@ enum VertexBufferIndex
     VertexBufferIndexIndices = 0,
     VertexBufferIndexPositions,
     VertexBufferIndexNormals,
-    VertexBufferIndexNormalTransform,
     VertexBufferIndexModelViewProjection,
+    VertexBufferIndexNormalTransform,
 };
 
 enum FragBufferIndex

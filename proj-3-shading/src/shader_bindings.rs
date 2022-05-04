@@ -10,7 +10,7 @@
 
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct half2 {
     pub x: u16,
     pub y: u16,
@@ -39,7 +39,7 @@ fn bindgen_test_layout_half2() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct packed_half2 {
     pub x: u16,
     pub y: u16,
@@ -79,7 +79,7 @@ fn bindgen_test_layout_packed_half2() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct half4 {
     pub x: u16,
     pub y: u16,
@@ -120,7 +120,7 @@ fn bindgen_test_layout_half4() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct packed_half4 {
     pub x: u16,
     pub y: u16,
@@ -182,7 +182,7 @@ fn bindgen_test_layout_packed_half4() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct float2 {
     pub x: f32,
     pub y: f32,
@@ -212,7 +212,7 @@ fn bindgen_test_layout_float2() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct float4 {
     pub x: f32,
     pub y: f32,
@@ -254,7 +254,7 @@ fn bindgen_test_layout_float4() {
 }
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ushort2 {
     pub x: ::std::os::raw::c_ushort,
     pub y: ::std::os::raw::c_ushort,
@@ -293,7 +293,7 @@ fn bindgen_test_layout_ushort2() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct packed_float2 {
     pub x: f32,
     pub y: f32,
@@ -332,7 +332,7 @@ fn bindgen_test_layout_packed_float2() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct packed_float4 {
     pub x: f32,
     pub y: f32,
@@ -395,8 +395,8 @@ fn bindgen_test_layout_packed_float4() {
 pub const VertexBufferIndex_VertexBufferIndexIndices: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 1;
 pub const VertexBufferIndex_VertexBufferIndexNormals: VertexBufferIndex = 2;
-pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 4;
+pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 3;
+pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex = 4;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 0;
 pub const FragBufferIndex_FragBufferIndexScreenSize: FragBufferIndex = 1;

@@ -175,6 +175,42 @@ impl f32x4x4 {
             self.columns[3][N],
         ])
     }
+
+    /// Returns 3x3 matrix that is Metal float3x3 memory layout compatible.
+    /// According to the specification, a float3x3 is...
+    ///     - column major layout
+    ///     - 48 bytes (3 columns of *4* floats)
+    ///
+    /// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+    #[inline]
+    pub fn metal_float3x3_upper_left(&self) -> [f32; 12] {
+        // TODO: Create a metal_float3x3 type
+        [
+            self.columns[0][0],
+            self.columns[0][1],
+            self.columns[0][2],
+            0.,
+            self.columns[1][0],
+            self.columns[1][1],
+            self.columns[1][2],
+            0.,
+            self.columns[2][0],
+            self.columns[2][1],
+            self.columns[2][2],
+            0.,
+        ]
+    }
+
+    /// Returns 4x4 matrix that is Metal float4x4 memory layout compatible.
+    /// According to the specification, a float4x4 is...
+    ///     - column major layout
+    ///     - 64 bytes: 4 columns of 4 floats
+    ///
+    /// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+    #[inline]
+    pub fn metal_float4x4(&self) -> &[f32x4; 4] {
+        &self.columns
+    }
 }
 
 impl Mul<f32x4> for f32x4x4 {
