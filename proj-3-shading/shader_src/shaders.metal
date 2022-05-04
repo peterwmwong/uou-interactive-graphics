@@ -7,8 +7,6 @@ struct VertexOut
 {
     float4 position      [[position]];
     float3 view_position;
-    // TODO: Can we read the depth from the depth buffer/texture.
-    float  z             [[center_no_perspective]];
     float3 normal_dir;
 };
 
@@ -33,7 +31,6 @@ main_vertex(         uint           inst_id          [[instance_id]],
     return {
         .position            = position,
         .view_position       = view_position.xyz,
-        .z                   = position.z / position.w,
         .normal_dir          = normal_dir
     };
 }
@@ -70,11 +67,11 @@ main_fragment(         VertexOut  in          [[stage_in]],
     //      - How do we calculate this value from screen position (in.position) and depth (see below)
 
     const float2 screen_pos = in.position.xy;
-    const float2 ndc_pos_xy = float2(2.0, -2.0) * ((screen_pos / screen_size) - 0.5);
-    const float4 ndc_pos    = float4(ndc_pos_xy, in.z, 1.f);
+    const float2 ndc_pos_xy = float2(2.f, -2.f) * ((screen_pos / screen_size) - 0.5);
+    const float4 ndc_pos    = float4(ndc_pos_xy, in.position.z, 1.f);
 
-    const float4 view_position_perspective = inv_mvp * ndc_pos;
-    const float3 view_position_calc = view_position_perspective.xyz / view_position_perspective.w;
+    const float4 view_pos_perspective = inv_mvp * ndc_pos;
+    const float3 view_pos             = view_pos_perspective.xyz / view_pos_perspective.w;
 
     /*
     Verify recalculating fragment view position (camera space coordinate) is correct/accurate.
@@ -82,9 +79,9 @@ main_fragment(         VertexOut  in          [[stage_in]],
         - xy within a thousandth
         - z  within a hundredth
 
-    const float3 actual     = view_position_calc;
-    const float3 expected   = in.view_position;
-    const float3 diff_pos       = abs(actual - expected);
+    const float3 actual   = view_pos;
+    const float3 expected = in.view_position;
+    const float3 diff_pos = abs(actual - expected);
     return half4(
         float4(
             max((diff_pos.xy * 1000.f) - 1.0f, 0.f),
@@ -100,7 +97,7 @@ main_fragment(         VertexOut  in          [[stage_in]],
         - Red:   if error >5e5, should be very little
         - Green: if error >1e5, should be most. Meaning, overall accuracy is within ~1e-5, nice!
 
-    const float3 w_actual           = float3(-normalize(view_position_calc));
+    const float3 w_actual           = float3(-normalize(view_pos));
     const float  cosTheta0_actual   = dot(w_actual, n);
     const float3 w_expected         = float3(-normalize(in.view_position));
     const float  cosTheta0_expected = dot(w_expected, n);
@@ -124,7 +121,7 @@ main_fragment(         VertexOut  in          [[stage_in]],
     //      - If you highlight the fragments with negative `cosTheta0`...
     //      - You'll notice a very small number of pixels around the very edge of the teapot
     //      - Inspecting the value of `cosTheta0`, most are within 3 degrees of 0.
-    const float3 w         = float3(-normalize(view_position_calc));
+    const float3 w         = float3(-normalize(view_pos));
     const float  cosTheta0 = dot(w, n);
     const float  cosTheta  = max(cosTheta0, 0.f);
     const float3 color     = I * cosTheta * k;
