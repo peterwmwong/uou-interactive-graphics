@@ -374,7 +374,7 @@ impl RendererDelgate for Delegate {
             &self.screen_size,
         );
         encoder.draw_primitives_instanced(
-            MTLPrimitiveType::TriangleStrip,
+            MTLPrimitiveType::Triangle,
             0,
             3,
             self.num_triangles as _,
