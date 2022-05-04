@@ -13,9 +13,16 @@ enum VertexBufferIndex
     VertexBufferIndexNormalTransform,
 };
 
+enum FragMode
+{
+    FragModeNormals = 0,
+    FragModeDiffuse,
+};
+
 enum FragBufferIndex
 {
-    FragBufferIndexInverseProjection = 0,
+    FragBufferIndexFragMode = 0,
+    FragBufferIndexInverseProjection,
     FragBufferIndexScreenSize,
 };
 

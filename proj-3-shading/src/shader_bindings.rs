@@ -398,8 +398,12 @@ pub const VertexBufferIndex_VertexBufferIndexNormals: VertexBufferIndex = 2;
 pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 3;
 pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex = 4;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
-pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 0;
-pub const FragBufferIndex_FragBufferIndexScreenSize: FragBufferIndex = 1;
+pub const FragMode_FragModeNormals: FragMode = 0;
+pub const FragMode_FragModeDiffuse: FragMode = 1;
+pub type FragMode = ::std::os::raw::c_uint;
+pub const FragBufferIndex_FragBufferIndexFragMode: FragBufferIndex = 0;
+pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 1;
+pub const FragBufferIndex_FragBufferIndexScreenSize: FragBufferIndex = 2;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************

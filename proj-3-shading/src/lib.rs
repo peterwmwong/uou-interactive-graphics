@@ -8,8 +8,9 @@ use metal_app::{
     RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    FragBufferIndex_FragBufferIndexInverseProjection, FragBufferIndex_FragBufferIndexScreenSize,
-    VertexBufferIndex_VertexBufferIndexIndices,
+    FragBufferIndex_FragBufferIndexFragMode, FragBufferIndex_FragBufferIndexInverseProjection,
+    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeDiffuse,
+    FragMode_FragModeNormals, VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
     VertexBufferIndex_VertexBufferIndexPositions,
@@ -23,6 +24,7 @@ use tobj::{LoadOptions, Mesh};
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
+const INITIAL_MODE: FragMode = FragMode_FragModeDiffuse;
 
 struct Delegate {
     aspect_ratio: f32,
@@ -32,11 +34,12 @@ struct Delegate {
     depth_texture: Option<Texture>,
     device: Device,
     max_bound: f32,
+    mode: FragMode,
     model_matrix: f32x4x4,
-    projection_inverse_matrix: f32x4x4,
     model_view_projection_matrix: f32x4x4,
     normal_transform_matrix: f32x4x4,
     num_triangles: usize,
+    projection_inverse_matrix: f32x4x4,
     render_pipeline_state: RenderPipelineState,
     screen_size: Size,
     vertex_buffer_indices: Buffer,
@@ -206,10 +209,10 @@ impl RendererDelgate for Delegate {
             },
             depth_texture: None,
             max_bound,
+            mode: INITIAL_MODE,
             model_matrix,
-            normal_transform_matrix: f32x4x4::identity(),
-            view_matrix: f32x4x4::identity(),
             model_view_projection_matrix: f32x4x4::identity(),
+            normal_transform_matrix: f32x4x4::identity(),
             projection_inverse_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
@@ -288,16 +291,17 @@ impl RendererDelgate for Delegate {
                 "Vertex Buffer Indices",
                 &indices,
             ),
-            vertex_buffer_positions: allocate_new_buffer_with_data(
-                &device,
-                "Vertex Buffer Positions",
-                &positions,
-            ),
             vertex_buffer_normals: allocate_new_buffer_with_data(
                 &device,
                 "Vertex Buffer Normals",
                 &normals,
             ),
+            vertex_buffer_positions: allocate_new_buffer_with_data(
+                &device,
+                "Vertex Buffer Positions",
+                &positions,
+            ),
+            view_matrix: f32x4x4::identity(),
             device,
         };
 
@@ -365,6 +369,11 @@ impl RendererDelgate for Delegate {
         );
         encode_fragment_bytes(
             &encoder,
+            FragBufferIndex_FragBufferIndexFragMode,
+            &self.mode,
+        );
+        encode_fragment_bytes(
+            &encoder,
             FragBufferIndex_FragBufferIndexInverseProjection,
             self.projection_inverse_matrix.metal_float4x4(),
         );
@@ -424,7 +433,14 @@ impl RendererDelgate for Delegate {
                     camera_distance += calc_distance_offset(down_position, position);
                 }
             },
-            _ => return,
+            KeyDown { key_code } => {
+                self.mode = match key_code {
+                    29 /* 0 */ => FragMode_FragModeDiffuse,
+                    18 /* 1 */ => FragMode_FragModeNormals,
+                    _ => self.mode
+                };
+            }
+            _ => {}
         }
         self.on_camera_change(
             camera_rotation,
