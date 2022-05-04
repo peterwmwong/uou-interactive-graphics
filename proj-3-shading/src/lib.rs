@@ -12,7 +12,7 @@ use shader_bindings::{
     VertexBufferIndex_VertexBufferIndexIndices, VertexBufferIndex_VertexBufferIndexModelView,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
-    VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
+    VertexBufferIndex_VertexBufferIndexPositions,
 };
 use std::{
     f32::consts::PI,
@@ -22,6 +22,7 @@ use std::{
 use tobj::{LoadOptions, Mesh};
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
+const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
 
 struct Delegate {
     aspect_ratio: f32,
