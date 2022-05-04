@@ -8,9 +8,8 @@ use metal_app::{
     RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    FragBufferIndex_FragBufferIndexInverseModelViewProjection,
-    FragBufferIndex_FragBufferIndexScreenSize, VertexBufferIndex_VertexBufferIndexIndices,
-    VertexBufferIndex_VertexBufferIndexModelView,
+    FragBufferIndex_FragBufferIndexInverseProjection, FragBufferIndex_FragBufferIndexScreenSize,
+    VertexBufferIndex_VertexBufferIndexIndices, VertexBufferIndex_VertexBufferIndexModelView,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
     VertexBufferIndex_VertexBufferIndexPositions, INITIAL_CAMERA_DISTANCE,
@@ -34,7 +33,7 @@ struct Delegate {
     max_bound: f32,
     model_matrix: f32x4x4,
     model_view_matrix: f32x4x4,
-    model_view_projection_inv_matrix: f32x4x4,
+    projection_inverse_matrix: f32x4x4,
     model_view_projection_matrix: f32x4x4,
     normal_transform_matrix: f32x4x4,
     num_triangles: usize,
@@ -130,7 +129,7 @@ impl Delegate {
         self.model_view_matrix = self.view_matrix * self.model_matrix;
         let projection_matrix = self.calc_projection_matrix(self.aspect_ratio);
         self.model_view_projection_matrix = projection_matrix * self.model_view_matrix;
-        self.model_view_projection_inv_matrix = projection_matrix.inverse();
+        self.projection_inverse_matrix = projection_matrix.inverse();
     }
 }
 
@@ -212,7 +211,7 @@ impl RendererDelgate for Delegate {
             view_matrix: f32x4x4::identity(),
             model_view_matrix: f32x4x4::identity(),
             model_view_projection_matrix: f32x4x4::identity(),
-            model_view_projection_inv_matrix: f32x4x4::identity(),
+            projection_inverse_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
                 let library = device
@@ -372,8 +371,8 @@ impl RendererDelgate for Delegate {
         );
         encode_fragment_bytes(
             &encoder,
-            FragBufferIndex_FragBufferIndexInverseModelViewProjection,
-            &self.model_view_projection_inv_matrix,
+            FragBufferIndex_FragBufferIndexInverseProjection,
+            &self.projection_inverse_matrix,
         );
         encode_fragment_bytes(
             &encoder,

@@ -400,7 +400,7 @@ pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex 
 pub const VertexBufferIndex_VertexBufferIndexModelView: VertexBufferIndex = 4;
 pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIndex = 5;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
-pub const FragBufferIndex_FragBufferIndexInverseModelViewProjection: FragBufferIndex = 0;
+pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 0;
 pub const FragBufferIndex_FragBufferIndexScreenSize: FragBufferIndex = 1;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
 
