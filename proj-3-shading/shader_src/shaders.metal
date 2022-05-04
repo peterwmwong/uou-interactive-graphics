@@ -5,33 +5,32 @@ using namespace metal;
 
 struct VertexOut
 {
-    float4 position      [[position]];
-    float3 view_position;
-    float3 normal_dir;
+    float4 position [[position]];
+    float3 normal;
 };
 
 vertex VertexOut
-main_vertex(         uint           inst_id          [[instance_id]],
-                     uint           vertex_id        [[vertex_id]],
-            constant uint          *indices          [[buffer(VertexBufferIndexIndices)]],
-            constant packed_float3 *positions        [[buffer(VertexBufferIndexPositions)]],
-            constant packed_float3 *normals          [[buffer(VertexBufferIndexNormals)]],
-            constant float4x4      &normal_transform [[buffer(VertexBufferIndexNormalTransform)]],
-            constant float4x4      &mv_transform     [[buffer(VertexBufferIndexModelView)]],
-            constant float4x4      &mvp_transform    [[buffer(VertexBufferIndexModelViewProjection)]])
+main_vertex(         uint            inst_id          [[instance_id]],
+                     uint            vertex_id        [[vertex_id]],
+            constant uint          * indices          [[buffer(VertexBufferIndexIndices)]],
+            constant packed_float3 * positions        [[buffer(VertexBufferIndexPositions)]],
+            constant packed_float3 * normals          [[buffer(VertexBufferIndexNormals)]],
+            constant float4x4      & normal_transform [[buffer(VertexBufferIndexNormalTransform)]],
+            constant float4x4      & mvp_transform    [[buffer(VertexBufferIndexModelViewProjection)]])
 {
     const uint   idx            = indices[inst_id * 3 + vertex_id];
     const float4 model_position = float4(positions[idx], 1.0);
     const float4 position       = mvp_transform * model_position;
-    const float4 view_position  = mv_transform  * model_position;
 
+    // Assumptions:
+    // 1. normal_transform does NOT produce a `w` component (no perspective).
+    // 2. normal_transform does NOT translate nor scale.
+    // 3. model_normal is a unit vector.
     const float4 model_normal   = float4(normals[idx], 1.0);
-    const float4 normal_raw     = normal_transform * model_normal;
-    const float3 normal_dir     = normalize(normal_raw.xyz / normal_raw.w);
+    const float3 normal         = (normal_transform * model_normal).xyz;
     return {
-        .position            = position,
-        .view_position       = view_position.xyz,
-        .normal_dir          = normal_dir
+        .position = position,
+        .normal   = normal
     };
 }
 
@@ -56,9 +55,9 @@ main_fragment(         VertexOut  in          [[stage_in]],
     = I cos(a) k Fr(w, c)
     = I n.w    k
     */
-    const float  I        = 1.f;
-    const float3 k        = float3(1.f, 0.f, 0.f);
-    const float3 n        = float3(in.normal_dir);
+    const float  I = 1.f;
+    const float3 k = float3(1.f, 0.f, 0.f);
+    const float3 n = float3(in.normal);
 
     // TODO: Still trying to figure out the right way to get the view position (camera space)
     // - Currently comparing directional vectors (view_dir and view_dir_persp)...
@@ -72,47 +71,6 @@ main_fragment(         VertexOut  in          [[stage_in]],
 
     const float4 view_pos_perspective = inv_mvp * ndc_pos;
     const float3 view_pos             = view_pos_perspective.xyz / view_pos_perspective.w;
-
-    /*
-    Verify recalculating fragment view position (camera space coordinate) is correct/accurate.
-    - Visualize error from expected (view position passed from Vertex Shader)...
-        - xy within a thousandth
-        - z  within a hundredth
-
-    const float3 actual   = view_pos;
-    const float3 expected = in.view_position;
-    const float3 diff_pos = abs(actual - expected);
-    return half4(
-        float4(
-            max((diff_pos.xy * 1000.f) - 1.0f, 0.f),
-            max((diff_pos.z * 100.f) - 1.0f, 0.f),
-            1.h)
-    );
-    */
-
-    /*
-    Verify cosine(theta) using recalculated fragment view position is correct/accurate.
-    - Visualize error from expected (dot product w/normal using view position passed from Vertex Shader)...
-        - Blue:  if error >1e4, should be *none*
-        - Red:   if error >5e5, should be very little
-        - Green: if error >1e5, should be most. Meaning, overall accuracy is within ~1e-5, nice!
-
-    const float3 w_actual           = float3(-normalize(view_pos));
-    const float  cosTheta0_actual   = dot(w_actual, n);
-    const float3 w_expected         = float3(-normalize(in.view_position));
-    const float  cosTheta0_expected = dot(w_expected, n);
-    const float  diff_cosTheta      = abs(cosTheta0_expected - cosTheta0_actual);
-    if (diff_cosTheta > (0.01745329251 * 1e-4f)) {
-        return half4(0, 0, 1, 1);
-    }
-    if (diff_cosTheta > (0.01745329251 * 5e-5f)) {
-        return half4(1, 0, 0, 1);
-    }
-    if (diff_cosTheta > (0.01745329251 * 1e-5f)) {
-        return half4(0, 1, 0, 1);
-    }
-    return half4(0,0,0,1);
-    */
 
     // max() to remove light rays that bounce away from the camera:
     // - Back-facing surfaces, like inside the teapot/spout when viewing teapot from above.
