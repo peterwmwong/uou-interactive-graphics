@@ -16,6 +16,7 @@ enum VertexBufferIndex
 enum FragMode
 {
     FragModeNormals = 0,
+    FragModeAmbient,
     FragModeAmbientDiffuse,
     FragModeSpecular,
     FragModeAmbientDiffuseSpecular,

@@ -9,8 +9,9 @@ use metal_app::{
 };
 use shader_bindings::{
     FragBufferIndex_FragBufferIndexFragMode, FragBufferIndex_FragBufferIndexInverseProjection,
-    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeAmbientDiffuse,
-    FragMode_FragModeAmbientDiffuseSpecular, FragMode_FragModeNormals, FragMode_FragModeSpecular,
+    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeAmbient,
+    FragMode_FragModeAmbientDiffuse, FragMode_FragModeAmbientDiffuseSpecular,
+    FragMode_FragModeNormals, FragMode_FragModeSpecular,
     VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
@@ -438,8 +439,9 @@ impl RendererDelgate for Delegate {
                 self.mode = match key_code {
                     29 /* 0 */ => FragMode_FragModeAmbientDiffuseSpecular,
                     18 /* 1 */ => FragMode_FragModeNormals,
-                    19 /* 2 */ => FragMode_FragModeAmbientDiffuse,
-                    20 /* 3 */ => FragMode_FragModeSpecular,
+                    19 /* 2 */ => FragMode_FragModeAmbient,
+                    20 /* 3 */ => FragMode_FragModeAmbientDiffuse,
+                    21 /* 4 */ => FragMode_FragModeSpecular,
                     _ => self.mode
                 };
             }

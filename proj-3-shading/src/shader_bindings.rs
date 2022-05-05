@@ -399,9 +399,10 @@ pub const VertexBufferIndex_VertexBufferIndexModelViewProjection: VertexBufferIn
 pub const VertexBufferIndex_VertexBufferIndexNormalTransform: VertexBufferIndex = 4;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 pub const FragMode_FragModeNormals: FragMode = 0;
-pub const FragMode_FragModeAmbientDiffuse: FragMode = 1;
-pub const FragMode_FragModeSpecular: FragMode = 2;
-pub const FragMode_FragModeAmbientDiffuseSpecular: FragMode = 3;
+pub const FragMode_FragModeAmbient: FragMode = 1;
+pub const FragMode_FragModeAmbientDiffuse: FragMode = 2;
+pub const FragMode_FragModeSpecular: FragMode = 3;
+pub const FragMode_FragModeAmbientDiffuseSpecular: FragMode = 4;
 pub type FragMode = ::std::os::raw::c_uint;
 pub const FragBufferIndex_FragBufferIndexFragMode: FragBufferIndex = 0;
 pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 1;
