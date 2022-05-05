@@ -9,8 +9,9 @@ use metal_app::{
 };
 use shader_bindings::{
     FragBufferIndex_FragBufferIndexFragMode, FragBufferIndex_FragBufferIndexInverseProjection,
-    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeDiffuse,
-    FragMode_FragModeNormals, VertexBufferIndex_VertexBufferIndexIndices,
+    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeAmbientDiffuse,
+    FragMode_FragModeAmbientDiffuseSpecular, FragMode_FragModeNormals, FragMode_FragModeSpecular,
+    VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
     VertexBufferIndex_VertexBufferIndexPositions,
@@ -24,7 +25,7 @@ use tobj::{LoadOptions, Mesh};
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
-const INITIAL_MODE: FragMode = FragMode_FragModeDiffuse;
+const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
 
 struct Delegate {
     aspect_ratio: f32,
@@ -435,8 +436,10 @@ impl RendererDelgate for Delegate {
             },
             KeyDown { key_code } => {
                 self.mode = match key_code {
-                    29 /* 0 */ => FragMode_FragModeDiffuse,
+                    29 /* 0 */ => FragMode_FragModeAmbientDiffuseSpecular,
                     18 /* 1 */ => FragMode_FragModeNormals,
+                    19 /* 2 */ => FragMode_FragModeAmbientDiffuse,
+                    20 /* 3 */ => FragMode_FragModeSpecular,
                     _ => self.mode
                 };
             }

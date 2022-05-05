@@ -41,33 +41,9 @@ main_fragment(         VertexOut  in          [[stage_in]],
 {
     switch (mode) {
         case FragModeNormals: return half4(half3(in.normal * float3(1,1,-1)), 1);
-        case FragModeDiffuse: {
-            /*
-            Rendering Equation
-            ==================
-
-            let n       = Normal - unit vector, world space direction perpendicular to surface
-            let w       = Light  - unit vector, world space direction to the light source
-            let c       = Camera - unit vector, world space direction to the camera
-            let a       = (theta) angle between n and w
-            let I       = Light Intensity
-            let k       = Material Color
-            let Fr(w,c) = Bidirectional Reflectance Distribution Function
-                        = 1 (diffuse)
-
-            = I cos(a) k Fr(w, c)
-            = I n.w    k
-            */
-            const float  I = 1.f;
-            const float3 k = float3(1.f, 0.f, 0.f);
-            const float3 n = float3(in.normal);
-
-            // TODO: Still trying to figure out the right way to get the view position (camera space)
-            // - Currently comparing directional vectors (view_dir and view_dir_persp)...
-            // - Let's look at view_position and comparing center_perspective/center_no_perspective
-            // - Once we know which one is actually correct...
-            //      - How do we calculate this value from screen position (in.position) and depth (see below)
-
+        case FragModeAmbientDiffuse:
+        case FragModeSpecular:
+        case FragModeAmbientDiffuseSpecular: {
             const float2 screen_pos = in.position.xy;
             const float2 ndc_pos_xy = float2(2.f, -2.f) * ((screen_pos / screen_size) - 0.5);
             const float4 ndc_pos    = float4(ndc_pos_xy, in.position.z, 1.f);
@@ -75,18 +51,44 @@ main_fragment(         VertexOut  in          [[stage_in]],
             const float4 view_pos_perspective = inv_mvp * ndc_pos;
             const float3 view_pos             = view_pos_perspective.xyz / view_pos_perspective.w;
 
-            // max() to remove light rays that bounce away from the camera:
-            // - Back-facing surfaces, like inside the teapot/spout when viewing teapot from above.
-            //      - TODO: Should we render back-faces? Do abs(), instead of max()?
-            // - Possibly floating point precision issues.
-            //      - If you highlight the fragments with negative `cosTheta0`...
-            //      - You'll notice a very small number of pixels around the very edge of the teapot
-            //      - Inspecting the value of `cosTheta0`, most are within 3 degrees of 0.
-            const float3 w         = float3(-normalize(view_pos));
-            const float  cosTheta0 = dot(w, n);
-            const float  cosTheta  = max(cosTheta0, 0.f);
-            const float3 color     = I * cosTheta * k;
-            return half4(half3(color), 1.0h);
+            const float3 n  = float3(in.normal);            // Normal - unit vector, world space direction perpendicular to surface
+            const float3 w  = float3(-normalize(view_pos)); // Light  - unit vector, world space direction to light
+            const float3 v  = w;                            // Camera - unit vector, world space direction to camera
+            const float3 h  = (n + v) / length(n + v);      // Half   - unit vector, world space direction half-way Light and Camera
+            const float  Il = 0.8f;                         // Light Intensity
+            const float  Ia = 0.2f;                         // Ambient Intensity
+            const float3 kd = float3(1.f, 0.f, 0.f);        // Material Difuse Color
+            const float3 ks = float3(1.f);                  // Material Specular Color
+            const float  s  = 100.f;                        // Shineness (Specular)
+
+            /*
+            ================================================================
+            Rendering Equation: Ambient + Geometry Term (Diffuse + Specular)
+            ================================================================
+
+            F(w, v) = Bidirectional Reflectance Distribution Function
+                    = 1 (diffuse)
+
+            Ambient + Geometry Term (Diffuse    + Specular)
+            -------   -------------  ----------   -------------------------------
+            Ia k    + Il cos(a)     (kd F(w, v) + (cos(p) ks F(w, v))^s / cos(a))
+            Ia k    + Il cos(a)     (kd         + (cos(p) ks)^s         / cos(a))
+            Ia k    + Il w.n        (kd         + (w.h ks)^s            / w.n)
+            */
+            const float  wn       = max(dot(w, n), 0.f); // max() to remove light rays that bounce away from the camera:
+                                                         // - Back-facing surfaces, like inside the teapot/spout when viewing teapot from above.
+                                                         //      - TODO: Should we render back-faces? Do abs(), instead of max()?
+                                                         // - Possibly floating point precision issues.
+                                                         //      - If you highlight the fragments with negative `cosTheta0`...
+                                                         //      - You'll notice a very small number of pixels around the very edge of the teapot
+                                                         //      - Inspecting the value of `cosTheta0`, most are within 3 degrees of 0.
+            const float3 geoTerm  = Il * wn;
+            const float3 ambient  = select(0, Ia * kd,                     mode == FragModeAmbientDiffuse || mode == FragModeAmbientDiffuseSpecular);
+            const float3 diffuse  = select(0, kd,                          mode == FragModeAmbientDiffuse || mode == FragModeAmbientDiffuseSpecular);
+            const float3 specular = select(0, pow(dot(w, h) * ks, s) / wn, mode == FragModeSpecular       || mode == FragModeAmbientDiffuseSpecular);
+            const half3  color    = half3(ambient + geoTerm * (diffuse + specular));
+
+            return half4(color, 1.0h);
         }
         default: return half4(0.f);
     }
