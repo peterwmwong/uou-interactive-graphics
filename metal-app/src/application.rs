@@ -106,8 +106,6 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         use NSEventType::*;
                         use UserEvent::*;
                         static mut LAST_DRAG_POSITION: Position = Position::splat(0.0);
-                        static mut LEFT_MOUSE_DOWN_POSITION: Position = Position::splat(0.0);
-                        static mut RIGHT_MOUSE_DOWN_POSITION: Position = Position::splat(0.0);
 
                         // We have to do this to have access to the `NSView` trait...
                         let view: id = this;
@@ -161,14 +159,9 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         let modifier_keys =
                             parse_modifier_keys(unsafe { NSEvent::modifierFlags(event) });
 
-                        let (button, down_position) = match ns_event_type {
-                            NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => {
-                                (Left, unsafe { &mut LEFT_MOUSE_DOWN_POSITION })
-                            }
-
-                            NSRightMouseDown | NSRightMouseDragged | NSRightMouseUp => {
-                                (Right, unsafe { &mut RIGHT_MOUSE_DOWN_POSITION })
-                            }
+                        let button = match ns_event_type {
+                            NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => Left,
+                            NSRightMouseDown | NSRightMouseDragged | NSRightMouseUp => Right,
                             unknown_nseventtype @ _ => {
                                 dbg!(unknown_nseventtype);
                                 return;
@@ -177,7 +170,6 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         let user_event = match ns_event_type {
                             NSLeftMouseDown | NSRightMouseDown => {
                                 unsafe { LAST_DRAG_POSITION = position };
-                                *down_position = position;
                                 MouseDown {
                                     button,
                                     position,
@@ -189,7 +181,6 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                                 unsafe { LAST_DRAG_POSITION = position };
                                 MouseDrag {
                                     button,
-                                    down_position: *down_position,
                                     modifier_keys,
                                     position,
                                     drag_amount,
@@ -197,10 +188,6 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                             }
                             NSLeftMouseUp | NSRightMouseUp => MouseUp {
                                 button,
-                                down_position: std::mem::replace(
-                                    down_position,
-                                    Position::splat(0.0),
-                                ),
                                 modifier_keys,
                                 position,
                             },

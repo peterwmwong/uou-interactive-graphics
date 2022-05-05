@@ -3,7 +3,8 @@
 mod shader_bindings;
 use metal_app::{
     allocate_new_buffer_with_data, encode_vertex_bytes, launch_application, metal::*,
-    unwrap_option_dcheck, unwrap_result_dcheck, Position, RendererDelgate, Size, Unit, UserEvent,
+    unwrap_option_dcheck, unwrap_result_dcheck, MouseButton, RendererDelgate, Size, Unit,
+    UserEvent,
 };
 use shader_bindings::{
     packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
@@ -26,19 +27,6 @@ struct Delegate {
     screen_size: Size,
     use_perspective: bool,
     vertex_buffer_positions: Buffer,
-}
-
-impl Delegate {
-    // TODO: This doesn't allow for a full 360 degree rotation in one drag (atan is [-90, 90]).
-    fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
-        let adjacent = Simd::splat(self.camera_distance);
-        let offsets = down_position - position;
-        let ratio = offsets / adjacent;
-        Simd::from_array([
-            ratio[1].atan(), // Rotation on x-axis
-            ratio[0].atan(), // Rotation on y-axis
-        ])
-    }
 }
 
 impl RendererDelgate for Delegate {
@@ -222,45 +210,29 @@ impl RendererDelgate for Delegate {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        use metal_app::MouseButton::*;
+        use MouseButton::*;
         use UserEvent::*;
-        fn calc_distance_offset(down_position: Position, position: Position) -> Unit {
-            // Dragging up   => zooms in  (-offset)
-            // Dragging down => zooms out (+offset)
-            let screen_offset = position[1] - down_position[1];
-            screen_offset / 8.0
-        }
-        // TODO: Switch to drag_amount, it's alot simpler. See proj-3-shading.
         match event {
             MouseDrag {
                 button,
-                position,
-                down_position,
+                drag_amount,
                 ..
-            } => match button {
-                Left => {
-                    self.camera_rotation_offset =
-                        self.calc_rotation_offset(down_position, position);
+            } => {
+                match button {
+                    Left => {
+                        self.camera_rotation += {
+                            let adjacent = Size::splat(self.camera_distance);
+                            let offsets = drag_amount / Size::splat(4.);
+                            let ratio = offsets / adjacent;
+                            Simd::from_array([
+                                ratio[1].atan(), // Rotation on x-axis
+                                ratio[0].atan(), // Rotation on y-axis
+                            ])
+                        }
+                    }
+                    Right => self.camera_distance += -drag_amount[1] / 8.0,
                 }
-                Right => {
-                    self.camera_distance_offset = calc_distance_offset(down_position, position);
-                }
-            },
-            MouseUp {
-                button,
-                position,
-                down_position,
-                ..
-            } => match button {
-                Left => {
-                    self.camera_rotation_offset = Simd::default();
-                    self.camera_rotation += self.calc_rotation_offset(down_position, position);
-                }
-                Right => {
-                    self.camera_distance_offset = 0.0;
-                    self.camera_distance += calc_distance_offset(down_position, position);
-                }
-            },
+            }
             UserEvent::KeyDown { key_code, .. } => {
                 // "P" Key Code
                 if key_code == 35 {
@@ -268,7 +240,7 @@ impl RendererDelgate for Delegate {
                     self.use_perspective = !self.use_perspective;
                 }
             }
-            _ => return,
+            _ => {}
         }
     }
 

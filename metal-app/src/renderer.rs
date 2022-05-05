@@ -38,14 +38,12 @@ pub enum UserEvent {
     #[non_exhaustive]
     MouseUp {
         button: MouseButton,
-        down_position: Position,
         modifier_keys: ModifierKeys,
         position: Position,
     },
     #[non_exhaustive]
     MouseDrag {
         button: MouseButton,
-        down_position: Position,
         modifier_keys: ModifierKeys,
         position: Position,
         drag_amount: Size,
