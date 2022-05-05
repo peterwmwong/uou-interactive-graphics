@@ -17,26 +17,41 @@ pub enum MouseButton {
     Right,
 }
 
+bitflags::bitflags! {
+    pub struct ModifierKeys: u32 {
+        const SHIFT    = 1 << 0;
+        const CONTROL  = 1 << 1;
+        const COMMAND  = 1 << 2;
+        const FUNCTION = 1 << 3;
+    }
+}
+
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum UserEvent {
+    #[non_exhaustive]
     MouseDown {
         button: MouseButton,
+        modifier_keys: ModifierKeys,
         position: Position,
     },
+    #[non_exhaustive]
     MouseUp {
         button: MouseButton,
-        position: Position,
         down_position: Position,
+        modifier_keys: ModifierKeys,
+        position: Position,
     },
+    #[non_exhaustive]
     MouseDrag {
         button: MouseButton,
-        position: Position,
         down_position: Position,
+        modifier_keys: ModifierKeys,
+        position: Position,
+        drag_amount: Size,
     },
-    KeyDown {
-        key_code: c_ushort,
-    },
+    #[non_exhaustive]
+    KeyDown { key_code: c_ushort },
 }
 
 pub trait RendererDelgate {

@@ -34,10 +34,11 @@ main_vertex(         uint            inst_id          [[instance_id]],
 }
 
 fragment half4
-main_fragment(         VertexOut  in          [[stage_in]],
-              constant FragMode  &mode        [[buffer(FragBufferIndexFragMode)]],
-              constant float4x4  &inv_mvp     [[buffer(FragBufferIndexInverseProjection)]],
-              constant float2    &screen_size [[buffer(FragBufferIndexScreenSize)]])
+main_fragment(         VertexOut       in          [[stage_in]],
+              constant FragMode      & mode        [[buffer(FragBufferIndexFragMode)]],
+              constant float4x4      & inv_mvp     [[buffer(FragBufferIndexInverseProjection)]],
+              constant float2        & screen_size [[buffer(FragBufferIndexScreenSize)]],
+              constant packed_float4 & light_dir   [[buffer(FragBufferIndexLightDirection)]])
 {
     if (mode == FragModeNormals) {
         return half4(half3(in.normal * float3(1,1,-1)), 1);
@@ -51,14 +52,14 @@ main_fragment(         VertexOut  in          [[stage_in]],
     const float3 view_pos             = view_pos_perspective.xyz / view_pos_perspective.w;
 
     const float3 n  = float3(in.normal);            // Normal - unit vector, world space direction perpendicular to surface
-    const float3 w  = float3(-normalize(view_pos)); // Light  - unit vector, world space direction to light
-    const float3 v  = w;                            // Camera - unit vector, world space direction to camera
+    const float3 w  = light_dir.xyz;                // Light  - unit vector, world space direction to light
+    const float3 v  = float3(-normalize(view_pos)); // Camera - unit vector, world space direction to camera
     const float3 h  = (n + v) / length(n + v);      // Half   - unit vector, world space direction half-way Light and Camera
     const float  Il = 1.0f;                         // Light Intensity
     const float  Ia = 0.1f;                         // Ambient Intensity
     const float3 kd = float3(1.f, 0.f, 0.f);        // Material Difuse Color
     const float3 ks = float3(1.f);                  // Material Specular Color
-    const float  s  = 100.f;                        // Shineness (Specular)
+    const float  s  = 500.f;                        // Shineness (Specular)
 
     /*
     ================================================================

@@ -407,6 +407,7 @@ pub type FragMode = ::std::os::raw::c_uint;
 pub const FragBufferIndex_FragBufferIndexFragMode: FragBufferIndex = 0;
 pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 1;
 pub const FragBufferIndex_FragBufferIndexScreenSize: FragBufferIndex = 2;
+pub const FragBufferIndex_FragBufferIndexLightDirection: FragBufferIndex = 3;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************

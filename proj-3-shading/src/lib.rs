@@ -4,14 +4,15 @@ mod shader_bindings;
 
 use metal_app::{
     allocate_new_buffer_with_data, encode_fragment_bytes, encode_vertex_bytes, f32x4x4,
-    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, Position,
+    launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, ModifierKeys,
     RendererDelgate, Size, Unit, UserEvent,
 };
 use shader_bindings::{
-    FragBufferIndex_FragBufferIndexFragMode, FragBufferIndex_FragBufferIndexInverseProjection,
-    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeAmbient,
-    FragMode_FragModeAmbientDiffuse, FragMode_FragModeAmbientDiffuseSpecular,
-    FragMode_FragModeNormals, FragMode_FragModeSpecular,
+    packed_float4, FragBufferIndex_FragBufferIndexFragMode,
+    FragBufferIndex_FragBufferIndexInverseProjection,
+    FragBufferIndex_FragBufferIndexLightDirection, FragBufferIndex_FragBufferIndexScreenSize,
+    FragMode, FragMode_FragModeAmbient, FragMode_FragModeAmbientDiffuse,
+    FragMode_FragModeAmbientDiffuseSpecular, FragMode_FragModeNormals, FragMode_FragModeSpecular,
     VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
@@ -20,7 +21,7 @@ use shader_bindings::{
 use std::{
     f32::consts::PI,
     path::PathBuf,
-    simd::{f32x2, Simd},
+    simd::{f32x2, f32x4, Simd},
 };
 use tobj::{LoadOptions, Mesh};
 
@@ -35,6 +36,7 @@ struct Delegate {
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
+    light_xy_rotation: f32x2,
     max_bound: f32,
     mode: FragMode,
     model_matrix: f32x4x4,
@@ -48,6 +50,7 @@ struct Delegate {
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
     view_matrix: f32x4x4,
+    view_rotation_matrix: f32x4x4,
 }
 
 impl Delegate {
@@ -61,35 +64,17 @@ impl Delegate {
         self.depth_texture = Some(self.device.new_texture(&desc));
     }
 
-    // // TODO: This doesn't allow for a full 360 degree rotation in one drag (atan is [-90, 90]).
     #[inline]
-    fn calc_rotation_offset(&self, down_position: Position, position: Position) -> Position {
-        let adjacent = Simd::splat(self.camera_distance);
-        let offsets = down_position - position;
-        let ratio = offsets / adjacent;
-        Simd::from_array([
-            ratio[1].atan(), // Rotation on x-axis
-            ratio[0].atan(), // Rotation on y-axis
-        ])
-    }
-
-    #[inline]
-    fn on_camera_change(
-        &mut self,
-        camera_rotation: Size,
-        camera_rotation_offset: Size,
-        camera_distance: Unit,
-        camera_distance_offset: Unit,
-    ) {
+    fn on_camera_change(&mut self, camera_rotation: Size, camera_distance: Unit) {
         self.camera_rotation = camera_rotation;
         self.camera_distance = camera_distance;
 
-        let rot = self.camera_rotation + camera_rotation_offset;
+        let rot = self.camera_rotation;
         let view_rotation_matrix = f32x4x4::rotate(-rot[0], -rot[1], 0.);
-        let view_translate_matrix =
-            f32x4x4::translate(0., 0., self.camera_distance + camera_distance_offset);
+        let view_translate_matrix = f32x4x4::translate(0., 0., self.camera_distance);
 
         self.normal_transform_matrix = view_rotation_matrix * self.model_matrix.zero_translate();
+        self.view_rotation_matrix = view_rotation_matrix;
         self.view_matrix = view_translate_matrix * view_rotation_matrix;
 
         self.update_model_view_projection_matrix();
@@ -210,6 +195,7 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
+            light_xy_rotation: f32x2::from_array([-PI / 6.0, 0.0]),
             max_bound,
             mode: INITIAL_MODE,
             model_matrix,
@@ -304,15 +290,11 @@ impl RendererDelgate for Delegate {
                 &positions,
             ),
             view_matrix: f32x4x4::identity(),
+            view_rotation_matrix: f32x4x4::identity(),
             device,
         };
 
-        delegate.on_camera_change(
-            delegate.camera_rotation,
-            Simd::splat(0.),
-            delegate.camera_distance,
-            0.,
-        );
+        delegate.on_camera_change(delegate.camera_rotation, delegate.camera_distance);
         delegate.on_resize(Size::splat(1.));
         delegate
     }
@@ -384,6 +366,16 @@ impl RendererDelgate for Delegate {
             FragBufferIndex_FragBufferIndexScreenSize,
             &self.screen_size,
         );
+        // TODO: Only do this when there's a change (mouse drag + control key)
+        let light_dir = self.view_rotation_matrix
+            * f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
+            * f32x4::from_array([0., 0., -1., 1.]);
+        let light_dir: packed_float4 = light_dir.into();
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex_FragBufferIndexLightDirection,
+            &light_dir,
+        );
         encoder.draw_primitives_instanced(
             MTLPrimitiveType::Triangle,
             0,
@@ -398,44 +390,47 @@ impl RendererDelgate for Delegate {
     fn on_event(&mut self, event: UserEvent) {
         use metal_app::MouseButton::*;
         use UserEvent::*;
-        fn calc_distance_offset(down_position: Position, position: Position) -> Unit {
-            // Dragging up   => zooms in  (-offset)
-            // Dragging down => zooms out (+offset)
-            let screen_offset = position[1] - down_position[1];
-            screen_offset / 8.0
-        }
-        let mut camera_rotation = self.camera_rotation;
-        let mut camera_rotation_offset = Size::splat(0.);
-        let mut camera_distance = self.camera_distance;
-        let mut camera_distance_offset = 0.;
         match event {
             MouseDrag {
                 button,
-                position,
-                down_position,
-            } => match button {
-                Left => {
-                    camera_rotation_offset = self.calc_rotation_offset(down_position, position);
+                modifier_keys,
+                drag_amount,
+                ..
+            } => {
+                if modifier_keys.is_empty() {
+                    let mut camera_rotation = self.camera_rotation;
+                    let mut camera_distance = self.camera_distance;
+                    match button {
+                        Left => {
+                            camera_rotation += {
+                                let adjacent = Size::splat(self.camera_distance);
+                                let offsets = drag_amount / Size::splat(4.);
+                                let ratio = offsets / adjacent;
+                                Simd::from_array([
+                                    ratio[1].atan(), // Rotation on x-axis
+                                    ratio[0].atan(), // Rotation on y-axis
+                                ])
+                            }
+                        }
+                        Right => camera_distance += -drag_amount[1] / 8.0,
+                    }
+                    self.on_camera_change(camera_rotation, camera_distance);
+                } else if modifier_keys.contains(ModifierKeys::CONTROL) {
+                    match button {
+                        Left => {
+                            let adjacent = Simd::splat(self.camera_distance);
+                            let opposite = -drag_amount / Size::splat(16.);
+                            let ratio = opposite / adjacent;
+                            self.light_xy_rotation += Simd::from_array([
+                                ratio[1].atan(), // Rotation on x-axis
+                                ratio[0].atan(), // Rotation on y-axis
+                            ])
+                        }
+                        _ => {}
+                    }
                 }
-                Right => {
-                    camera_distance_offset = calc_distance_offset(down_position, position);
-                }
-            },
-            MouseUp {
-                button,
-                position,
-                down_position,
-            } => match button {
-                Left => {
-                    camera_rotation_offset = Simd::default();
-                    camera_rotation += self.calc_rotation_offset(down_position, position);
-                }
-                Right => {
-                    camera_distance_offset = 0.0;
-                    camera_distance += calc_distance_offset(down_position, position);
-                }
-            },
-            KeyDown { key_code } => {
+            }
+            KeyDown { key_code, .. } => {
                 self.mode = match key_code {
                     29 /* 0 */ => FragMode_FragModeAmbientDiffuseSpecular,
                     18 /* 1 */ => FragMode_FragModeNormals,
@@ -447,19 +442,12 @@ impl RendererDelgate for Delegate {
             }
             _ => {}
         }
-        self.on_camera_change(
-            camera_rotation,
-            camera_rotation_offset,
-            camera_distance,
-            camera_distance_offset,
-        );
     }
 
     #[inline]
     fn on_resize(&mut self, size: Size) {
         self.update_depth_texture_size(size);
         self.on_screen_size_change(size);
-        // self.update_model_view_projection_matrix();
     }
 }
 

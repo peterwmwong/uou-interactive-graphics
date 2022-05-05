@@ -2,13 +2,13 @@ use crate::{
     objc_helpers::debug_assert_objc_class,
     renderer::{MetalRenderer, RendererDelgate, Size, Unit},
     unwrap_helpers::unwrap_option_dcheck,
-    MouseButton, Position, UserEvent,
+    ModifierKeys, MouseButton, Position, UserEvent,
 };
 use cocoa::{
     appkit::{
         NSApp, NSApplication, NSApplicationActivationPolicy,
-        NSBackingStoreType::NSBackingStoreBuffered, NSEvent, NSEventType, NSMenu, NSMenuItem,
-        NSWindow, NSWindowStyleMask,
+        NSBackingStoreType::NSBackingStoreBuffered, NSEvent, NSEventModifierFlags, NSEventType,
+        NSMenu, NSMenuItem, NSWindow, NSWindowStyleMask,
     },
     base::{id, nil, selector},
     foundation::{NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString},
@@ -30,6 +30,31 @@ pub struct ApplicationManager<R: RendererDelgate + 'static> {
 }
 
 unsafe impl<R: RendererDelgate + 'static> Send for ApplicationManager<R> {}
+
+#[inline]
+fn parse_modifier_keys(ns_modifiers: NSEventModifierFlags) -> ModifierKeys {
+    let mut modifiers = ModifierKeys::empty();
+    for (ns_modifier, modifier) in [
+        (NSEventModifierFlags::NSShiftKeyMask, ModifierKeys::SHIFT),
+        (
+            NSEventModifierFlags::NSControlKeyMask,
+            ModifierKeys::CONTROL,
+        ),
+        (
+            NSEventModifierFlags::NSCommandKeyMask,
+            ModifierKeys::COMMAND,
+        ),
+        (
+            NSEventModifierFlags::NSFunctionKeyMask,
+            ModifierKeys::FUNCTION,
+        ),
+    ] {
+        if ns_modifiers.contains(ns_modifier) {
+            modifiers |= modifier;
+        };
+    }
+    modifiers
+}
 
 impl<R: RendererDelgate + 'static> ApplicationManager<R> {
     // Important: Call within `autoreleasepool()`.
@@ -80,6 +105,7 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         use MouseButton::*;
                         use NSEventType::*;
                         use UserEvent::*;
+                        static mut LAST_DRAG_POSITION: Position = Position::splat(0.0);
                         static mut LEFT_MOUSE_DOWN_POSITION: Position = Position::splat(0.0);
                         static mut RIGHT_MOUSE_DOWN_POSITION: Position = Position::splat(0.0);
 
@@ -132,6 +158,9 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                             Position::from_array([point.x as Unit, point.y as Unit])
                         };
                         let ns_event_type = unsafe { NSEvent::eventType(event) };
+                        let modifier_keys =
+                            parse_modifier_keys(unsafe { NSEvent::modifierFlags(event) });
+
                         let (button, down_position) = match ns_event_type {
                             NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => {
                                 (Left, unsafe { &mut LEFT_MOUSE_DOWN_POSITION })
@@ -147,21 +176,33 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         };
                         let user_event = match ns_event_type {
                             NSLeftMouseDown | NSRightMouseDown => {
+                                unsafe { LAST_DRAG_POSITION = position };
                                 *down_position = position;
-                                MouseDown { button, position }
+                                MouseDown {
+                                    button,
+                                    position,
+                                    modifier_keys,
+                                }
                             }
-                            NSLeftMouseDragged | NSRightMouseDragged => MouseDrag {
-                                button,
-                                position,
-                                down_position: *down_position,
-                            },
+                            NSLeftMouseDragged | NSRightMouseDragged => {
+                                let drag_amount = unsafe { LAST_DRAG_POSITION - position };
+                                unsafe { LAST_DRAG_POSITION = position };
+                                MouseDrag {
+                                    button,
+                                    down_position: *down_position,
+                                    modifier_keys,
+                                    position,
+                                    drag_amount,
+                                }
+                            }
                             NSLeftMouseUp | NSRightMouseUp => MouseUp {
                                 button,
-                                position,
                                 down_position: std::mem::replace(
                                     down_position,
                                     Position::splat(0.0),
                                 ),
+                                modifier_keys,
+                                position,
                             },
                             _ => return, // Should never get here, preceding match should have early exited
                                          // in the case.

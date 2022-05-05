@@ -355,6 +355,7 @@ dependencies = [
 name = "metal-app"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "cocoa",
  "core-graphics",
  "core-graphics-types",

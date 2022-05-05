@@ -230,11 +230,13 @@ impl RendererDelgate for Delegate {
             let screen_offset = position[1] - down_position[1];
             screen_offset / 8.0
         }
+        // TODO: Switch to drag_amount, it's alot simpler. See proj-3-shading.
         match event {
             MouseDrag {
                 button,
                 position,
                 down_position,
+                ..
             } => match button {
                 Left => {
                     self.camera_rotation_offset =
@@ -248,6 +250,7 @@ impl RendererDelgate for Delegate {
                 button,
                 position,
                 down_position,
+                ..
             } => match button {
                 Left => {
                     self.camera_rotation_offset = Simd::default();
@@ -258,7 +261,7 @@ impl RendererDelgate for Delegate {
                     self.camera_distance += calc_distance_offset(down_position, position);
                 }
             },
-            UserEvent::KeyDown { key_code } => {
+            UserEvent::KeyDown { key_code, .. } => {
                 // "P" Key Code
                 if key_code == 35 {
                     // Toggle between orthographic and perspective

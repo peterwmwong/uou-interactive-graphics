@@ -27,6 +27,7 @@ enum FragBufferIndex
     FragBufferIndexFragMode = 0,
     FragBufferIndexInverseProjection,
     FragBufferIndexScreenSize,
+    FragBufferIndexLightDirection,
 };
 
 #endif
