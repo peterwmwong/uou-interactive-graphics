@@ -296,7 +296,6 @@ impl RendererDelgate for Delegate {
         };
 
         delegate.on_camera_change(delegate.camera_rotation, delegate.camera_distance);
-        delegate.on_resize(f32x2::splat(1.));
         delegate
     }
 
@@ -441,14 +440,12 @@ impl RendererDelgate for Delegate {
                     _ => self.mode
                 };
             }
+            WindowResize { size, .. } => {
+                self.update_depth_texture_size(size);
+                self.on_screen_size_change(size);
+            }
             _ => {}
         }
-    }
-
-    #[inline]
-    fn on_resize(&mut self, size: f32x2) {
-        self.update_depth_texture_size(size);
-        self.on_screen_size_change(size);
     }
 }
 

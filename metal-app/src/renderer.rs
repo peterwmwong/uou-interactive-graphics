@@ -45,16 +45,17 @@ pub enum UserEvent {
     },
     #[non_exhaustive]
     KeyDown { key_code: c_ushort },
+    #[non_exhaustive]
+    WindowResize { size: f32x2 },
 }
 
 pub trait RendererDelgate {
     fn new(device: Device) -> Self;
+
     fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef);
-    #[inline]
-    fn on_event(&mut self, _event: UserEvent) {}
 
     #[inline]
-    fn on_resize(&mut self, _size: f32x2) {}
+    fn on_event(&mut self, _event: UserEvent) {}
 }
 
 pub(crate) struct MetalRenderer<R: RendererDelgate> {
@@ -92,7 +93,7 @@ impl<R: RendererDelgate> MetalRenderer<R> {
             self.layer
                 .set_drawable_size(CGSize::new(size[0] as CGFloat, size[1] as CGFloat));
             self.screen_size = size;
-            self.delegate.on_resize(self.screen_size);
+            self.delegate.on_event(UserEvent::WindowResize { size });
         }
     }
 

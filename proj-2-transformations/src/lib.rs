@@ -236,20 +236,18 @@ impl RendererDelgate for Delegate {
                     Right => self.camera_distance += -drag_amount[1] / 8.0,
                 }
             }
-            UserEvent::KeyDown { key_code, .. } => {
+            KeyDown { key_code, .. } => {
                 // "P" Key Code
                 if key_code == 35 {
                     // Toggle between orthographic and perspective
                     self.use_perspective = !self.use_perspective;
                 }
             }
+            WindowResize { size, .. } => {
+                self.screen_size = size;
+            }
             _ => {}
         }
-    }
-
-    #[inline]
-    fn on_resize(&mut self, size: f32x2) {
-        self.screen_size = size;
     }
 }
 

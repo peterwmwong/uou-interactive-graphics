@@ -1,7 +1,5 @@
 # metal-app
 
-- Should `RenderDelegate::on_resize` just be an event passed to `on_event`?
-
 # metal-build
 
 - Switching between release/dev build doesn't seem to rebuild shader_bindings.
