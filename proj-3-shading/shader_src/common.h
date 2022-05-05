@@ -30,4 +30,10 @@ enum FragBufferIndex
     FragBufferIndexLightDirection,
 };
 
+enum LightVertexBufferIndex
+{
+    LightVertexBufferIndexViewProjection = 0,
+    LightVertexBufferIndexLightPosition,
+};
+
 #endif

@@ -13,6 +13,7 @@ use shader_bindings::{
     FragBufferIndex_FragBufferIndexLightDirection, FragBufferIndex_FragBufferIndexScreenSize,
     FragMode, FragMode_FragModeAmbient, FragMode_FragModeAmbientDiffuse,
     FragMode_FragModeAmbientDiffuseSpecular, FragMode_FragModeNormals, FragMode_FragModeSpecular,
+    LightVertexBufferIndex_LightVertexBufferIndexViewProjection,
     VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexModelViewProjection,
     VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
@@ -25,9 +26,12 @@ use std::{
 };
 use tobj::{LoadOptions, Mesh};
 
+use crate::shader_bindings::LightVertexBufferIndex_LightVertexBufferIndexLightPosition;
+
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
 const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
+const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 struct Delegate {
     aspect_ratio: f32,
@@ -41,10 +45,12 @@ struct Delegate {
     mode: FragMode,
     model_matrix: f32x4x4,
     model_view_projection_matrix: f32x4x4,
+    view_projection_matrix: f32x4x4,
     normal_transform_matrix: f32x4x4,
     num_triangles: usize,
     projection_inverse_matrix: f32x4x4,
     render_pipeline_state: RenderPipelineState,
+    render_light_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
@@ -117,8 +123,8 @@ impl Delegate {
     #[inline]
     fn update_model_view_projection_matrix(&mut self) {
         let projection_matrix = self.calc_projection_matrix(self.aspect_ratio);
-        self.model_view_projection_matrix =
-            projection_matrix * self.view_matrix * self.model_matrix;
+        self.view_projection_matrix = projection_matrix * self.view_matrix;
+        self.model_view_projection_matrix = self.view_projection_matrix * self.model_matrix;
         self.projection_inverse_matrix = projection_matrix.inverse();
     }
 }
@@ -184,7 +190,7 @@ impl RendererDelgate for Delegate {
         };
 
         let camera_distance = INITIAL_CAMERA_DISTANCE;
-        let camera_rotation = Simd::from_array([-PI / 6.0, 0.0]);
+        let camera_rotation = Simd::from_array([0., 0.0]);
         let mut delegate = Self {
             aspect_ratio: 1.0,
             camera_distance,
@@ -196,20 +202,18 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
-            light_xy_rotation: f32x2::from_array([-PI / 6.0, 0.0]),
+            light_xy_rotation: f32x2::from_array([0.0, 0.0]),
             max_bound,
             mode: INITIAL_MODE,
             model_matrix,
+            view_projection_matrix: f32x4x4::identity(),
             model_view_projection_matrix: f32x4x4::identity(),
             normal_transform_matrix: f32x4x4::identity(),
             projection_inverse_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
                 let library = device
-                    .new_library_with_data(include_bytes!(concat!(
-                        env!("OUT_DIR"),
-                        "/shaders.metallib"
-                    )))
+                    .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib.");
 
                 let pipeline_state_desc = RenderPipelineDescriptor::new();
@@ -225,7 +229,7 @@ impl RendererDelgate for Delegate {
                     let buffers = pipeline_state_desc
                         .vertex_buffers()
                         .expect("Failed to access vertex buffers");
-                    for &buffer_index in &[
+                    for buffer_index in [
                         VertexBufferIndex_VertexBufferIndexIndices,
                         VertexBufferIndex_VertexBufferIndexPositions,
                         VertexBufferIndex_VertexBufferIndexNormals,
@@ -245,6 +249,70 @@ impl RendererDelgate for Delegate {
                 {
                     let fun = unwrap_result_dcheck(
                         library.get_function(&"main_fragment", None),
+                        "Failed to access fragment shader function from metal library",
+                    );
+                    pipeline_state_desc.set_fragment_function(Some(&fun));
+                }
+
+                // Setup Target Color Attachment
+                {
+                    let desc = &unwrap_option_dcheck(
+                        pipeline_state_desc.color_attachments().object_at(0 as u64),
+                        "Failed to access color attachment on pipeline descriptor",
+                    );
+                    // TODO: Maybe disable this, since we don't have any transparency
+                    desc.set_blending_enabled(true);
+
+                    desc.set_rgb_blend_operation(MTLBlendOperation::Add);
+                    desc.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
+                    desc.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+
+                    desc.set_alpha_blend_operation(MTLBlendOperation::Add);
+                    desc.set_source_alpha_blend_factor(MTLBlendFactor::SourceAlpha);
+                    desc.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
+
+                    desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+                }
+
+                unwrap_result_dcheck(
+                    device.new_render_pipeline_state(&pipeline_state_desc),
+                    "Failed to create render pipeline",
+                )
+            },
+            render_light_pipeline_state: {
+                let library = device
+                    .new_library_with_data(LIBRARY_BYTES)
+                    .expect("Failed to import shader metal lib.");
+
+                let pipeline_state_desc = RenderPipelineDescriptor::new();
+                pipeline_state_desc.set_label("Render Light Pipeline");
+
+                // Setup Vertex Shader
+                {
+                    let fun = library
+                        .get_function(&"light_vertex", None)
+                        .expect("Failed to access vertex shader function from metal library");
+                    pipeline_state_desc.set_vertex_function(Some(&fun));
+
+                    let buffers = pipeline_state_desc
+                        .vertex_buffers()
+                        .expect("Failed to access vertex buffers");
+                    for buffer_index in [LightVertexBufferIndex_LightVertexBufferIndexLightPosition]
+                    {
+                        unwrap_option_dcheck(
+                            buffers.object_at(buffer_index as _),
+                            "Failed to access vertex buffer",
+                        )
+                        .set_mutability(MTLMutability::Immutable);
+                    }
+                }
+
+                pipeline_state_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
+
+                // Setup Fragment Shader
+                {
+                    let fun = unwrap_result_dcheck(
+                        library.get_function(&"light_fragment", None),
                         "Failed to access fragment shader function from metal library",
                     );
                     pipeline_state_desc.set_fragment_function(Some(&fun));
@@ -367,14 +435,27 @@ impl RendererDelgate for Delegate {
             &self.screen_size,
         );
         // TODO: Only do this when there's a change (mouse drag + control key)
-        let light_dir = self.view_rotation_matrix
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // - REMOVE applying the view_projection_matrix
+        //      - FS is currently unnecessarily applying the INVERSE projection matrix just to get
+        //        the view space coordinate of the light.
+        // - Only apply the view_projection_matrix when draing the light
+        // - Rename variables to make it clear what coordinate space we're in
+        // - Verify with shader debugger FS is accurately calculating the `w`
+        //      - Place the light right above the teapot (centered)
+        //      - Debug the very top of the teapot fragment shader invocation
+        //      - Verify the `w` is as expected... something close to (0, 1, 0)?
+        //      - Try another position, place the light right in front, check the very front teapot fragment, etc.
+        let light_view_position = self.view_projection_matrix
             * f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
-            * f32x4::from_array([0., 0., -1., 1.]);
-        let light_dir: packed_float4 = light_dir.into();
+            * f32x4::from_array([0., 0., -(INITIAL_CAMERA_DISTANCE / 2.), 1.]);
+        let light_view_position = packed_float4::from(light_view_position);
         encode_fragment_bytes(
             &encoder,
             FragBufferIndex_FragBufferIndexLightDirection,
-            &light_dir,
+            &light_view_position,
         );
         encoder.draw_primitives_instanced(
             MTLPrimitiveType::Triangle,
@@ -382,6 +463,25 @@ impl RendererDelgate for Delegate {
             3,
             self.num_triangles as _,
         );
+        {
+            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
+            encoder.set_depth_stencil_state(&self.depth_state);
+            // TODO: Figure out a better way to unset this buffers from the previous draw call
+            encoder.set_vertex_buffers(0, &[None; 5], &[0; 5]);
+            encode_vertex_bytes(
+                &encoder,
+                LightVertexBufferIndex_LightVertexBufferIndexViewProjection,
+                &self.view_projection_matrix,
+            );
+            encode_vertex_bytes(
+                &encoder,
+                LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
+                &light_view_position,
+            );
+            // TODO: Figure out a better way to unset this buffers from the previous draw call
+            encoder.set_fragment_buffers(0, &[None; 4], &[0; 4]);
+            encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
+        }
         encoder.end_encoding();
         command_buffer.present_drawable(drawable);
         command_buffer.commit();

@@ -409,6 +409,9 @@ pub const FragBufferIndex_FragBufferIndexInverseProjection: FragBufferIndex = 1;
 pub const FragBufferIndex_FragBufferIndexScreenSize: FragBufferIndex = 2;
 pub const FragBufferIndex_FragBufferIndexLightDirection: FragBufferIndex = 3;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
+pub const LightVertexBufferIndex_LightVertexBufferIndexViewProjection: LightVertexBufferIndex = 0;
+pub const LightVertexBufferIndex_LightVertexBufferIndexLightPosition: LightVertexBufferIndex = 1;
+pub type LightVertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.
