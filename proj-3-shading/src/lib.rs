@@ -123,6 +123,7 @@ impl Delegate {
     }
 }
 
+// TODO: Display light
 impl RendererDelgate for Delegate {
     fn new(device: metal_app::metal::Device) -> Self {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -152,17 +153,17 @@ impl RendererDelgate for Delegate {
         debug_assert_eq!(
             indices.len() % 3,
             0,
-            r#"`mesh.indices` should contain triples (triangle vertices). Model should have been loaded with `triangulate`, guaranteeing all faces have 3 vertices."#
+            "`mesh.indices` should contain triples (triangle vertices). Model should have been loaded with `triangulate`, guaranteeing all faces have 3 vertices."
         );
         debug_assert_eq!(
             positions.len() % 3,
             0,
-            r#"`mesh.positions` should contain triples (3D position)"#
+            "`mesh.positions` should contain triples (3D position)"
         );
         debug_assert_eq!(
             normals.len(),
             positions.len(),
-            r#"`mesh.normals` should contain triples (3D vector)"#
+            "`mesh.normals` should contain triples (3D vector)"
         );
 
         let (positions3, ..) = positions.as_chunks::<3>();
