@@ -5,11 +5,6 @@ use metal::*;
 use objc::{rc::autoreleasepool, runtime::YES};
 use std::{os::raw::c_ushort, simd::*};
 
-pub type Unit = f32;
-// TODO: Rename to indicate 2D-ness
-pub type Size = Simd<Unit, 2>;
-pub type Position = Simd<Unit, 2>;
-
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum MouseButton {
@@ -33,20 +28,20 @@ pub enum UserEvent {
     MouseDown {
         button: MouseButton,
         modifier_keys: ModifierKeys,
-        position: Position,
+        position: f32x2,
     },
     #[non_exhaustive]
     MouseUp {
         button: MouseButton,
         modifier_keys: ModifierKeys,
-        position: Position,
+        position: f32x2,
     },
     #[non_exhaustive]
     MouseDrag {
         button: MouseButton,
         modifier_keys: ModifierKeys,
-        position: Position,
-        drag_amount: Size,
+        position: f32x2,
+        drag_amount: f32x2,
     },
     #[non_exhaustive]
     KeyDown { key_code: c_ushort },
@@ -59,20 +54,20 @@ pub trait RendererDelgate {
     fn on_event(&mut self, _event: UserEvent) {}
 
     #[inline]
-    fn on_resize(&mut self, _size: Size) {}
+    fn on_resize(&mut self, _size: f32x2) {}
 }
 
 pub(crate) struct MetalRenderer<R: RendererDelgate> {
-    backing_scale_factor: Unit,
+    backing_scale_factor: f32,
     command_queue: CommandQueue,
     pub(crate) layer: MetalLayer,
-    screen_size: Size,
+    screen_size: f32x2,
     delegate: R,
 }
 
 impl<R: RendererDelgate> MetalRenderer<R> {
     #[inline]
-    pub(crate) fn new(backing_scale_factor: Unit) -> MetalRenderer<R> {
+    pub(crate) fn new(backing_scale_factor: f32) -> MetalRenderer<R> {
         let device = unwrap_option_dcheck(Device::system_default(), "No device found");
         let command_queue = device.new_command_queue();
         let layer = MetalLayer::new();
@@ -91,7 +86,7 @@ impl<R: RendererDelgate> MetalRenderer<R> {
     }
 
     #[inline]
-    pub(crate) fn update_size(&mut self, size: Size) {
+    pub(crate) fn update_size(&mut self, size: f32x2) {
         let size = size * Simd::splat(self.backing_scale_factor);
         if self.screen_size != size {
             self.layer

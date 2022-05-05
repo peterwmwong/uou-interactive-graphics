@@ -1,8 +1,8 @@
 use crate::{
     objc_helpers::debug_assert_objc_class,
-    renderer::{MetalRenderer, RendererDelgate, Size, Unit},
+    renderer::{MetalRenderer, RendererDelgate},
     unwrap_helpers::unwrap_option_dcheck,
-    ModifierKeys, MouseButton, Position, UserEvent,
+    ModifierKeys, MouseButton, UserEvent,
 };
 use cocoa::{
     appkit::{
@@ -22,6 +22,7 @@ use objc::{
 };
 use std::{
     os::raw::c_void,
+    simd::f32x2,
     sync::{Arc, Mutex},
 };
 
@@ -61,7 +62,7 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
     pub fn from_nswindow(nswindow: *mut Object) -> DisplayLink {
         let nswindow = debug_assert_objc_class(nswindow, &"NSWindow");
         let mut manager = Box::new(Self {
-            renderer: MetalRenderer::new(unsafe { nswindow.backingScaleFactor() as Unit }),
+            renderer: MetalRenderer::new(unsafe { nswindow.backingScaleFactor() as f32 }),
         });
         manager.init_window_event_handlers(nswindow);
         manager.init_and_attach_view(nswindow);
@@ -105,7 +106,7 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                         use MouseButton::*;
                         use NSEventType::*;
                         use UserEvent::*;
-                        static mut LAST_DRAG_POSITION: Position = Position::splat(0.0);
+                        static mut LAST_DRAG_POSITION: f32x2 = f32x2::splat(0.0);
 
                         // We have to do this to have access to the `NSView` trait...
                         let view: id = this;
@@ -153,7 +154,7 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
                                     NSSize::new(0.0, 0.0),
                                 ))
                                 .origin;
-                            Position::from_array([point.x as Unit, point.y as Unit])
+                            f32x2::from_array([point.x as f32, point.y as f32])
                         };
                         let ns_event_type = unsafe { NSEvent::eventType(event) };
                         let modifier_keys =
@@ -260,7 +261,7 @@ impl<R: RendererDelgate + 'static> ApplicationManager<R> {
             };
             manager
                 .renderer
-                .update_size(Size::from_array([width as Unit, height as Unit]));
+                .update_size(f32x2::from_array([width as f32, height as f32]));
         }
 
         unsafe {

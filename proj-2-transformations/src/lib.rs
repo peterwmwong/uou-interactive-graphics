@@ -3,8 +3,7 @@
 mod shader_bindings;
 use metal_app::{
     allocate_new_buffer_with_data, encode_vertex_bytes, launch_application, metal::*,
-    unwrap_option_dcheck, unwrap_result_dcheck, MouseButton, RendererDelgate, Size, Unit,
-    UserEvent,
+    unwrap_option_dcheck, unwrap_result_dcheck, MouseButton, RendererDelgate, UserEvent,
 };
 use shader_bindings::{
     packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
@@ -13,18 +12,22 @@ use shader_bindings::{
     VertexBufferIndex_VertexBufferIndexPositions, VertexBufferIndex_VertexBufferIndexScreenSize,
     VertexBufferIndex_VertexBufferIndexUsePerspective, INITIAL_CAMERA_DISTANCE,
 };
-use std::{f32::consts::PI, path::PathBuf, simd::Simd};
+use std::{
+    f32::consts::PI,
+    path::PathBuf,
+    simd::{f32x2, f32x4, Simd},
+};
 use tobj::LoadOptions;
 
 struct Delegate {
-    camera_distance_offset: Unit,
-    camera_distance: Unit,
-    camera_rotation_offset: Simd<Unit, 2>,
-    camera_rotation: Simd<Unit, 2>,
+    camera_distance_offset: f32,
+    camera_distance: f32,
+    camera_rotation_offset: Simd<f32, 2>,
+    camera_rotation: Simd<f32, 2>,
     mins_maxs: [packed_float4; 2],
     num_vertices: usize,
     render_pipeline_state: RenderPipelineState,
-    screen_size: Size,
+    screen_size: f32x2,
     use_perspective: bool,
     vertex_buffer_positions: Buffer,
 }
@@ -58,8 +61,8 @@ impl RendererDelgate for Delegate {
 
         let mins_maxs = {
             let (positions3, ..) = positions.as_chunks::<3>();
-            let mut mins = Simd::splat(f32::MAX);
-            let mut maxs = Simd::splat(f32::MIN);
+            let mut mins: f32x4 = Simd::splat(f32::MAX);
+            let mut maxs: f32x4 = Simd::splat(f32::MIN);
             for &[x, y, z] in positions3 {
                 let input = Simd::from_array([x, y, z, 0.0]);
                 mins = mins.min(input);
@@ -151,7 +154,7 @@ impl RendererDelgate for Delegate {
                 "Vertex Buffer Positions",
                 &positions,
             ),
-            screen_size: Size::splat(0.),
+            screen_size: f32x2::splat(0.),
         }
     }
 
@@ -221,8 +224,8 @@ impl RendererDelgate for Delegate {
                 match button {
                     Left => {
                         self.camera_rotation += {
-                            let adjacent = Size::splat(self.camera_distance);
-                            let offsets = drag_amount / Size::splat(4.);
+                            let adjacent = f32x2::splat(self.camera_distance);
+                            let offsets = drag_amount / f32x2::splat(4.);
                             let ratio = offsets / adjacent;
                             Simd::from_array([
                                 ratio[1].atan(), // Rotation on x-axis
@@ -245,7 +248,7 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn on_resize(&mut self, size: Size) {
+    fn on_resize(&mut self, size: f32x2) {
         self.screen_size = size;
     }
 }

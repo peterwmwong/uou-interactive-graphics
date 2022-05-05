@@ -5,7 +5,7 @@ mod shader_bindings;
 use metal_app::{
     allocate_new_buffer_with_data, encode_fragment_bytes, encode_vertex_bytes, f32x4x4,
     launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, ModifierKeys,
-    RendererDelgate, Size, Unit, UserEvent,
+    RendererDelgate, UserEvent,
 };
 use shader_bindings::{
     packed_float4, FragBufferIndex_FragBufferIndexFragMode,
@@ -31,7 +31,7 @@ const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
 
 struct Delegate {
     aspect_ratio: f32,
-    camera_distance: Unit,
+    camera_distance: f32,
     camera_rotation: f32x2,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
@@ -45,7 +45,7 @@ struct Delegate {
     num_triangles: usize,
     projection_inverse_matrix: f32x4x4,
     render_pipeline_state: RenderPipelineState,
-    screen_size: Size,
+    screen_size: f32x2,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
@@ -54,7 +54,7 @@ struct Delegate {
 }
 
 impl Delegate {
-    fn update_depth_texture_size(&mut self, size: Size) {
+    fn update_depth_texture_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();
         desc.set_width(size[0] as _);
         desc.set_height(size[1] as _);
@@ -65,7 +65,7 @@ impl Delegate {
     }
 
     #[inline]
-    fn on_camera_change(&mut self, camera_rotation: Size, camera_distance: Unit) {
+    fn on_camera_change(&mut self, camera_rotation: f32x2, camera_distance: f32) {
         self.camera_rotation = camera_rotation;
         self.camera_distance = camera_distance;
 
@@ -80,7 +80,7 @@ impl Delegate {
         self.update_model_view_projection_matrix();
     }
 
-    fn on_screen_size_change(&mut self, size: Size) {
+    fn on_screen_size_change(&mut self, size: f32x2) {
         self.screen_size = size;
         self.aspect_ratio = size[0] / size[1];
         self.update_model_view_projection_matrix();
@@ -167,8 +167,8 @@ impl RendererDelgate for Delegate {
         );
 
         let (positions3, ..) = positions.as_chunks::<3>();
-        let mut mins = Simd::splat(f32::MAX);
-        let mut maxs = Simd::splat(f32::MIN);
+        let mut mins: f32x4 = Simd::splat(f32::MAX);
+        let mut maxs: f32x4 = Simd::splat(f32::MIN);
         for &[x, y, z] in positions3 {
             let input = Simd::from_array([x, y, z, 0.0]);
             mins = mins.min(input);
@@ -274,7 +274,7 @@ impl RendererDelgate for Delegate {
                     "Failed to create render pipeline",
                 )
             },
-            screen_size: Size::default(),
+            screen_size: f32x2::default(),
             vertex_buffer_indices: allocate_new_buffer_with_data(
                 &device,
                 "Vertex Buffer Indices",
@@ -296,7 +296,7 @@ impl RendererDelgate for Delegate {
         };
 
         delegate.on_camera_change(delegate.camera_rotation, delegate.camera_distance);
-        delegate.on_resize(Size::splat(1.));
+        delegate.on_resize(f32x2::splat(1.));
         delegate
     }
 
@@ -404,8 +404,8 @@ impl RendererDelgate for Delegate {
                     match button {
                         Left => {
                             camera_rotation += {
-                                let adjacent = Size::splat(self.camera_distance);
-                                let offsets = drag_amount / Size::splat(4.);
+                                let adjacent = f32x2::splat(self.camera_distance);
+                                let offsets = drag_amount / f32x2::splat(4.);
                                 let ratio = offsets / adjacent;
                                 Simd::from_array([
                                     ratio[1].atan(), // Rotation on x-axis
@@ -420,7 +420,7 @@ impl RendererDelgate for Delegate {
                     match button {
                         Left => {
                             let adjacent = Simd::splat(self.camera_distance);
-                            let opposite = -drag_amount / Size::splat(16.);
+                            let opposite = -drag_amount / f32x2::splat(16.);
                             let ratio = opposite / adjacent;
                             self.light_xy_rotation += Simd::from_array([
                                 ratio[1].atan(), // Rotation on x-axis
@@ -446,7 +446,7 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn on_resize(&mut self, size: Size) {
+    fn on_resize(&mut self, size: f32x2) {
         self.update_depth_texture_size(size);
         self.on_screen_size_change(size);
     }
