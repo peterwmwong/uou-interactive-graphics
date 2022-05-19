@@ -49,20 +49,25 @@ main_fragment(         VertexOut       in          [[stage_in]],
     const float4 ndc_pos    = float4(ndc_pos_xy, in.position.z, 1.f);
 
     const float4 view_pos_perspective = inv_p * ndc_pos;
-    const float3 view_pos             = view_pos_perspective.xyz / view_pos_perspective.w;
+    const float3 view_pos             = normalize(view_pos_perspective.xyz / view_pos_perspective.w);
     const float4 light_pos_raw0       = light_pos;
     const float4 light_pos_raw        = inv_p * light_pos_raw0;
-    const float3 light_pos2           = light_pos_raw.xyz / light_pos_raw.w;
+    const float3 light_pos2           = normalize(light_pos_raw.xyz / light_pos_raw.w);
 
-    const float3 n  = float3(in.normal);            // Normal - unit vector, world space direction perpendicular to surface
-    const float3 w  = normalize(light_pos2 - view_pos);     // Light  - unit vector, world space direction to light
-    const float3 v  = float3(-normalize(view_pos)); // Camera - unit vector, world space direction to camera
-    const float3 h  = (n + v) / length(n + v);      // Half   - unit vector, world space direction half-way Light and Camera
-    const float  Il = 1.0f;                         // Light Intensity
-    const float  Ia = 0.1f;                         // Ambient Intensity
-    const float3 kd = float3(1.f, 0.f, 0.f);        // Material Difuse Color
-    const float3 ks = float3(1.f);                  // Material Specular Color
-    const float  s  = 500.f;                        // Shineness (Specular)
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // 1. When the light is *BEHIND* the teapot, something doesn't look right
+    // 2. When the light is *IN FRONT* the camera, something doesn't look right
+    const float3 n  = normalize(in.normal);               // Normal - unit vector, world space direction perpendicular to surface
+    const float3 w  = normalize(light_pos2 - view_pos);   // Light  - unit vector, world space direction to light
+    const float3 v  = -normalize(view_pos);               // Camera - unit vector, world space direction to camera
+    const float3 h  = normalize((w + v) / length(w + v)); // Half   - unit vector, world space direction half-way Light and Camera
+    const float  Il = 1.0f;                               // Light Intensity
+    const float  Ia = 0.1f;                               // Ambient Intensity
+    const float3 kd = float3(1.f, 0.f, 0.f);              // Material Difuse Color
+    const float3 ks = float3(1.f);                        // Material Specular Color
+    const float  s  = 50.f;                              // Shineness (Specular)
 
     /*
     ================================================================
@@ -74,9 +79,9 @@ main_fragment(         VertexOut       in          [[stage_in]],
 
     Ambient + Geometry Term (Diffuse    + Specular)
     -------   -------------  ----------   -------------------------------
-    Ia k    + Il cos(a)     (kd F(w, v) + (cos(p) ks F(w, v))^s / cos(a))
-    Ia k    + Il cos(a)     (kd         + (cos(p) ks)^s         / cos(a))
-    Ia k    + Il w.n        (kd         + (w.h ks)^s            / w.n)
+    Ia k    + Il cos(a)     (kd F(w, v) + (cos(t) ks F(w, v))^s / cos(a))
+    Ia k    + Il cos(a)     (kd         + (cos(t) ks)^s         / cos(a))
+    Ia k    + Il w.n        (kd         + (n.h ks)^s            / w.n)
     */
     const float  wn       = max(dot(w, n), 0.f); // max() to remove light rays that bounce away from the camera:
                                                  // - Back-facing surfaces, like inside the teapot/spout when viewing teapot from above.
@@ -88,7 +93,8 @@ main_fragment(         VertexOut       in          [[stage_in]],
     const float3 geoTerm  = Il * wn;
     const float3 ambient  = select(0, Ia * kd,                     mode == FragModeAmbientDiffuseSpecular || mode == FragModeAmbient || mode == FragModeAmbientDiffuse);
     const float3 diffuse  = select(0, kd,                          mode == FragModeAmbientDiffuseSpecular || mode == FragModeAmbientDiffuse);
-    const float3 specular = select(0, pow(dot(w, h) * ks, s) / wn, mode == FragModeAmbientDiffuseSpecular || mode == FragModeSpecular      );
+    const float  cosTheta = dot(n, h);
+    const float3 specular = select(0, pow(cosTheta * ks, s) / wn,  mode == FragModeAmbientDiffuseSpecular || mode == FragModeSpecular      );
     const half3  color    = half3(ambient + geoTerm * (diffuse + specular));
 
     // TODO: BUG! When the light is positioned somewhere above the teapot, the very bottom edge of the teapot lights up!
@@ -114,5 +120,6 @@ light_vertex(constant float4x4      & vp        [[buffer(LightVertexBufferIndexV
 fragment half4
 light_fragment(const float2 point_coord [[point_coord]])
 {
-    return half4(0, 1, 0, 1) * half(round(1.0 - length(point_coord - float2(0.5))));
+    float circle_sd = 1.0 - length(point_coord - float2(0.5));
+    return half4(1, 1, 1, half(round(circle_sd)));
 };

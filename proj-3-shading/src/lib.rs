@@ -20,7 +20,6 @@ use shader_bindings::{
     VertexBufferIndex_VertexBufferIndexPositions,
 };
 use std::{
-    f32::consts::PI,
     path::PathBuf,
     simd::{f32x2, f32x4, Simd},
 };
@@ -202,7 +201,7 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
-            light_xy_rotation: f32x2::from_array([0.0, 0.0]),
+            light_xy_rotation: f32x2::from_array([-std::f32::consts::PI / 2., 0.0]),
             max_bound,
             mode: INITIAL_MODE,
             model_matrix,
@@ -435,9 +434,9 @@ impl RendererDelgate for Delegate {
             &self.screen_size,
         );
         // TODO: Only do this when there's a change (mouse drag + control key)
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: START HERE 2
         // - REMOVE applying the view_projection_matrix
         //      - FS is currently unnecessarily applying the INVERSE projection matrix just to get
         //        the view space coordinate of the light.
@@ -450,7 +449,7 @@ impl RendererDelgate for Delegate {
         //      - Try another position, place the light right in front, check the very front teapot fragment, etc.
         let light_view_position = self.view_projection_matrix
             * f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
-            * f32x4::from_array([0., 0., -(INITIAL_CAMERA_DISTANCE / 2.), 1.]);
+            * f32x4::from_array([0., 0., -(INITIAL_CAMERA_DISTANCE * 2.), 1.]);
         let light_view_position = packed_float4::from(light_view_position);
         encode_fragment_bytes(
             &encoder,
@@ -465,7 +464,6 @@ impl RendererDelgate for Delegate {
         );
         {
             encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
-            encoder.set_depth_stencil_state(&self.depth_state);
             // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(0, &[None; 5], &[0; 5]);
             encode_vertex_bytes(
