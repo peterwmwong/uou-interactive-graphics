@@ -40,7 +40,8 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       enableGPUFrameCaptureMode = "1"
-      allowLocationSimulation = "YES">
+      allowLocationSimulation = "YES"
+      GPUProfilerEnabled = "No">
       <PathRunnable
          runnableDebuggingMode = "0"
          FilePath = "/Users/pwong/projects/uou-interactive-graphics/target/debug/app_launched_by_xcode">
