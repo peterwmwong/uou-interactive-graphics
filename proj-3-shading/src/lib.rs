@@ -2,22 +2,27 @@
 #![feature(slice_as_chunks)]
 mod shader_bindings;
 
+use crate::shader_bindings::{
+    LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
+    VertexBufferIndex_VertexBufferIndexLENGTH,
+    VertexBufferIndex_VertexBufferIndexMatrixModelToWorld,
+};
 use metal_app::{
     allocate_new_buffer_with_data, encode_fragment_bytes, encode_vertex_bytes, f32x4x4,
     launch_application, metal::*, unwrap_option_dcheck, unwrap_result_dcheck, ModifierKeys,
     RendererDelgate, UserEvent,
 };
 use shader_bindings::{
-    packed_float4, FragBufferIndex_FragBufferIndexFragMode,
-    FragBufferIndex_FragBufferIndexInverseProjection,
-    FragBufferIndex_FragBufferIndexLightDirection, FragBufferIndex_FragBufferIndexScreenSize,
-    FragMode, FragMode_FragModeAmbient, FragMode_FragModeAmbientDiffuse,
-    FragMode_FragModeAmbientDiffuseSpecular, FragMode_FragModeNormals, FragMode_FragModeSpecular,
-    LightVertexBufferIndex_LightVertexBufferIndexViewProjection,
+    packed_float4, FragBufferIndex_FragBufferIndexCameraPosition,
+    FragBufferIndex_FragBufferIndexFragMode, FragBufferIndex_FragBufferIndexLENGTH,
+    FragBufferIndex_FragBufferIndexLightPosition,
+    FragBufferIndex_FragBufferIndexMatrixProjectionToWorld,
+    FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeAmbient,
+    FragMode_FragModeAmbientDiffuse, FragMode_FragModeAmbientDiffuseSpecular,
+    FragMode_FragModeNormals, FragMode_FragModeSpecular,
     VertexBufferIndex_VertexBufferIndexIndices,
-    VertexBufferIndex_VertexBufferIndexModelViewProjection,
-    VertexBufferIndex_VertexBufferIndexNormalTransform, VertexBufferIndex_VertexBufferIndexNormals,
-    VertexBufferIndex_VertexBufferIndexPositions,
+    VertexBufferIndex_VertexBufferIndexMatrixModelToProjection,
+    VertexBufferIndex_VertexBufferIndexNormals, VertexBufferIndex_VertexBufferIndexPositions,
 };
 use std::{
     path::PathBuf,
@@ -25,15 +30,15 @@ use std::{
 };
 use tobj::{LoadOptions, Mesh};
 
-use crate::shader_bindings::LightVertexBufferIndex_LightVertexBufferIndexLightPosition;
-
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
-const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
+const INITIAL_CAMERA_DISTANCE: f32 = 50.;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-std::f32::consts::PI / 6., 0.]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
+const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE * 200.;
 const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 struct Delegate {
-    aspect_ratio: f32,
     camera_distance: f32,
     camera_rotation: f32x2,
     depth_state: DepthStencilState,
@@ -41,21 +46,18 @@ struct Delegate {
     device: Device,
     light_xy_rotation: f32x2,
     max_bound: f32,
+    matrix_model_to_projection: f32x4x4,
+    matrix_model_to_world: f32x4x4,
+    matrix_projection_to_world: f32x4x4,
+    matrix_world_to_view: f32x4x4,
     mode: FragMode,
-    model_matrix: f32x4x4,
-    model_view_projection_matrix: f32x4x4,
-    view_projection_matrix: f32x4x4,
-    normal_transform_matrix: f32x4x4,
     num_triangles: usize,
-    projection_inverse_matrix: f32x4x4,
     render_pipeline_state: RenderPipelineState,
     render_light_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
-    view_matrix: f32x4x4,
-    view_rotation_matrix: f32x4x4,
 }
 
 impl Delegate {
@@ -70,29 +72,7 @@ impl Delegate {
     }
 
     #[inline]
-    fn on_camera_change(&mut self, camera_rotation: f32x2, camera_distance: f32) {
-        self.camera_rotation = camera_rotation;
-        self.camera_distance = camera_distance;
-
-        let rot = self.camera_rotation;
-        let view_rotation_matrix = f32x4x4::rotate(-rot[0], -rot[1], 0.);
-        let view_translate_matrix = f32x4x4::translate(0., 0., self.camera_distance);
-
-        self.normal_transform_matrix = view_rotation_matrix * self.model_matrix.zero_translate();
-        self.view_rotation_matrix = view_rotation_matrix;
-        self.view_matrix = view_translate_matrix * view_rotation_matrix;
-
-        self.update_model_view_projection_matrix();
-    }
-
-    fn on_screen_size_change(&mut self, size: f32x2) {
-        self.screen_size = size;
-        self.aspect_ratio = size[0] / size[1];
-        self.update_model_view_projection_matrix();
-    }
-
-    #[inline]
-    fn calc_projection_matrix(&self, aspect_ratio: f32) -> f32x4x4 {
+    fn calc_matrix_view_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
         let n = 0.1;
         let f = 1000.0;
         let camera_distance = INITIAL_CAMERA_DISTANCE;
@@ -119,12 +99,21 @@ impl Delegate {
         orthographic_matrix * perspective_matrix
     }
 
-    #[inline]
-    fn update_model_view_projection_matrix(&mut self) {
-        let projection_matrix = self.calc_projection_matrix(self.aspect_ratio);
-        self.view_projection_matrix = projection_matrix * self.view_matrix;
-        self.model_view_projection_matrix = self.view_projection_matrix * self.model_matrix;
-        self.projection_inverse_matrix = projection_matrix.inverse();
+    // TODO: Consider mass renaming everyting with "view" to "camera"
+    // - Really view and camera are the same (view space = camera space)
+    // - This would reduce cognitive load (view? camera? oh right their the same?)
+    fn update_view(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
+        self.camera_rotation = camera_rotation;
+        self.camera_distance = camera_distance;
+        self.matrix_world_to_view = f32x4x4::translate(0., 0., self.camera_distance)
+            * f32x4x4::rotate(-self.camera_rotation[0], -self.camera_rotation[1], 0.);
+
+        self.screen_size = screen_size;
+        let aspect_ratio = screen_size[0] / screen_size[1];
+        let matrix_world_to_projection =
+            self.calc_matrix_view_to_projection(aspect_ratio) * self.matrix_world_to_view;
+        self.matrix_model_to_projection = matrix_world_to_projection * self.matrix_model_to_world;
+        self.matrix_projection_to_world = matrix_world_to_projection.inverse();
     }
 }
 
@@ -180,20 +169,16 @@ impl RendererDelgate for Delegate {
             maxs = maxs.max(input);
         }
         let max_bound = mins.reduce_min().abs().max(maxs.reduce_max());
-
-        let height_of_teapot = maxs[2] - mins[2];
-        let model_matrix = {
+        let matrix_model_to_world = {
+            let height_of_teapot = maxs[2] - mins[2];
             let r = f32x4x4::x_rotate(std::f32::consts::PI / 2.);
             let t = f32x4x4::translate(0., 0., -height_of_teapot / 2.0);
             r * t
         };
 
-        let camera_distance = INITIAL_CAMERA_DISTANCE;
-        let camera_rotation = Simd::from_array([0., 0.0]);
         let mut delegate = Self {
-            aspect_ratio: 1.0,
-            camera_distance,
-            camera_rotation,
+            camera_distance: INITIAL_CAMERA_DISTANCE,
+            camera_rotation: INITIAL_CAMERA_ROTATION,
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -201,14 +186,13 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
-            light_xy_rotation: f32x2::from_array([-std::f32::consts::PI / 2., 0.0]),
+            light_xy_rotation: INITIAL_LIGHT_ROTATION,
+            matrix_model_to_projection: f32x4x4::identity(),
+            matrix_model_to_world,
+            matrix_projection_to_world: f32x4x4::identity(),
+            matrix_world_to_view: f32x4x4::identity(),
             max_bound,
             mode: INITIAL_MODE,
-            model_matrix,
-            view_projection_matrix: f32x4x4::identity(),
-            model_view_projection_matrix: f32x4x4::identity(),
-            normal_transform_matrix: f32x4x4::identity(),
-            projection_inverse_matrix: f32x4x4::identity(),
             num_triangles: indices.len() / 3,
             render_pipeline_state: {
                 let library = device
@@ -228,12 +212,7 @@ impl RendererDelgate for Delegate {
                     let buffers = pipeline_state_desc
                         .vertex_buffers()
                         .expect("Failed to access vertex buffers");
-                    for buffer_index in [
-                        VertexBufferIndex_VertexBufferIndexIndices,
-                        VertexBufferIndex_VertexBufferIndexPositions,
-                        VertexBufferIndex_VertexBufferIndexNormals,
-                        VertexBufferIndex_VertexBufferIndexModelViewProjection,
-                    ] {
+                    for buffer_index in 0..VertexBufferIndex_VertexBufferIndexLENGTH {
                         unwrap_option_dcheck(
                             buffers.object_at(buffer_index as _),
                             "Failed to access vertex buffer",
@@ -251,6 +230,17 @@ impl RendererDelgate for Delegate {
                         "Failed to access fragment shader function from metal library",
                     );
                     pipeline_state_desc.set_fragment_function(Some(&fun));
+
+                    let buffers = pipeline_state_desc
+                        .fragment_buffers()
+                        .expect("Failed to access fragment buffers");
+                    for buffer_index in 0..FragBufferIndex_FragBufferIndexLENGTH {
+                        unwrap_option_dcheck(
+                            buffers.object_at(buffer_index as _),
+                            "Failed to access fragment buffer",
+                        )
+                        .set_mutability(MTLMutability::Immutable);
+                    }
                 }
 
                 // Setup Target Color Attachment
@@ -357,12 +347,13 @@ impl RendererDelgate for Delegate {
                 "Vertex Buffer Positions",
                 &positions,
             ),
-            view_matrix: f32x4x4::identity(),
-            view_rotation_matrix: f32x4x4::identity(),
             device,
         };
-
-        delegate.on_camera_change(delegate.camera_rotation, delegate.camera_distance);
+        delegate.update_view(
+            delegate.screen_size,
+            delegate.camera_rotation,
+            delegate.camera_distance,
+        );
         delegate
     }
 
@@ -410,13 +401,13 @@ impl RendererDelgate for Delegate {
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexNormalTransform,
-            &self.normal_transform_matrix.metal_float3x3_upper_left(),
+            VertexBufferIndex_VertexBufferIndexMatrixModelToWorld,
+            &self.matrix_model_to_world,
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexModelViewProjection,
-            self.model_view_projection_matrix.metal_float4x4(),
+            VertexBufferIndex_VertexBufferIndexMatrixModelToProjection,
+            self.matrix_model_to_projection.metal_float4x4(),
         );
         encode_fragment_bytes(
             &encoder,
@@ -425,18 +416,13 @@ impl RendererDelgate for Delegate {
         );
         encode_fragment_bytes(
             &encoder,
-            FragBufferIndex_FragBufferIndexInverseProjection,
-            self.projection_inverse_matrix.metal_float4x4(),
+            FragBufferIndex_FragBufferIndexMatrixProjectionToWorld,
+            self.matrix_projection_to_world.metal_float4x4(),
         );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex_FragBufferIndexScreenSize,
-            &self.screen_size,
-        );
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: START HERE 2
         // TODO: Only do this when there's a change (mouse drag + control key)
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // TODO: START HERE 2
         // - REMOVE applying the view_projection_matrix
         //      - FS is currently unnecessarily applying the INVERSE projection matrix just to get
         //        the view space coordinate of the light.
@@ -447,14 +433,28 @@ impl RendererDelgate for Delegate {
         //      - Debug the very top of the teapot fragment shader invocation
         //      - Verify the `w` is as expected... something close to (0, 1, 0)?
         //      - Try another position, place the light right in front, check the very front teapot fragment, etc.
-        let light_view_position = self.view_projection_matrix
-            * f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
-            * f32x4::from_array([0., 0., -(INITIAL_CAMERA_DISTANCE * 2.), 1.]);
-        let light_view_position = packed_float4::from(light_view_position);
+        let light_world_position = packed_float4::from(
+            f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
+                * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]),
+        );
         encode_fragment_bytes(
             &encoder,
-            FragBufferIndex_FragBufferIndexLightDirection,
-            &light_view_position,
+            FragBufferIndex_FragBufferIndexLightPosition,
+            &light_world_position,
+        );
+        let camera_world_position = packed_float4::from(
+            f32x4x4::rotate(self.camera_rotation[0], self.camera_rotation[1], 0.)
+                * f32x4::from_array([0., 0., -self.camera_distance, 1.]),
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex_FragBufferIndexCameraPosition,
+            &camera_world_position,
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex_FragBufferIndexScreenSize,
+            &self.screen_size,
         );
         encoder.draw_primitives_instanced(
             MTLPrimitiveType::Triangle,
@@ -462,24 +462,28 @@ impl RendererDelgate for Delegate {
             3,
             self.num_triangles as _,
         );
-        {
-            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
-            // TODO: Figure out a better way to unset this buffers from the previous draw call
-            encoder.set_vertex_buffers(0, &[None; 5], &[0; 5]);
-            encode_vertex_bytes(
-                &encoder,
-                LightVertexBufferIndex_LightVertexBufferIndexViewProjection,
-                &self.view_projection_matrix,
-            );
-            encode_vertex_bytes(
-                &encoder,
-                LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
-                &light_view_position,
-            );
-            // TODO: Figure out a better way to unset this buffers from the previous draw call
-            encoder.set_fragment_buffers(0, &[None; 4], &[0; 4]);
-            encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
-        }
+        // TODO: START HERE 3
+        // TODO: START HERE 3
+        // TODO: START HERE 3
+        // TODO: Bring back rendering the light
+        // {
+        //     encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
+        //     // TODO: Figure out a better way to unset this buffers from the previous draw call
+        //     encoder.set_vertex_buffers(0, &[None; 5], &[0; 5]);
+        //     encode_vertex_bytes(
+        //         &encoder,
+        //         LightVertexBufferIndex_LightVertexBufferIndexViewProjection,
+        //         &self.view_projection_matrix,
+        //     );
+        //     encode_vertex_bytes(
+        //         &encoder,
+        //         LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
+        //         &light_world_position,
+        //     );
+        //     // TODO: Figure out a better way to unset this buffers from the previous draw call
+        //     encoder.set_fragment_buffers(0, &[None; 4], &[0; 4]);
+        //     encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
+        // }
         encoder.end_encoding();
         command_buffer.present_drawable(drawable);
         command_buffer.commit();
@@ -512,7 +516,7 @@ impl RendererDelgate for Delegate {
                         }
                         Right => camera_distance += -drag_amount[1] / 8.0,
                     }
-                    self.on_camera_change(camera_rotation, camera_distance);
+                    self.update_view(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::CONTROL) {
                     match button {
                         Left => {
@@ -540,7 +544,7 @@ impl RendererDelgate for Delegate {
             }
             WindowResize { size, .. } => {
                 self.update_depth_texture_size(size);
-                self.on_screen_size_change(size);
+                self.update_view(size, self.camera_rotation, self.camera_distance);
             }
             _ => {}
         }

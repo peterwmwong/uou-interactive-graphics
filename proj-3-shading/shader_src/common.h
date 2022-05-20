@@ -9,8 +9,9 @@ enum VertexBufferIndex
     VertexBufferIndexIndices = 0,
     VertexBufferIndexPositions,
     VertexBufferIndexNormals,
-    VertexBufferIndexModelViewProjection,
-    VertexBufferIndexNormalTransform,
+    VertexBufferIndexMatrixModelToProjection,
+    VertexBufferIndexMatrixModelToWorld,
+    VertexBufferIndexLENGTH
 };
 
 enum FragMode
@@ -25,9 +26,11 @@ enum FragMode
 enum FragBufferIndex
 {
     FragBufferIndexFragMode = 0,
-    FragBufferIndexInverseProjection,
+    FragBufferIndexMatrixProjectionToWorld,
     FragBufferIndexScreenSize,
-    FragBufferIndexLightDirection,
+    FragBufferIndexLightPosition,
+    FragBufferIndexCameraPosition,
+    FragBufferIndexLENGTH
 };
 
 enum LightVertexBufferIndex
