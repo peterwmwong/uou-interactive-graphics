@@ -84,6 +84,7 @@ impl Delegate {
             [0., 0., n + f, -n * f],
             [0., 0., 1., 0.],
         );
+        // TODO: Simplify these calculations knowing b = -t and l = -r.
         let b = n * -self.max_bound / camera_distance;
         let t = n * self.max_bound / camera_distance;
         let l = aspect_ratio * b;
