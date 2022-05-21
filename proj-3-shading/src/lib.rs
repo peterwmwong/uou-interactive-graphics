@@ -5,7 +5,7 @@ mod shader_bindings;
 use crate::shader_bindings::{
     LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
     VertexBufferIndex_VertexBufferIndexLENGTH,
-    VertexBufferIndex_VertexBufferIndexMatrixModelToWorld,
+    VertexBufferIndex_VertexBufferIndexMatrixNormalToWorld,
 };
 use metal_app::{
     allocate_new_buffer_with_data, encode_fragment_bytes, encode_vertex_bytes, f32x4x4,
@@ -172,9 +172,7 @@ impl RendererDelgate for Delegate {
         let max_bound = mins.reduce_min().abs().max(maxs.reduce_max());
         let matrix_model_to_world = {
             let height_of_teapot = maxs[2] - mins[2];
-            let r = f32x4x4::x_rotate(PI / 2.);
-            let t = f32x4x4::translate(0., 0., -height_of_teapot / 2.0);
-            r * t
+            f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
         };
 
         let mut delegate = Self {
@@ -402,7 +400,15 @@ impl RendererDelgate for Delegate {
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexMatrixModelToWorld,
+            VertexBufferIndex_VertexBufferIndexMatrixNormalToWorld,
+            // IMPORTANT: In the shader, this maps to a float3x3. This works because...
+            // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
+            //   - Since normals are directions (not positions), translations are meaningless and
+            //     should not be applied.
+            // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
+            //
+            // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
+            //       task), this may be wayyy to tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
             &self.matrix_model_to_world,
         );
         encode_vertex_bytes(

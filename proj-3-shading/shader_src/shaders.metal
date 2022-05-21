@@ -1,12 +1,11 @@
-#include "./common.h"
 #include <metal_stdlib>
+#include "./common.h"
 
 using namespace metal;
 
 struct VertexOut
 {
     float4 position  [[position]];
-    float3 world_pos [[center_no_perspective]];
     float3 normal;
 };
 
@@ -17,33 +16,14 @@ main_vertex(         uint            inst_id          [[instance_id]],
             constant packed_float3 * positions        [[buffer(VertexBufferIndexPositions)]],
             constant packed_float3 * normals          [[buffer(VertexBufferIndexNormals)]],
             constant float4x4      & model_to_proj    [[buffer(VertexBufferIndexMatrixModelToProjection)]],
-            constant float4x4      & model_to_world   [[buffer(VertexBufferIndexMatrixModelToWorld)]])
+            constant float3x3      & normal_to_world  [[buffer(VertexBufferIndexMatrixNormalToWorld)]])
 {
-    const uint   idx       = indices[inst_id * 3 + vertex_id];
-    const float4 model_pos = float4(positions[idx], 1.0);
-    const float4 proj_pos  = model_to_proj * model_pos;
-    const float4 world_pos = model_to_world * model_pos;
-
-    const float3 model_normal    = normals[idx];
-    // Same as model_to_world, except NO translation.
-    // Since normals are directions (not positions), translations are meaningless and should not be
-    // applied.
-    const float3x3 normal_to_world = float3x3(
-        model_to_world[0][0],
-        model_to_world[0][1],
-        model_to_world[0][2],
-        model_to_world[1][0],
-        model_to_world[1][1],
-        model_to_world[1][2],
-        model_to_world[2][0],
-        model_to_world[2][1],
-        model_to_world[2][2]
-    );
-    const float3 normal = normal_to_world * model_normal;
+    const uint   idx      = indices[inst_id * 3 + vertex_id];
+    const float4 position = float4(positions[idx], 1.0);
+    const float3 normal   = normals[idx];
     return {
-        .position  = proj_pos,
-        .world_pos = world_pos.xyz,
-        .normal    = normal
+        .position  = model_to_proj * position,
+        .normal    = normal_to_world * normal
     };
 }
 
@@ -68,10 +48,6 @@ main_fragment(         VertexOut       in            [[stage_in]],
     const float4 proj_pos    = float4(proj_pos_xy, in.position.z, 1);
     const float4 pos_w_persp = proj_to_world * proj_pos;
     const float3 pos         = pos_w_persp.xyz / pos_w_persp.w;
-    // FOR DEBUGGING ONLY
-    // const float3 world_position_truth = in.world_pos;
-    // const float3 world_position_calc_diff = abs(pos - world_position_truth);
-    // return half4(half3(world_position_calc_diff), 1.h);
 
     /*
     ================================================================
@@ -129,8 +105,7 @@ main_fragment(         VertexOut       in            [[stage_in]],
                                 mode == FragModeAmbientDiffuseSpecular || mode == FragModeAmbient || mode == FragModeAmbientDiffuse
                             );
 
-    const half3  color    = half3(ambient + diffuse + specular);
-    return half4(color, 1.0h);
+    return half4(half3(ambient + diffuse + specular), 1.0h);
 };
 
 struct LightVertexOut {

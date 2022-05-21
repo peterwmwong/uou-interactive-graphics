@@ -99,11 +99,14 @@ impl f32x4x4 {
 
     #[inline]
     pub fn zero_translate(&self) -> Self {
-        let mut other = self.clone();
-        other.columns[3][0] = 0.;
-        other.columns[3][1] = 0.;
-        other.columns[3][2] = 0.;
-        other
+        Self {
+            columns: [
+                self.columns[0],
+                self.columns[1],
+                self.columns[2],
+                f32x4::from_array([0., 0., 0., 1.]),
+            ],
+        }
     }
 
     #[inline]

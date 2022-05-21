@@ -10,7 +10,7 @@ enum VertexBufferIndex
     VertexBufferIndexPositions,
     VertexBufferIndexNormals,
     VertexBufferIndexMatrixModelToProjection,
-    VertexBufferIndexMatrixModelToWorld,
+    VertexBufferIndexMatrixNormalToWorld,
     VertexBufferIndexLENGTH
 };
 
