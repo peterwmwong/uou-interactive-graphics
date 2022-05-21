@@ -34,7 +34,7 @@ use tobj::{LoadOptions, Mesh};
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([PI, 0.]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 8., 0.]);
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE * 200.;
 const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -444,8 +444,7 @@ impl RendererDelgate for Delegate {
             &light_world_position,
         );
         let camera_world_position = packed_float4::from(
-            f32x4x4::rotate(self.camera_rotation[0], self.camera_rotation[1], 0.)
-                * f32x4::from_array([0., 0., -self.camera_distance, 1.]),
+            self.matrix_world_to_view.inverse() * f32x4::from_array([0., 0., 0., 1.]),
         );
         encode_fragment_bytes(
             &encoder,
