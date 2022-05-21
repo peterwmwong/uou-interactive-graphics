@@ -25,6 +25,7 @@ use shader_bindings::{
     VertexBufferIndex_VertexBufferIndexNormals, VertexBufferIndex_VertexBufferIndexPositions,
 };
 use std::{
+    f32::consts::PI,
     path::PathBuf,
     simd::{f32x2, f32x4, Simd},
 };
@@ -32,8 +33,8 @@ use tobj::{LoadOptions, Mesh};
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-std::f32::consts::PI / 6., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([PI, 0.]);
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE * 200.;
 const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -171,7 +172,7 @@ impl RendererDelgate for Delegate {
         let max_bound = mins.reduce_min().abs().max(maxs.reduce_max());
         let matrix_model_to_world = {
             let height_of_teapot = maxs[2] - mins[2];
-            let r = f32x4x4::x_rotate(std::f32::consts::PI / 2.);
+            let r = f32x4x4::x_rotate(PI / 2.);
             let t = f32x4x4::translate(0., 0., -height_of_teapot / 2.0);
             r * t
         };
