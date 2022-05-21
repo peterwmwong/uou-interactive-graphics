@@ -42,9 +42,11 @@ main_fragment(         VertexOut       in            [[stage_in]],
         return half4(half3(n * float3(1,1,-1)), 1);
     }
 
-    // Calculate the fragment's position in world space.
+    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
+    // 1. Viewport Coordinate -> Normalized Device Coordinate (aka Projected w/Perspective)
     const float2 screen_pos  = in.position.xy;
-    const float2 proj_pos_xy = float2(2, -2) * ((screen_pos / screen_size) - 0.5);
+    const float2 proj_pos_xy = fma(float2(2, -2), (screen_pos / screen_size), float2(-1, 1));
+    // 2. Projected Coordinate -> World Space position
     const float4 proj_pos    = float4(proj_pos_xy, in.position.z, 1);
     const float4 pos_w_persp = proj_to_world * proj_pos;
     const float3 pos         = pos_w_persp.xyz / pos_w_persp.w;
