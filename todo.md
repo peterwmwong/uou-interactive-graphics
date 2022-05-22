@@ -38,8 +38,9 @@
 
 # metal-build
 
-- Switching between release/dev build doesn't seem to rebuild shader_bindings.
-    - Wish we could add `#[cfg_attr(debug_assertions), derive(Debug)]` to bindgen
+- Move the generated shader_bindings.rs back into OUT_DIR
+    - Switching between release/dev build doesn't seem to rebuild shader_bindings.
+        - Wish we could add `#[cfg_attr(debug_assertions), derive(Debug)]` to bindgen
 - Can bindgen replace vector types (ex. float2) with SIMD<?,?> equivalents?
     - This should remove/reduce the need for vector_type_helpers
 
