@@ -27,14 +27,14 @@ impl f32x4x4 {
         }
     }
 
+    #[inline]
     pub fn transpose(&self) -> Self {
-        let c = self.columns;
         f32x4x4 {
             columns: [
-                f32x4::from_array([c[0][0], c[1][0], c[2][0], c[3][0]]),
-                f32x4::from_array([c[0][1], c[1][1], c[2][1], c[3][1]]),
-                f32x4::from_array([c[0][2], c[1][2], c[2][2], c[3][2]]),
-                f32x4::from_array([c[0][3], c[1][3], c[2][3], c[3][3]]),
+                self.row::<0>(),
+                self.row::<1>(),
+                self.row::<2>(),
+                self.row::<3>(),
             ],
         }
     }
@@ -232,13 +232,14 @@ impl Mul<f32x4x4> for f32x4x4 {
 
     #[inline]
     fn mul(self, rhs: f32x4x4) -> Self::Output {
+        let rows = self.transpose().columns;
         Self {
             columns: rhs.columns.map(|col| {
                 f32x4::from_array([
-                    dot(self.row::<0>(), col),
-                    dot(self.row::<1>(), col),
-                    dot(self.row::<2>(), col),
-                    dot(self.row::<3>(), col),
+                    dot(rows[0], col),
+                    dot(rows[1], col),
+                    dot(rows[2], col),
+                    dot(rows[3], col),
                 ])
             }),
         }
