@@ -98,7 +98,19 @@
             "label": "Run proj-3-shading"
         },
         {
-            "label": "asm proj-3-shading",
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-4-textures"
+            ],
+            "label": "Run proj-4-textures"
+        },
+        {
+            "label": "asm proj-4-textures",
             "type": "shell",
             "presentation": {
                 "echo": true,
@@ -108,7 +120,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/build-release-asm.sh proj-3-shading",
+            "command": "${workspaceFolder}/build-release-asm.sh proj-4-textures",
             "problemMatcher": []
         },
     ]
