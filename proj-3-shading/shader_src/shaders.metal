@@ -129,6 +129,7 @@ light_vertex(constant float4x4 & model_to_proj [[buffer(LightVertexBufferIndex_M
 fragment half4
 light_fragment(const float2 point_coord [[point_coord]])
 {
-    float circle_sd = 1 - length(point_coord - float2(0.5));
-    return half4(1, 1, 1, half(round(circle_sd)));
+    float dist_from_center = length(point_coord - float2(0.5));
+    if (dist_from_center > 0.5) discard_fragment();
+    return half4(1);
 };
