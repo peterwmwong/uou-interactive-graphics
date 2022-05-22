@@ -1,3 +1,4 @@
+use crate::{unwrap_option_dcheck, unwrap_result_dcheck};
 use metal::*;
 use std::ffi::c_void;
 
@@ -55,4 +56,56 @@ pub fn encode_fragment_bytes<I: Into<u64>, T: Sized + Copy + Clone>(
         std::mem::size_of::<T>() as _,
         ptr as *const c_void,
     );
+}
+
+pub fn create_pipeline(
+    device: &Device,
+    library: &Library,
+    base_pipeline_desc: &RenderPipelineDescriptor,
+    label: &str,
+    vertex_func_name: &str,
+    num_vertex_immutable_buffers: u32,
+    frag_func_name: &str,
+    num_frag_immutable_buffers: u32,
+) -> RenderPipelineState {
+    base_pipeline_desc.set_label(label);
+
+    let fun = unwrap_result_dcheck(
+        library.get_function(vertex_func_name, None),
+        "Failed to access vertex shader function from metal library",
+    );
+    base_pipeline_desc.set_vertex_function(Some(&fun));
+
+    let buffers = base_pipeline_desc
+        .vertex_buffers()
+        .expect("Failed to access vertex buffers");
+    for buffer_index in 0..num_vertex_immutable_buffers {
+        unwrap_option_dcheck(
+            buffers.object_at(buffer_index as _),
+            "Failed to access vertex buffer",
+        )
+        .set_mutability(MTLMutability::Immutable);
+    }
+
+    let fun = unwrap_result_dcheck(
+        library.get_function(frag_func_name, None),
+        "Failed to access fragment shader function from metal library",
+    );
+    base_pipeline_desc.set_fragment_function(Some(&fun));
+
+    let buffers = base_pipeline_desc
+        .fragment_buffers()
+        .expect("Failed to access fragment buffers");
+    for buffer_index in 0..num_frag_immutable_buffers {
+        unwrap_option_dcheck(
+            buffers.object_at(buffer_index as _),
+            "Failed to access fragment buffer",
+        )
+        .set_mutability(MTLMutability::Immutable);
+    }
+
+    unwrap_result_dcheck(
+        device.new_render_pipeline_state(&base_pipeline_desc),
+        "Failed to create render pipeline",
+    )
 }
