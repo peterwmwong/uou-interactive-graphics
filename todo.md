@@ -1,3 +1,7 @@
+# proj-3
+
+- Add Fresnel Effect
+
 # metal-shader-app
 
 - Consider creating a ShaderToy-esque crate that allows you to quickly create a metal-app with just
