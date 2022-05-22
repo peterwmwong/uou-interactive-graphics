@@ -19,9 +19,9 @@ const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
-const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 const INITIAL_MODE: FragMode = FragMode_FragMode_AmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
+const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
 struct Delegate {
     camera_distance: f32,
@@ -30,18 +30,18 @@ struct Delegate {
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
-    light_xy_rotation: f32x2,
     light_world_position: f32x4,
-    max_bound: f32,
+    light_xy_rotation: f32x2,
     matrix_model_to_projection: f32x4x4,
     matrix_model_to_world: f32x4x4,
     matrix_projection_to_world: f32x4x4,
-    matrix_world_to_projection: f32x4x4,
     matrix_world_to_camera: f32x4x4,
+    matrix_world_to_projection: f32x4x4,
+    max_bound: f32,
     mode: FragMode,
     num_triangles: usize,
-    render_pipeline_state: RenderPipelineState,
     render_light_pipeline_state: RenderPipelineState,
+    render_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
@@ -132,8 +132,8 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
-            light_xy_rotation: INITIAL_LIGHT_ROTATION,
             light_world_position: f32x4::default(),
+            light_xy_rotation: INITIAL_LIGHT_ROTATION,
             matrix_model_to_projection: f32x4x4::identity(),
             matrix_model_to_world,
             matrix_projection_to_world: f32x4x4::identity(),
@@ -430,9 +430,6 @@ impl Delegate {
                 * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.])
     }
 
-    // TODO: Consider mass renaming everyting with "view" to "camera"
-    // - Really view and camera are the same (view space = camera space)
-    // - This would reduce cognitive load (view? camera? oh right their the same?)
     fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
         self.camera_rotation = camera_rotation;
         self.camera_distance = camera_distance;
