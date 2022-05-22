@@ -32,10 +32,8 @@ main_fragment(         VertexOut   in            [[stage_in]],
               constant FragMode  & mode          [[buffer(FragBufferIndex_FragMode)]],
               constant float4x4  & proj_to_world [[buffer(FragBufferIndex_MatrixProjectionToWorld)]],
               constant float2    & screen_size   [[buffer(FragBufferIndex_ScreenSize)]],
-              // TODO: Figure out how to pass a packed_float3
-              constant float4    & light_pos     [[buffer(FragBufferIndex_LightPosition)]],
-              // TODO: Figure out how to pass a packed_float3
-              constant float4    & cam_pos       [[buffer(FragBufferIndex_CameraPosition)]])
+              constant float3    & light_pos     [[buffer(FragBufferIndex_LightPosition)]],
+              constant float3    & cam_pos       [[buffer(FragBufferIndex_CameraPosition)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (mode == FragMode_Normals) {
@@ -112,7 +110,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
 
 struct LightVertexOut {
     float4 position [[position]];
-    float size      [[point_size]];
+    float  size     [[point_size]];
 };
 
 vertex LightVertexOut

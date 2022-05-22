@@ -48,7 +48,6 @@ struct Delegate {
     vertex_buffer_positions: Buffer,
 }
 
-// TODO: Display light
 impl RendererDelgate for Delegate {
     fn new(device: metal_app::metal::Device) -> Self {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -246,7 +245,7 @@ impl RendererDelgate for Delegate {
                 // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
                 //
                 // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
-                //       task), this may be wayyy to tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
+                //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
                 &self.matrix_model_to_world,
             );
             encode_vertex_bytes(
@@ -267,11 +266,15 @@ impl RendererDelgate for Delegate {
             encode_fragment_bytes(
                 &encoder,
                 FragBufferIndex_FragBufferIndex_LightPosition,
+                // IMPORTANT: In the shader, this maps to a float3. This works because the float4
+                // and float3 have the same size and alignment.
                 &light_world_position,
             );
             encode_fragment_bytes(
                 &encoder,
                 FragBufferIndex_FragBufferIndex_CameraPosition,
+                // IMPORTANT: In the shader, this maps to a float3. This works because the float4
+                // and float3 have the same size and alignment.
                 &float4::from(self.camera_world_position),
             );
             encode_fragment_bytes(
@@ -398,23 +401,18 @@ impl Delegate {
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
         let n = 0.1;
         let f = 1000.0;
-        let camera_distance = INITIAL_CAMERA_DISTANCE;
-
         let perspective_matrix = f32x4x4::new(
             [n, 0., 0., 0.],
             [0., n, 0., 0.],
             [0., 0., n + f, -n * f],
             [0., 0., 1., 0.],
         );
-        // TODO: Simplify these calculations knowing b = -t and l = -r.
-        let b = n * -self.max_bound / camera_distance;
-        let t = n * self.max_bound / camera_distance;
-        let l = aspect_ratio * b;
-        let r = aspect_ratio * t;
+        let w = 2. * n * self.max_bound / INITIAL_CAMERA_DISTANCE;
+        let h = aspect_ratio * w;
         let orthographic_matrix = {
             f32x4x4::new(
-                [2. / (r - l), 0., 0., -(r + l) / (r - l)],
-                [0., 2. / (t - b), 0., -(t + b) / (t - b)],
+                [2. / w, 0., 0., 0.],
+                [0., 2. / h, 0., 0.],
                 // IMPORTANT: Metal's NDC coordinate space has a z range of [0.,1], **NOT [-1,1]** (OpenGL).
                 [0., 0., 1. / (f - n), -n / (f - n)],
                 [0., 0., 0., 1.],
