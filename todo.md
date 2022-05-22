@@ -1,3 +1,35 @@
+# metal-shader-app
+
+- Consider creating a ShaderToy-esque crate that allows you to quickly create a metal-app with just
+  a **Fragment** Shader
+- As such, assumes the following configuration...
+    - Application/Window setup
+    - Window Resize maintenance
+        - Resize depth attachment texture
+    - Single Render Pipeline
+        - Color Attachment
+        - Depth Attachment
+        - Fragment shader
+            - Function name of `main()`
+            - Bound buffers
+                - Mouse
+                    - Coordinate
+                    - Button states
+                - Time
+                - Viewport/Screen Size (pixels)
+    - Render
+        - One draw call (triangle strip that's a quad fits the screen exactly)
+- Question: Would it be better to allow specifying more than just a Fragment shader?
+    - Geometry (vertices)
+    - Vertex shader
+        - This should simplify...
+            - Applying Perspective Projection
+            - Remove the need to Ray Marching
+                - Which one is worse/harder?
+                    - Ray Marching and SDF
+                    - Vertices, Vertex Shader, Draw call
+                        - Maybe there's a Vertices/Draw call simplification? Just provide vertices and assume a draw call with triangle primitive and vertex count.
+
 # metal-app
 
 # metal-build
