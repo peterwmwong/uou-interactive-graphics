@@ -12,11 +12,11 @@ struct VertexOut
 vertex VertexOut
 main_vertex(         uint            inst_id         [[instance_id]],
                      uint            vertex_id       [[vertex_id]],
-            constant uint          * indices         [[buffer(VertexBufferIndexIndices)]],
-            constant packed_float3 * positions       [[buffer(VertexBufferIndexPositions)]],
-            constant packed_float3 * normals         [[buffer(VertexBufferIndexNormals)]],
-            constant float4x4      & model_to_proj   [[buffer(VertexBufferIndexMatrixModelToProjection)]],
-            constant float3x3      & normal_to_world [[buffer(VertexBufferIndexMatrixNormalToWorld)]])
+            constant uint          * indices         [[buffer(VertexBufferIndex_Indices)]],
+            constant packed_float3 * positions       [[buffer(VertexBufferIndex_Positions)]],
+            constant packed_float3 * normals         [[buffer(VertexBufferIndex_Normals)]],
+            constant float4x4      & model_to_proj   [[buffer(VertexBufferIndex_MatrixModelToProjection)]],
+            constant float3x3      & normal_to_world [[buffer(VertexBufferIndex_MatrixNormalToWorld)]])
 {
     const uint   idx      = indices[inst_id * 3 + vertex_id];
     const float4 position = float4(positions[idx], 1.0);
@@ -29,16 +29,16 @@ main_vertex(         uint            inst_id         [[instance_id]],
 
 fragment half4
 main_fragment(         VertexOut   in            [[stage_in]],
-              constant FragMode  & mode          [[buffer(FragBufferIndexFragMode)]],
-              constant float4x4  & proj_to_world [[buffer(FragBufferIndexMatrixProjectionToWorld)]],
-              constant float2    & screen_size   [[buffer(FragBufferIndexScreenSize)]],
+              constant FragMode  & mode          [[buffer(FragBufferIndex_FragMode)]],
+              constant float4x4  & proj_to_world [[buffer(FragBufferIndex_MatrixProjectionToWorld)]],
+              constant float2    & screen_size   [[buffer(FragBufferIndex_ScreenSize)]],
               // TODO: Figure out how to pass a packed_float3
-              constant float4    & light_pos     [[buffer(FragBufferIndexLightPosition)]],
+              constant float4    & light_pos     [[buffer(FragBufferIndex_LightPosition)]],
               // TODO: Figure out how to pass a packed_float3
-              constant float4    & cam_pos       [[buffer(FragBufferIndexCameraPosition)]])
+              constant float4    & cam_pos       [[buffer(FragBufferIndex_CameraPosition)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
-    if (mode == FragModeNormals) {
+    if (mode == FragMode_Normals) {
         return half4(half3(n * float3(1,1,-1)), 1);
     }
 
@@ -88,7 +88,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 diffuse  = select(
                                 0,
                                 Il * ln * Kd,
-                                mode == FragModeAmbientDiffuseSpecular || mode == FragModeAmbientDiffuse
+                                mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_AmbientDiffuse
                             );
 
     const float3 Ks       = 1;   // Specular Material Color
@@ -96,7 +96,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 specular = select(
                                 0,
                                 Il * pow(dot(h, n) * Ks, s),
-                                mode == FragModeAmbientDiffuseSpecular || mode == FragModeSpecular
+                                mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_Specular
                             );
 
     const float  Ia       = 0.1; // Ambient Intensity
@@ -104,7 +104,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 ambient  = select(
                                 0,
                                 Ia * Ka,
-                                mode == FragModeAmbientDiffuseSpecular || mode == FragModeAmbient || mode == FragModeAmbientDiffuse
+                                mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_Ambient || mode == FragMode_AmbientDiffuse
                             );
 
     return half4(half3(ambient + diffuse + specular), 1.0h);
@@ -116,8 +116,8 @@ struct LightVertexOut {
 };
 
 vertex LightVertexOut
-light_vertex(constant float4x4 & model_to_proj [[buffer(LightVertexBufferIndexMatrixWorldToProjection)]],
-             constant float4   & light_pos     [[buffer(LightVertexBufferIndexLightPosition)]])
+light_vertex(constant float4x4 & model_to_proj [[buffer(LightVertexBufferIndex_MatrixWorldToProjection)]],
+             constant float4   & light_pos     [[buffer(LightVertexBufferIndex_LightPosition)]])
 {
     return {
         .position = model_to_proj * light_pos,

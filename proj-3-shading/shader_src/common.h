@@ -6,37 +6,38 @@
 
 enum VertexBufferIndex
 {
-    VertexBufferIndexIndices = 0,
-    VertexBufferIndexPositions,
-    VertexBufferIndexNormals,
-    VertexBufferIndexMatrixModelToProjection,
-    VertexBufferIndexMatrixNormalToWorld,
-    VertexBufferIndexLENGTH
+    VertexBufferIndex_Indices = 0,
+    VertexBufferIndex_Positions,
+    VertexBufferIndex_Normals,
+    VertexBufferIndex_MatrixModelToProjection,
+    VertexBufferIndex_MatrixNormalToWorld,
+    VertexBufferIndex_LENGTH
 };
 
 enum FragMode
 {
-    FragModeNormals = 0,
-    FragModeAmbient,
-    FragModeAmbientDiffuse,
-    FragModeSpecular,
-    FragModeAmbientDiffuseSpecular,
+    FragMode_Normals = 0,
+    FragMode_Ambient,
+    FragMode_AmbientDiffuse,
+    FragMode_Specular,
+    FragMode_AmbientDiffuseSpecular,
 };
 
 enum FragBufferIndex
 {
-    FragBufferIndexFragMode = 0,
-    FragBufferIndexMatrixProjectionToWorld,
-    FragBufferIndexScreenSize,
-    FragBufferIndexLightPosition,
-    FragBufferIndexCameraPosition,
-    FragBufferIndexLENGTH
+    FragBufferIndex_FragMode = 0,
+    FragBufferIndex_MatrixProjectionToWorld,
+    FragBufferIndex_ScreenSize,
+    FragBufferIndex_LightPosition,
+    FragBufferIndex_CameraPosition,
+    FragBufferIndex_LENGTH
 };
 
 enum LightVertexBufferIndex
 {
-    LightVertexBufferIndexMatrixWorldToProjection = 0,
-    LightVertexBufferIndexLightPosition,
+    LightVertexBufferIndex_MatrixWorldToProjection = 0,
+    LightVertexBufferIndex_LightPosition,
+    LightVertexBufferIndex_LENGTH,
 };
 
 #endif
