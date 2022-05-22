@@ -5,18 +5,18 @@ using namespace metal;
 
 struct VertexOut
 {
-    float4 position  [[position]];
+    float4 position [[position]];
     float3 normal;
 };
 
 vertex VertexOut
-main_vertex(         uint            inst_id          [[instance_id]],
-                     uint            vertex_id        [[vertex_id]],
-            constant uint          * indices          [[buffer(VertexBufferIndexIndices)]],
-            constant packed_float3 * positions        [[buffer(VertexBufferIndexPositions)]],
-            constant packed_float3 * normals          [[buffer(VertexBufferIndexNormals)]],
-            constant float4x4      & model_to_proj    [[buffer(VertexBufferIndexMatrixModelToProjection)]],
-            constant float3x3      & normal_to_world  [[buffer(VertexBufferIndexMatrixNormalToWorld)]])
+main_vertex(         uint            inst_id         [[instance_id]],
+                     uint            vertex_id       [[vertex_id]],
+            constant uint          * indices         [[buffer(VertexBufferIndexIndices)]],
+            constant packed_float3 * positions       [[buffer(VertexBufferIndexPositions)]],
+            constant packed_float3 * normals         [[buffer(VertexBufferIndexNormals)]],
+            constant float4x4      & model_to_proj   [[buffer(VertexBufferIndexMatrixModelToProjection)]],
+            constant float3x3      & normal_to_world [[buffer(VertexBufferIndexMatrixNormalToWorld)]])
 {
     const uint   idx      = indices[inst_id * 3 + vertex_id];
     const float4 position = float4(positions[idx], 1.0);
@@ -28,14 +28,14 @@ main_vertex(         uint            inst_id          [[instance_id]],
 }
 
 fragment half4
-main_fragment(         VertexOut       in            [[stage_in]],
-              constant FragMode      & mode          [[buffer(FragBufferIndexFragMode)]],
-              constant float4x4      & proj_to_world [[buffer(FragBufferIndexMatrixProjectionToWorld)]],
-              constant packed_float2 & screen_size   [[buffer(FragBufferIndexScreenSize)]],
+main_fragment(         VertexOut   in            [[stage_in]],
+              constant FragMode  & mode          [[buffer(FragBufferIndexFragMode)]],
+              constant float4x4  & proj_to_world [[buffer(FragBufferIndexMatrixProjectionToWorld)]],
+              constant float2    & screen_size   [[buffer(FragBufferIndexScreenSize)]],
               // TODO: Figure out how to pass a packed_float3
-              constant packed_float4 & light_pos     [[buffer(FragBufferIndexLightPosition)]],
+              constant float4    & light_pos     [[buffer(FragBufferIndexLightPosition)]],
               // TODO: Figure out how to pass a packed_float3
-              constant packed_float4 & cam_pos       [[buffer(FragBufferIndexCameraPosition)]])
+              constant float4    & cam_pos       [[buffer(FragBufferIndexCameraPosition)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (mode == FragModeNormals) {
@@ -116,10 +116,9 @@ struct LightVertexOut {
 };
 
 vertex LightVertexOut
-light_vertex(constant float4x4      & model_to_proj [[buffer(LightVertexBufferIndexMatrixWorldToProjection)]],
-             constant packed_float4 & light_pos_    [[buffer(LightVertexBufferIndexLightPosition)]])
+light_vertex(constant float4x4 & model_to_proj [[buffer(LightVertexBufferIndexMatrixWorldToProjection)]],
+             constant float4   & light_pos     [[buffer(LightVertexBufferIndexLightPosition)]])
 {
-    const float4 light_pos = light_pos_;
     return {
         .position = model_to_proj * light_pos,
         .size = 50,
@@ -130,6 +129,6 @@ light_vertex(constant float4x4      & model_to_proj [[buffer(LightVertexBufferIn
 fragment half4
 light_fragment(const float2 point_coord [[point_coord]])
 {
-    float circle_sd = 1.0 - length(point_coord - float2(0.5));
+    float circle_sd = 1 - length(point_coord - float2(0.5));
     return half4(1, 1, 1, half(round(circle_sd)));
 };
