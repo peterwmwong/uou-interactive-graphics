@@ -35,7 +35,7 @@ enum FragBufferIndex
 
 enum LightVertexBufferIndex
 {
-    LightVertexBufferIndexViewProjection = 0,
+    LightVertexBufferIndexMatrixWorldToProjection = 0,
     LightVertexBufferIndexLightPosition,
 };
 

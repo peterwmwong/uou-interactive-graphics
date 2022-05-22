@@ -20,6 +20,7 @@ use shader_bindings::{
     FragBufferIndex_FragBufferIndexScreenSize, FragMode, FragMode_FragModeAmbient,
     FragMode_FragModeAmbientDiffuse, FragMode_FragModeAmbientDiffuseSpecular,
     FragMode_FragModeNormals, FragMode_FragModeSpecular,
+    LightVertexBufferIndex_LightVertexBufferIndexMatrixWorldToProjection,
     VertexBufferIndex_VertexBufferIndexIndices,
     VertexBufferIndex_VertexBufferIndexMatrixModelToProjection,
     VertexBufferIndex_VertexBufferIndexNormals, VertexBufferIndex_VertexBufferIndexPositions,
@@ -34,8 +35,8 @@ use tobj::{LoadOptions, Mesh};
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 8., 0.]);
-const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE * 200.;
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
+const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 const INITIAL_MODE: FragMode = FragMode_FragModeAmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
@@ -50,6 +51,7 @@ struct Delegate {
     matrix_model_to_projection: f32x4x4,
     matrix_model_to_world: f32x4x4,
     matrix_projection_to_world: f32x4x4,
+    matrix_world_to_projection: f32x4x4,
     matrix_world_to_view: f32x4x4,
     mode: FragMode,
     num_triangles: usize,
@@ -112,10 +114,11 @@ impl Delegate {
 
         self.screen_size = screen_size;
         let aspect_ratio = screen_size[0] / screen_size[1];
-        let matrix_world_to_projection =
+        self.matrix_world_to_projection =
             self.calc_matrix_view_to_projection(aspect_ratio) * self.matrix_world_to_view;
-        self.matrix_model_to_projection = matrix_world_to_projection * self.matrix_model_to_world;
-        self.matrix_projection_to_world = matrix_world_to_projection.inverse();
+        self.matrix_model_to_projection =
+            self.matrix_world_to_projection * self.matrix_model_to_world;
+        self.matrix_projection_to_world = self.matrix_world_to_projection.inverse();
     }
 }
 
@@ -191,6 +194,7 @@ impl RendererDelgate for Delegate {
             matrix_model_to_world,
             matrix_projection_to_world: f32x4x4::identity(),
             matrix_world_to_view: f32x4x4::identity(),
+            matrix_world_to_projection: f32x4x4::identity(),
             max_bound,
             mode: INITIAL_MODE,
             num_triangles: indices.len() / 3,
@@ -384,113 +388,114 @@ impl RendererDelgate for Delegate {
         });
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.set_depth_stencil_state(&self.depth_state);
-        encoder.set_vertex_buffer(
-            VertexBufferIndex_VertexBufferIndexIndices as _,
-            Some(&self.vertex_buffer_indices),
-            0,
-        );
-        encoder.set_vertex_buffer(
-            VertexBufferIndex_VertexBufferIndexPositions as _,
-            Some(&self.vertex_buffer_positions),
-            0,
-        );
-        encoder.set_vertex_buffer(
-            VertexBufferIndex_VertexBufferIndexNormals as _,
-            Some(&self.vertex_buffer_normals),
-            0,
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex_VertexBufferIndexMatrixNormalToWorld,
-            // IMPORTANT: In the shader, this maps to a float3x3. This works because...
-            // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
-            //   - Since normals are directions (not positions), translations are meaningless and
-            //     should not be applied.
-            // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
-            //
-            // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
-            //       task), this may be wayyy to tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
-            &self.matrix_model_to_world,
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex_VertexBufferIndexMatrixModelToProjection,
-            self.matrix_model_to_projection.metal_float4x4(),
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex_FragBufferIndexFragMode,
-            &self.mode,
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex_FragBufferIndexMatrixProjectionToWorld,
-            self.matrix_projection_to_world.metal_float4x4(),
-        );
+
         // TODO: START HERE 2
         // TODO: START HERE 2
         // TODO: START HERE 2
         // TODO: Only do this when there's a change (mouse drag + control key)
-        // - REMOVE applying the view_projection_matrix
-        //      - FS is currently unnecessarily applying the INVERSE projection matrix just to get
-        //        the view space coordinate of the light.
-        // - Only apply the view_projection_matrix when draing the light
-        // - Rename variables to make it clear what coordinate space we're in
-        // - Verify with shader debugger FS is accurately calculating the `w`
-        //      - Place the light right above the teapot (centered)
-        //      - Debug the very top of the teapot fragment shader invocation
-        //      - Verify the `w` is as expected... something close to (0, 1, 0)?
-        //      - Try another position, place the light right in front, check the very front teapot fragment, etc.
         let light_world_position = packed_float4::from(
             f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
                 * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]),
         );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex_FragBufferIndexLightPosition,
-            &light_world_position,
-        );
-        let camera_world_position = packed_float4::from(
-            self.matrix_world_to_view.inverse() * f32x4::from_array([0., 0., 0., 1.]),
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex_FragBufferIndexCameraPosition,
-            &camera_world_position,
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex_FragBufferIndexScreenSize,
-            &self.screen_size,
-        );
-        encoder.draw_primitives_instanced(
-            MTLPrimitiveType::Triangle,
-            0,
-            3,
-            self.num_triangles as _,
-        );
-        // TODO: START HERE 3
-        // TODO: START HERE 3
-        // TODO: START HERE 3
-        // TODO: Bring back rendering the light
-        // {
-        //     encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
-        //     // TODO: Figure out a better way to unset this buffers from the previous draw call
-        //     encoder.set_vertex_buffers(0, &[None; 5], &[0; 5]);
-        //     encode_vertex_bytes(
-        //         &encoder,
-        //         LightVertexBufferIndex_LightVertexBufferIndexViewProjection,
-        //         &self.view_projection_matrix,
-        //     );
-        //     encode_vertex_bytes(
-        //         &encoder,
-        //         LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
-        //         &light_world_position,
-        //     );
-        //     // TODO: Figure out a better way to unset this buffers from the previous draw call
-        //     encoder.set_fragment_buffers(0, &[None; 4], &[0; 4]);
-        //     encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
-        // }
+
+        // Render Teapot
+        {
+            encoder.set_vertex_buffer(
+                VertexBufferIndex_VertexBufferIndexIndices as _,
+                Some(&self.vertex_buffer_indices),
+                0,
+            );
+            encoder.set_vertex_buffer(
+                VertexBufferIndex_VertexBufferIndexPositions as _,
+                Some(&self.vertex_buffer_positions),
+                0,
+            );
+            encoder.set_vertex_buffer(
+                VertexBufferIndex_VertexBufferIndexNormals as _,
+                Some(&self.vertex_buffer_normals),
+                0,
+            );
+            encode_vertex_bytes(
+                &encoder,
+                VertexBufferIndex_VertexBufferIndexMatrixNormalToWorld,
+                // IMPORTANT: In the shader, this maps to a float3x3. This works because...
+                // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
+                //   - Since normals are directions (not positions), translations are meaningless and
+                //     should not be applied.
+                // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
+                //
+                // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
+                //       task), this may be wayyy to tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
+                &self.matrix_model_to_world,
+            );
+            encode_vertex_bytes(
+                &encoder,
+                VertexBufferIndex_VertexBufferIndexMatrixModelToProjection,
+                self.matrix_model_to_projection.metal_float4x4(),
+            );
+            encode_fragment_bytes(
+                &encoder,
+                FragBufferIndex_FragBufferIndexFragMode,
+                &self.mode,
+            );
+            encode_fragment_bytes(
+                &encoder,
+                FragBufferIndex_FragBufferIndexMatrixProjectionToWorld,
+                self.matrix_projection_to_world.metal_float4x4(),
+            );
+            encode_fragment_bytes(
+                &encoder,
+                FragBufferIndex_FragBufferIndexLightPosition,
+                &light_world_position,
+            );
+            let camera_world_position = packed_float4::from(
+                self.matrix_world_to_view.inverse() * f32x4::from_array([0., 0., 0., 1.]),
+            );
+            encode_fragment_bytes(
+                &encoder,
+                FragBufferIndex_FragBufferIndexCameraPosition,
+                &camera_world_position,
+            );
+            encode_fragment_bytes(
+                &encoder,
+                FragBufferIndex_FragBufferIndexScreenSize,
+                &self.screen_size,
+            );
+            encoder.draw_primitives_instanced(
+                MTLPrimitiveType::Triangle,
+                0,
+                3,
+                self.num_triangles as _,
+            );
+        }
+
+        // Render Light
+        {
+            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
+            encoder.set_vertex_buffers(
+                0,
+                &[None; VertexBufferIndex_VertexBufferIndexLENGTH as _],
+                &[0; VertexBufferIndex_VertexBufferIndexLENGTH as _],
+            );
+            encoder.set_fragment_buffers(
+                0,
+                &[None; FragBufferIndex_FragBufferIndexLENGTH as _],
+                &[0; FragBufferIndex_FragBufferIndexLENGTH as _],
+            );
+            encode_vertex_bytes(
+                &encoder,
+                LightVertexBufferIndex_LightVertexBufferIndexMatrixWorldToProjection,
+                &self.matrix_world_to_projection,
+            );
+            encode_vertex_bytes(
+                &encoder,
+                LightVertexBufferIndex_LightVertexBufferIndexLightPosition,
+                &light_world_position,
+            );
+            // TODO: Figure out a better way to unset this buffers from the previous draw call
+            encoder.set_fragment_buffers(0, &[None; 4], &[0; 4]);
+            encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
+        }
         encoder.end_encoding();
         command_buffer.present_drawable(drawable);
         command_buffer.commit();

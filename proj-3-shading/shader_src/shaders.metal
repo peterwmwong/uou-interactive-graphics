@@ -116,12 +116,12 @@ struct LightVertexOut {
 };
 
 vertex LightVertexOut
-light_vertex(constant float4x4      & vp        [[buffer(LightVertexBufferIndexViewProjection)]],
-             constant packed_float4 & light_pos [[buffer(LightVertexBufferIndexLightPosition)]])
+light_vertex(constant float4x4      & model_to_proj [[buffer(LightVertexBufferIndexMatrixWorldToProjection)]],
+             constant packed_float4 & light_pos_    [[buffer(LightVertexBufferIndexLightPosition)]])
 {
-    // TODO: light_pos is now in world coordinates, MVP needs to be applied
+    const float4 light_pos = light_pos_;
     return {
-        .position = light_pos,
+        .position = model_to_proj * light_pos,
         .size = 50,
     };
 }

@@ -412,7 +412,8 @@ pub const FragBufferIndex_FragBufferIndexLightPosition: FragBufferIndex = 3;
 pub const FragBufferIndex_FragBufferIndexCameraPosition: FragBufferIndex = 4;
 pub const FragBufferIndex_FragBufferIndexLENGTH: FragBufferIndex = 5;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
-pub const LightVertexBufferIndex_LightVertexBufferIndexViewProjection: LightVertexBufferIndex = 0;
+pub const LightVertexBufferIndex_LightVertexBufferIndexMatrixWorldToProjection:
+    LightVertexBufferIndex = 0;
 pub const LightVertexBufferIndex_LightVertexBufferIndexLightPosition: LightVertexBufferIndex = 1;
 pub type LightVertexBufferIndex = ::std::os::raw::c_uint;
 
