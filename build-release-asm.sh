@@ -13,4 +13,4 @@ RUSTFLAGS="--emit asm -C target-cpu=native" \
 touch $BEFORE_ASM_PATH
 touch $AFTER_ASM_PATH
 /usr/local/bin/code-insiders -r --diff $BEFORE_ASM_PATH $AFTER_ASM_PATH
-cat ./target/release/deps/"$CRATE_NAME_NORMALIZED"-*.s > $AFTER_ASM_PATH
+cat ./target/release/deps/metal_app-*.s ./target/release/deps/"$CRATE_NAME_NORMALIZED"-*.s > $AFTER_ASM_PATH
