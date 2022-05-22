@@ -1,4 +1,4 @@
-# proj-3
+# proj-3-fresnel
 
 - Add Fresnel Effect
 
