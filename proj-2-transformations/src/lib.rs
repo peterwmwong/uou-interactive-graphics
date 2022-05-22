@@ -2,28 +2,22 @@
 #![feature(slice_as_chunks)]
 mod shader_bindings;
 use metal_app::{
-    allocate_new_buffer_with_data, encode_vertex_bytes, launch_application, metal::*,
-    unwrap_option_dcheck, unwrap_result_dcheck, MouseButton, RendererDelgate, UserEvent,
+    allocate_new_buffer_with_data, create_pipeline, encode_vertex_bytes, launch_application,
+    metal::*, unwrap_option_dcheck, MouseButton, RendererDelgate, UserEvent,
 };
-use shader_bindings::{
-    packed_float4, VertexBufferIndex_VertexBufferIndexCameraDistance,
-    VertexBufferIndex_VertexBufferIndexCameraRotation,
-    VertexBufferIndex_VertexBufferIndexMaxPositionValue,
-    VertexBufferIndex_VertexBufferIndexPositions, VertexBufferIndex_VertexBufferIndexScreenSize,
-    VertexBufferIndex_VertexBufferIndexUsePerspective, INITIAL_CAMERA_DISTANCE,
-};
+use shader_bindings::*;
 use std::{
     f32::consts::PI,
     path::PathBuf,
-    simd::{f32x2, f32x4, Simd},
+    simd::{f32x2, f32x4},
 };
 use tobj::LoadOptions;
 
 struct Delegate {
     camera_distance_offset: f32,
     camera_distance: f32,
-    camera_rotation_offset: Simd<f32, 2>,
-    camera_rotation: Simd<f32, 2>,
+    camera_rotation_offset: f32x2,
+    camera_rotation: f32x2,
     mins_maxs: [packed_float4; 2],
     num_vertices: usize,
     render_pipeline_state: RenderPipelineState,
@@ -61,10 +55,10 @@ impl RendererDelgate for Delegate {
 
         let mins_maxs = {
             let (positions3, ..) = positions.as_chunks::<3>();
-            let mut mins: f32x4 = Simd::splat(f32::MAX);
-            let mut maxs: f32x4 = Simd::splat(f32::MIN);
+            let mut mins = f32x4::splat(f32::MAX);
+            let mut maxs = f32x4::splat(f32::MIN);
             for &[x, y, z] in positions3 {
-                let input = Simd::from_array([x, y, z, 0.0]);
+                let input = f32x4::from_array([x, y, z, 0.0]);
                 mins = mins.min(input);
                 maxs = maxs.max(input);
             }
@@ -74,8 +68,8 @@ impl RendererDelgate for Delegate {
         Self {
             camera_distance_offset: 0.0,
             camera_distance: INITIAL_CAMERA_DISTANCE,
-            camera_rotation_offset: Simd::splat(0.0),
-            camera_rotation: Simd::from_array([-PI / 6.0, 0.0]),
+            camera_rotation_offset: f32x2::splat(0.0),
+            camera_rotation: f32x2::from_array([-PI / 6.0, 0.0]),
             mins_maxs,
             num_vertices: positions.len() / 3,
             render_pipeline_state: {
@@ -85,67 +79,27 @@ impl RendererDelgate for Delegate {
                         "/shaders.metallib"
                     )))
                     .expect("Failed to import shader metal lib.");
-
-                let pipeline_state_desc = RenderPipelineDescriptor::new();
-                pipeline_state_desc.set_label("Render Pipeline");
-
-                // Setup Vertex Shader
-                {
-                    let fun = library
-                        .get_function(&"main_vertex", None)
-                        .expect("Failed to access vertex shader function from metal library");
-                    pipeline_state_desc.set_vertex_function(Some(&fun));
-
-                    let buffers = pipeline_state_desc
-                        .vertex_buffers()
-                        .expect("Failed to access vertex buffers");
-                    for &buffer_index in &[
-                        VertexBufferIndex_VertexBufferIndexCameraDistance,
-                        VertexBufferIndex_VertexBufferIndexCameraRotation,
-                        VertexBufferIndex_VertexBufferIndexMaxPositionValue,
-                        VertexBufferIndex_VertexBufferIndexPositions,
-                        VertexBufferIndex_VertexBufferIndexScreenSize,
-                        VertexBufferIndex_VertexBufferIndexUsePerspective,
-                    ] {
-                        unwrap_option_dcheck(
-                            buffers.object_at(buffer_index as _),
-                            "Failed to access vertex buffer",
-                        )
-                        .set_mutability(MTLMutability::Immutable);
-                    }
-                }
-
-                // Setup Fragment Shader
-                {
-                    let fun = unwrap_result_dcheck(
-                        library.get_function(&"main_fragment", None),
-                        "Failed to access fragment shader function from metal library",
-                    );
-                    pipeline_state_desc.set_fragment_function(Some(&fun));
-                }
+                let base_pipeline_desc = RenderPipelineDescriptor::new();
 
                 // Setup Target Color Attachment
                 {
-                    let desc = &unwrap_option_dcheck(
-                        pipeline_state_desc.color_attachments().object_at(0 as u64),
+                    let desc = unwrap_option_dcheck(
+                        base_pipeline_desc.color_attachments().object_at(0 as u64),
                         "Failed to access color attachment on pipeline descriptor",
                     );
-                    desc.set_blending_enabled(true);
-
-                    desc.set_rgb_blend_operation(MTLBlendOperation::Add);
-                    desc.set_source_rgb_blend_factor(MTLBlendFactor::SourceAlpha);
-                    desc.set_destination_rgb_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
-
-                    desc.set_alpha_blend_operation(MTLBlendOperation::Add);
-                    desc.set_source_alpha_blend_factor(MTLBlendFactor::SourceAlpha);
-                    desc.set_destination_alpha_blend_factor(MTLBlendFactor::OneMinusSourceAlpha);
-
+                    desc.set_blending_enabled(false);
                     desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
                 }
 
-                unwrap_result_dcheck(
-                    device.new_render_pipeline_state(&pipeline_state_desc),
-                    "Failed to create render pipeline",
+                create_pipeline(
+                    &device,
+                    &library,
+                    &base_pipeline_desc,
+                    "Render Pipeline",
+                    &"main_vertex",
+                    VertexBufferIndex_VertexBufferIndex_LENGTH,
+                    "main_fragment",
+                    0,
                 )
             },
             use_perspective: true,
@@ -177,32 +131,32 @@ impl RendererDelgate for Delegate {
         });
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexMaxPositionValue,
+            VertexBufferIndex_VertexBufferIndex_MaxPositionValue,
             &self.mins_maxs,
         );
         encoder.set_vertex_buffer(
-            VertexBufferIndex_VertexBufferIndexPositions as _,
+            VertexBufferIndex_VertexBufferIndex_Positions as _,
             Some(&self.vertex_buffer_positions),
             0,
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexCameraRotation,
+            VertexBufferIndex_VertexBufferIndex_CameraRotation,
             &(self.camera_rotation + self.camera_rotation_offset),
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexCameraDistance,
+            VertexBufferIndex_VertexBufferIndex_CameraDistance,
             &(self.camera_distance + self.camera_distance_offset),
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexScreenSize,
+            VertexBufferIndex_VertexBufferIndex_ScreenSize,
             &self.screen_size,
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndexUsePerspective,
+            VertexBufferIndex_VertexBufferIndex_UsePerspective,
             &self.use_perspective,
         );
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
@@ -227,7 +181,7 @@ impl RendererDelgate for Delegate {
                             let adjacent = f32x2::splat(self.camera_distance);
                             let offsets = drag_amount / f32x2::splat(4.);
                             let ratio = offsets / adjacent;
-                            Simd::from_array([
+                            f32x2::from_array([
                                 ratio[1].atan(), // Rotation on x-axis
                                 ratio[0].atan(), // Rotation on y-axis
                             ])

@@ -1,5 +1,5 @@
-#include "./common.h"
 #include <metal_stdlib>
+#include "./common.h"
 
 using namespace metal;
 
@@ -57,13 +57,13 @@ struct VertexOut
 // the Vertex Shader as a constant space buffer. It is done in the Vertex Shader for this project as
 // a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
-main_vertex(         uint           vertex_id        [[instance_id]],
-            constant packed_float4* mins_maxs        [[buffer(VertexBufferIndexMaxPositionValue)]],
-            constant packed_float3* positions        [[buffer(VertexBufferIndexPositions)]],
-            constant float2&        screen_size      [[buffer(VertexBufferIndexScreenSize)]],
-            constant float2&        camera_rotation  [[buffer(VertexBufferIndexCameraRotation)]],
-            constant float&         camera_distance  [[buffer(VertexBufferIndexCameraDistance)]],
-            constant bool&          use_perspective  [[buffer(VertexBufferIndexUsePerspective)]])
+main_vertex(         uint            vertex_id        [[instance_id]],
+            constant packed_float4 * mins_maxs        [[buffer(VertexBufferIndex_MaxPositionValue)]],
+            constant packed_float3 * positions        [[buffer(VertexBufferIndex_Positions)]],
+            constant float2        & screen_size      [[buffer(VertexBufferIndex_ScreenSize)]],
+            constant float2        & camera_rotation  [[buffer(VertexBufferIndex_CameraRotation)]],
+            constant float         & camera_distance  [[buffer(VertexBufferIndex_CameraDistance)]],
+            constant bool          & use_perspective  [[buffer(VertexBufferIndex_UsePerspective)]])
 {
     const float4 model_position = float4(positions[vertex_id], 1.0); // Make homogenous coordinate
     const float4 mins           = mins_maxs[0];
@@ -169,5 +169,7 @@ main_fragment(      VertexOut in          [[stage_in]],
 {
     // OPTIONAL: Metal renders Point primitives as... squares, instead render them as un-shaded
     // spheres.
-    return in.color * round(1.0 - length(point_coord - float2(0.5)));
+    const float dist_from_center = length(point_coord - float2(0.5));
+    if (dist_from_center > 0.5) discard_fragment();
+    return in.color;
 };

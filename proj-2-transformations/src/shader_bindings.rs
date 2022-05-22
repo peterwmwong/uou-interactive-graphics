@@ -393,12 +393,13 @@ fn bindgen_test_layout_packed_float4() {
     );
 }
 pub const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
-pub const VertexBufferIndex_VertexBufferIndexMaxPositionValue: VertexBufferIndex = 0;
-pub const VertexBufferIndex_VertexBufferIndexPositions: VertexBufferIndex = 1;
-pub const VertexBufferIndex_VertexBufferIndexScreenSize: VertexBufferIndex = 2;
-pub const VertexBufferIndex_VertexBufferIndexCameraRotation: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndexCameraDistance: VertexBufferIndex = 4;
-pub const VertexBufferIndex_VertexBufferIndexUsePerspective: VertexBufferIndex = 5;
+pub const VertexBufferIndex_VertexBufferIndex_MaxPositionValue: VertexBufferIndex = 0;
+pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;
+pub const VertexBufferIndex_VertexBufferIndex_ScreenSize: VertexBufferIndex = 2;
+pub const VertexBufferIndex_VertexBufferIndex_CameraRotation: VertexBufferIndex = 3;
+pub const VertexBufferIndex_VertexBufferIndex_CameraDistance: VertexBufferIndex = 4;
+pub const VertexBufferIndex_VertexBufferIndex_UsePerspective: VertexBufferIndex = 5;
+pub const VertexBufferIndex_VertexBufferIndex_LENGTH: VertexBufferIndex = 6;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
 
 /**************************************************************************************************

@@ -14,12 +14,13 @@ DEF_CONSTANT const float INITIAL_CAMERA_DISTANCE = 50.0;
 
 enum VertexBufferIndex
 {
-    VertexBufferIndexMaxPositionValue = 0,
-    VertexBufferIndexPositions,
-    VertexBufferIndexScreenSize,
-    VertexBufferIndexCameraRotation,
-    VertexBufferIndexCameraDistance,
-    VertexBufferIndexUsePerspective,
+    VertexBufferIndex_MaxPositionValue = 0,
+    VertexBufferIndex_Positions,
+    VertexBufferIndex_ScreenSize,
+    VertexBufferIndex_CameraRotation,
+    VertexBufferIndex_CameraDistance,
+    VertexBufferIndex_UsePerspective,
+    VertexBufferIndex_LENGTH,
 };
 
 #endif
