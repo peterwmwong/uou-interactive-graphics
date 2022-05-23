@@ -2,6 +2,7 @@
 #![feature(slice_as_chunks)]
 mod shader_bindings;
 
+use bitflags::bitflags;
 use metal_app::metal::*;
 use metal_app::*;
 use shader_bindings::*;
@@ -12,11 +13,21 @@ use std::{
 };
 use tobj::{LoadOptions, Mesh};
 
+bitflags! {
+    struct Mode: u16 {
+        const HAS_AMBIENT = 1 << FC_FC_HAS_AMBIENT;
+        const HAS_DIFFUSE = 1 << FC_FC_HAS_DIFFUSE;
+        const HAS_NORMAL = 1 << FC_FC_HAS_NORMAL;
+        const HAS_SPECULAR = 1 << FC_FC_HAS_SPECULAR;
+        const DEFAULT = Self::HAS_AMBIENT.bits | Self::HAS_DIFFUSE.bits | Self::HAS_SPECULAR.bits;
+    }
+}
+
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
-const INITIAL_MODE: FragMode = FragMode_FragMode_AmbientDiffuseSpecular;
+const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
@@ -70,6 +81,7 @@ struct Delegate {
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
+    library: Library,
     light_world_position: f32x4,
     light_xy_rotation: f32x2,
     matrix_model_to_projection: f32x4x4,
@@ -78,17 +90,79 @@ struct Delegate {
     matrix_world_to_camera: f32x4x4,
     matrix_world_to_projection: f32x4x4,
     max_bound: f32,
-    mode: FragMode,
+    mode: Mode,
     num_triangles: usize,
     render_light_pipeline_state: RenderPipelineState,
     render_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
+    specular_shineness: f32,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
     vertex_buffer_texcoords: Buffer,
     texture_specular: Texture,
     texture_ambient_diffuse: Texture,
+}
+
+fn create_pipelines(
+    device: &Device,
+    library: &Library,
+    mode: Mode,
+    specular_shineness: f32,
+) -> (RenderPipelineState, RenderPipelineState) {
+    let base_pipeline_desc = RenderPipelineDescriptor::new();
+    base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
+    {
+        let desc = unwrap_option_dcheck(
+            base_pipeline_desc.color_attachments().object_at(0 as u64),
+            "Failed to access color attachment on pipeline descriptor",
+        );
+        desc.set_blending_enabled(false);
+        desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+    }
+
+    let function_constants = FunctionConstantValues::new();
+    for index in [
+        FC_FC_HAS_AMBIENT,
+        FC_FC_HAS_DIFFUSE,
+        FC_FC_HAS_SPECULAR,
+        FC_FC_HAS_NORMAL,
+    ] {
+        function_constants.set_constant_value_at_index(
+            (&mode.contains(Mode::from_bits_truncate(1 << index)) as *const _) as _,
+            MTLDataType::Bool,
+            index as _,
+        );
+    }
+    function_constants.set_constant_value_at_index(
+        (&specular_shineness as *const _) as _,
+        MTLDataType::Float,
+        FC_FC_SPECULAR_SHINENESS as _,
+    );
+    (
+        create_pipeline_with_constants(
+            &device,
+            &library,
+            &base_pipeline_desc,
+            "Teapot",
+            Some(&function_constants),
+            &"main_vertex",
+            VertexBufferIndex_VertexBufferIndex_LENGTH,
+            &"main_fragment",
+            FragBufferIndex_FragBufferIndex_LENGTH,
+        ),
+        create_pipeline_with_constants(
+            &device,
+            &library,
+            &base_pipeline_desc,
+            "Light",
+            Some(&function_constants),
+            &"light_vertex",
+            LightVertexBufferIndex_LightVertexBufferIndex_LENGTH,
+            &"light_fragment",
+            0,
+        ),
+    )
 }
 
 impl RendererDelgate for Delegate {
@@ -177,22 +251,9 @@ impl RendererDelgate for Delegate {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
 
-        // Setup Render Pipeline Descriptor used for rendering the teapot and light
-        let base_pipeline_desc = RenderPipelineDescriptor::new();
-        base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
-        {
-            let desc = unwrap_option_dcheck(
-                base_pipeline_desc.color_attachments().object_at(0 as u64),
-                "Failed to access color attachment on pipeline descriptor",
-            );
-            desc.set_blending_enabled(false);
-            desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-        }
-        let function_constants = [(
-            (&specular_shineness as *const _) as _,
-            MTLDataType::Float,
-            FC_FC_SPECULAR_SHINENESS,
-        )];
+        let mode = INITIAL_MODE;
+        let (render_pipeline_state, render_light_pipeline_state) =
+            create_pipelines(&device, &library, mode, specular_shineness);
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
@@ -204,6 +265,7 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
+            library,
             light_world_position: f32x4::default(),
             light_xy_rotation: INITIAL_LIGHT_ROTATION,
             matrix_model_to_projection: f32x4x4::identity(),
@@ -212,31 +274,14 @@ impl RendererDelgate for Delegate {
             matrix_world_to_camera: f32x4x4::identity(),
             matrix_world_to_projection: f32x4x4::identity(),
             max_bound,
-            mode: INITIAL_MODE,
+            mode,
             num_triangles: indices.len() / 3,
-            render_pipeline_state: create_pipeline(
-                &device,
-                &library,
-                &base_pipeline_desc,
-                "Teapot",
-                Some(&function_constants),
-                &"main_vertex",
-                VertexBufferIndex_VertexBufferIndex_LENGTH,
-                &"main_fragment",
-                FragBufferIndex_FragBufferIndex_LENGTH,
-            ),
-            render_light_pipeline_state: create_pipeline(
-                &device,
-                &library,
-                &base_pipeline_desc,
-                "Light",
-                Some(&function_constants),
-                &"light_vertex",
-                LightVertexBufferIndex_LightVertexBufferIndex_LENGTH,
-                &"light_fragment",
-                0,
-            ),
+            render_pipeline_state,
+            render_light_pipeline_state,
             screen_size: f32x2::default(),
+            specular_shineness,
+            texture_specular,
+            texture_ambient_diffuse,
             vertex_buffer_indices: allocate_new_buffer_with_data(&device, "Indices", &indices),
             vertex_buffer_normals: allocate_new_buffer_with_data(&device, "Normals", &normals),
             vertex_buffer_positions: allocate_new_buffer_with_data(
@@ -249,8 +294,6 @@ impl RendererDelgate for Delegate {
                 "Texcoords",
                 &texcoords,
             ),
-            texture_specular,
-            texture_ambient_diffuse,
             device,
         };
         delegate.update_light(delegate.light_xy_rotation);
@@ -331,11 +374,6 @@ impl RendererDelgate for Delegate {
                 &encoder,
                 VertexBufferIndex_VertexBufferIndex_MatrixModelToProjection,
                 self.matrix_model_to_projection.metal_float4x4(),
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex_FragBufferIndex_FragMode,
-                &self.mode,
             );
             encode_fragment_bytes(
                 &encoder,
@@ -455,14 +493,14 @@ impl RendererDelgate for Delegate {
                 }
             }
             KeyDown { key_code, .. } => {
-                self.mode = match key_code {
-                    29 /* 0 */ => FragMode_FragMode_AmbientDiffuseSpecular,
-                    18 /* 1 */ => FragMode_FragMode_Normals,
-                    19 /* 2 */ => FragMode_FragMode_Ambient,
-                    20 /* 3 */ => FragMode_FragMode_AmbientDiffuse,
-                    21 /* 4 */ => FragMode_FragMode_Specular,
+                self.update_mode(match key_code {
+                    29 /* 0 */ => Mode::DEFAULT,
+                    18 /* 1 */ => Mode::HAS_NORMAL,
+                    19 /* 2 */ => Mode::HAS_AMBIENT,
+                    20 /* 3 */ => Mode::HAS_AMBIENT | Mode::HAS_DIFFUSE,
+                    21 /* 4 */ => Mode::HAS_DIFFUSE | Mode::HAS_SPECULAR,
                     _ => self.mode
-                };
+                });
             }
             WindowResize { size, .. } => {
                 self.update_depth_texture_size(size);
@@ -474,6 +512,14 @@ impl RendererDelgate for Delegate {
 }
 
 impl Delegate {
+    fn update_mode(&mut self, mode: Mode) {
+        if mode != self.mode {
+            self.mode = mode;
+            (self.render_pipeline_state, self.render_light_pipeline_state) =
+                create_pipelines(&self.device, &self.library, mode, self.specular_shineness);
+        }
+    }
+
     fn update_depth_texture_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();
         desc.set_width(size[0] as _);

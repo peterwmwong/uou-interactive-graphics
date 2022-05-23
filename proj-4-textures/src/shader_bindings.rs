@@ -392,7 +392,11 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
-pub const FC_FC_SPECULAR_SHINENESS: FC = 0;
+pub const FC_FC_HAS_AMBIENT: FC = 0;
+pub const FC_FC_HAS_DIFFUSE: FC = 1;
+pub const FC_FC_HAS_NORMAL: FC = 2;
+pub const FC_FC_HAS_SPECULAR: FC = 3;
+pub const FC_FC_SPECULAR_SHINENESS: FC = 4;
 pub type FC = ::std::os::raw::c_uint;
 pub const VertexBufferIndex_VertexBufferIndex_Indices: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;
@@ -402,20 +406,13 @@ pub const VertexBufferIndex_VertexBufferIndex_MatrixModelToProjection: VertexBuf
 pub const VertexBufferIndex_VertexBufferIndex_MatrixNormalToWorld: VertexBufferIndex = 5;
 pub const VertexBufferIndex_VertexBufferIndex_LENGTH: VertexBufferIndex = 6;
 pub type VertexBufferIndex = ::std::os::raw::c_uint;
-pub const FragMode_FragMode_Normals: FragMode = 0;
-pub const FragMode_FragMode_Ambient: FragMode = 1;
-pub const FragMode_FragMode_AmbientDiffuse: FragMode = 2;
-pub const FragMode_FragMode_Specular: FragMode = 3;
-pub const FragMode_FragMode_AmbientDiffuseSpecular: FragMode = 4;
-pub type FragMode = ::std::os::raw::c_uint;
-pub const FragBufferIndex_FragBufferIndex_FragMode: FragBufferIndex = 0;
-pub const FragBufferIndex_FragBufferIndex_MatrixProjectionToWorld: FragBufferIndex = 1;
-pub const FragBufferIndex_FragBufferIndex_ScreenSize: FragBufferIndex = 2;
-pub const FragBufferIndex_FragBufferIndex_LightPosition: FragBufferIndex = 3;
-pub const FragBufferIndex_FragBufferIndex_CameraPosition: FragBufferIndex = 4;
-pub const FragBufferIndex_FragBufferIndex_AmbientTexture: FragBufferIndex = 5;
-pub const FragBufferIndex_FragBufferIndex_Specular: FragBufferIndex = 6;
-pub const FragBufferIndex_FragBufferIndex_LENGTH: FragBufferIndex = 7;
+pub const FragBufferIndex_FragBufferIndex_MatrixProjectionToWorld: FragBufferIndex = 0;
+pub const FragBufferIndex_FragBufferIndex_ScreenSize: FragBufferIndex = 1;
+pub const FragBufferIndex_FragBufferIndex_LightPosition: FragBufferIndex = 2;
+pub const FragBufferIndex_FragBufferIndex_CameraPosition: FragBufferIndex = 3;
+pub const FragBufferIndex_FragBufferIndex_AmbientTexture: FragBufferIndex = 4;
+pub const FragBufferIndex_FragBufferIndex_Specular: FragBufferIndex = 5;
+pub const FragBufferIndex_FragBufferIndex_LENGTH: FragBufferIndex = 6;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
 pub const LightVertexBufferIndex_LightVertexBufferIndex_MatrixWorldToProjection:
     LightVertexBufferIndex = 0;

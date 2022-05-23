@@ -136,6 +136,7 @@ fn make_function_constant_values(
     })
 }
 
+// TODO: Consolidate with create_pipeline_with_constants() and create helpers for creating function constants.
 pub fn create_pipeline(
     device: &Device,
     library: &Library,
@@ -147,11 +148,35 @@ pub fn create_pipeline(
     frag_func_name: &str,
     num_frag_immutable_buffers: u32,
 ) -> RenderPipelineState {
+    create_pipeline_with_constants(
+        device,
+        library,
+        base_pipeline_desc,
+        label,
+        make_function_constant_values(func_constants).as_ref(),
+        vertex_func_name,
+        num_vertex_immutable_buffers,
+        frag_func_name,
+        num_frag_immutable_buffers,
+    )
+}
+
+pub fn create_pipeline_with_constants(
+    device: &Device,
+    library: &Library,
+    base_pipeline_desc: &RenderPipelineDescriptor,
+    label: &str,
+    func_constants: Option<&FunctionConstantValues>,
+    vertex_func_name: &str,
+    num_vertex_immutable_buffers: u32,
+    frag_func_name: &str,
+    num_frag_immutable_buffers: u32,
+) -> RenderPipelineState {
     base_pipeline_desc.set_label(label);
 
-    let fcs = make_function_constant_values(func_constants);
+    let fcs = func_constants;
     let fun = unwrap_result_dcheck(
-        new_function_from_library(library, vertex_func_name, fcs.as_ref()),
+        new_function_from_library(library, vertex_func_name, fcs),
         "Failed to access vertex shader function from metal library",
     );
     base_pipeline_desc.set_vertex_function(Some(&fun));
@@ -168,7 +193,7 @@ pub fn create_pipeline(
     }
 
     let fun = unwrap_result_dcheck(
-        new_function_from_library(library, frag_func_name, fcs.as_ref()),
+        new_function_from_library(library, frag_func_name, fcs),
         "Failed to access fragment shader function from metal library",
     );
     base_pipeline_desc.set_fragment_function(Some(&fun));

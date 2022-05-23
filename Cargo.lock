@@ -532,6 +532,7 @@ dependencies = [
 name = "proj-4-textures"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "metal-app",
  "metal-build",
  "png",

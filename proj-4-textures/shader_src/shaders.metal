@@ -4,6 +4,10 @@
 using namespace metal;
 
 constant float SPECULAR_SHINENESS [[function_constant(FC_SPECULAR_SHINENESS)]];
+constant bool  HAS_AMBIENT        [[function_constant(FC_HAS_AMBIENT)]];
+constant bool  HAS_DIFFUSE        [[function_constant(FC_HAS_DIFFUSE)]];
+constant bool  HAS_NORMAL         [[function_constant(FC_HAS_NORMAL)]];
+constant bool  HAS_SPECULAR       [[function_constant(FC_HAS_SPECULAR)]];
 
 struct VertexOut
 {
@@ -35,7 +39,6 @@ main_vertex(         uint            inst_id         [[instance_id]],
 
 fragment half4
 main_fragment(         VertexOut   in            [[stage_in]],
-              constant FragMode  & mode          [[buffer(FragBufferIndex_FragMode)]],
               constant float4x4  & proj_to_world [[buffer(FragBufferIndex_MatrixProjectionToWorld)]],
               constant float2    & screen_size   [[buffer(FragBufferIndex_ScreenSize)]],
               constant float3    & light_pos     [[buffer(FragBufferIndex_LightPosition)]],
@@ -44,7 +47,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
               texture2d<half>      tx_specular   [[texture(FragBufferIndex_Specular)]])
 {
     const half3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
-    if (mode == FragMode_Normals) {
+    if (HAS_NORMAL) {
         return half4(n.xy, n.z * -1, 1);
     }
 
@@ -78,47 +81,27 @@ main_fragment(         VertexOut   in            [[stage_in]],
     */
     const half3 l  = normalize(half3(light_pos.xyz) - pos); // Light  - world space direction from fragment to light
     const half3 c  = normalize(half3(cam_pos.xyz) - pos);   // Camera - world space direction from fragment to camera
-    const half3 h  = normalize(l + c);               // Half   - half-way vector between Light and Camera
-    const half  ln = dot(l, n); // Cosine angle between Light and Normal
-    const half  cn = dot(c, n); // Cosine angle between Camera and Normal
-    const half  Il = select(    // Light Intensity
-                        0,
-                        1,
-                        // Remove Diffuse and Specular (set Light Intensity to 0) if either...
-                        // 1. Light is hitting the back of the surface
-                        // 2. Camera is viewing the back of the surface
-                        ln > 0 && cn > 0
-                      );
+    const half3 h  = normalize(l + c);                      // Half   - half-way vector between Light and Camera
+
+    // Cosine angle between Light and Normal
+    // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
+    const half ln = max(dot(l, n), 0.h);
+    // Cosine angle between Camera and Normal
+    // - ceil() to remove Diffuse/Specular when the Camera is viewing the back of the surface
+    const half cn = ceil(dot(c, n));
+    const half Il = 1 * cn;
 
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     const float2 tx_coord = float2(in.tx_coord);
-    const half4 Kd        = tx_ambient.sample(tx_sampler, tx_coord);  // Diffuse Material Color
-    const half4 Ks        = tx_specular.sample(tx_sampler, tx_coord); // Specular Material Color
+    const half4 Kd        = HAS_AMBIENT || HAS_DIFFUSE ? tx_ambient.sample(tx_sampler, tx_coord)  : 0;  // Diffuse Material Color
+    const half4 Ks        = HAS_SPECULAR               ? tx_specular.sample(tx_sampler, tx_coord) : 0;  // Specular Material Color
 
-    // TODO: Try collecting final color, instead of storing diffuse/specular/ambient and summing at the end
-    // - See if this improves the generated code/instruction count/temporary registers.
-    // TODO: Try function specialization with `mode`.
-    // - How much of an improvement?
-    const half4 diffuse  = select(
-                                0,
-                                Il * ln * Kd,
-                                mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_AmbientDiffuse
-                            );
-
+    const half4 diffuse  = HAS_AMBIENT ? Il * ln * Kd : 0;
     const half  s        = SPECULAR_SHINENESS;
-    const half4 specular = select(
-                                0,
-                                Il * pow(dot(h, n) * Ks, s),
-                                mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_Specular
-                            );
+    const half4 specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
 
-    const half  Ia       = 0.1; // Ambient Intensity
-    const half4 Ka       = Kd;  // Ambient Material Color
-    const half4 ambient  = select(
-                                0,
-                                Ia * Ka,
-                                mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_Ambient || mode == FragMode_AmbientDiffuse
-                            );
+    constexpr half  Ia       = 0.1; // Ambient Intensity
+    const half4 ambient  = HAS_AMBIENT ? Ia * Kd : 0;
 
     return half4(ambient + diffuse + specular);
 };

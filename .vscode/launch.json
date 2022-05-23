@@ -5,16 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug 'proj-3-shading'",
+            "name": "Debug 'proj-4-textures'",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "build",
-                    "--package=proj-3-shading"
+                    "--package=proj-4-textures"
                 ],
                 "filter": {
-                    "name": "proj-3-shading",
+                    "name": "proj-4-textures",
                     "kind": "bin"
                 }
             },

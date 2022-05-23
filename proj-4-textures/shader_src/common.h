@@ -6,7 +6,11 @@
 
 enum FC
 {
-    FC_SPECULAR_SHINENESS = 0,
+    FC_HAS_AMBIENT = 0,
+    FC_HAS_DIFFUSE,
+    FC_HAS_NORMAL,
+    FC_HAS_SPECULAR,
+    FC_SPECULAR_SHINENESS,
 };
 
 enum VertexBufferIndex
@@ -20,19 +24,9 @@ enum VertexBufferIndex
     VertexBufferIndex_LENGTH
 };
 
-enum FragMode
-{
-    FragMode_Normals = 0,
-    FragMode_Ambient,
-    FragMode_AmbientDiffuse,
-    FragMode_Specular,
-    FragMode_AmbientDiffuseSpecular,
-};
-
 enum FragBufferIndex
 {
-    FragBufferIndex_FragMode = 0,
-    FragBufferIndex_MatrixProjectionToWorld,
+    FragBufferIndex_MatrixProjectionToWorld = 0,
     FragBufferIndex_ScreenSize,
     FragBufferIndex_LightPosition,
     FragBufferIndex_CameraPosition,
