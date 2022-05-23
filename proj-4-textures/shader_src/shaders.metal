@@ -8,8 +8,8 @@ constant float SPECULAR_SHINENESS [[function_constant(FC_SPECULAR_SHINENESS)]];
 struct VertexOut
 {
     float4 position [[position]];
-    float3 normal;
-    float2 tx_coord;
+    half3  normal;
+    half2  tx_coord;
 };
 
 vertex VertexOut
@@ -28,8 +28,8 @@ main_vertex(         uint            inst_id         [[instance_id]],
     const float2 tx_coord = texcoords[idx];
     return {
         .position  = model_to_proj * position,
-        .normal    = normal_to_world * normal,
-        .tx_coord  = tx_coord
+        .normal    = half3(normal_to_world * normal),
+        .tx_coord  = half2(tx_coord)
     };
 }
 
@@ -40,23 +40,22 @@ main_fragment(         VertexOut   in            [[stage_in]],
               constant float2    & screen_size   [[buffer(FragBufferIndex_ScreenSize)]],
               constant float3    & light_pos     [[buffer(FragBufferIndex_LightPosition)]],
               constant float3    & cam_pos       [[buffer(FragBufferIndex_CameraPosition)]],
-              // TODO: We should use half precision as much as possible
-              texture2d<float>     tx_ambient    [[texture(FragBufferIndex_AmbientTexture)]],
-              texture2d<float>     tx_specular   [[texture(FragBufferIndex_Specular)]])
+              texture2d<half>      tx_ambient    [[texture(FragBufferIndex_AmbientTexture)]],
+              texture2d<half>      tx_specular   [[texture(FragBufferIndex_Specular)]])
 {
-    const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
+    const half3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (mode == FragMode_Normals) {
-        return half4(half3(n * float3(1,1,-1)), 1);
+        return half4(n.xy, n.z * -1, 1);
     }
 
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
     // 1. Viewport Coordinate -> Normalized Device Coordinate (aka Projected w/Perspective)
-    const float2 screen_pos  = in.position.xy;
-    const float2 proj_pos_xy = fma(float2(2, -2), (screen_pos / screen_size), float2(-1, 1));
+    const half2  screen_pos   = half2(in.position.xy);
+    const half2  proj_pos_xy  = fma(half2(2, -2), (screen_pos / half2(screen_size)), half2(-1, 1));
     // 2. Projected Coordinate -> World Space position
-    const float4 proj_pos    = float4(proj_pos_xy, in.position.z, 1);
-    const float4 pos_w_persp = proj_to_world * proj_pos;
-    const float3 pos         = pos_w_persp.xyz / pos_w_persp.w;
+    const float4 proj_pos     = float4(float2(proj_pos_xy), in.position.z, 1);
+    const float4 pos_w_persp  = proj_to_world * proj_pos;
+    const half3  pos          = half3(pos_w_persp.xyz / pos_w_persp.w);
 
     /*
     ================================================================
@@ -77,12 +76,12 @@ main_fragment(         VertexOut   in            [[stage_in]],
     -------   ---------   ---------------
     Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
     */
-    const float3 l  = normalize(light_pos.xyz - pos); // Light  - world space direction from fragment to light
-    const float3 c  = normalize(cam_pos.xyz - pos);   // Camera - world space direction from fragment to camera
-    const float3 h  = normalize(l + c);               // Half   - half-way vector between Light and Camera
-    const float  ln = dot(l, n); // Cosine angle between Light and Normal
-    const float  cn = dot(c, n); // Cosine angle between Camera and Normal
-    const float  Il = select(    // Light Intensity
+    const half3 l  = normalize(half3(light_pos.xyz) - pos); // Light  - world space direction from fragment to light
+    const half3 c  = normalize(half3(cam_pos.xyz) - pos);   // Camera - world space direction from fragment to camera
+    const half3 h  = normalize(l + c);               // Half   - half-way vector between Light and Camera
+    const half  ln = dot(l, n); // Cosine angle between Light and Normal
+    const half  cn = dot(c, n); // Cosine angle between Camera and Normal
+    const half  Il = select(    // Light Intensity
                         0,
                         1,
                         // Remove Diffuse and Specular (set Light Intensity to 0) if either...
@@ -92,29 +91,30 @@ main_fragment(         VertexOut   in            [[stage_in]],
                       );
 
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
-    const float2 tx_coord = in.tx_coord;
-    const float4 Kd       = tx_ambient.sample(tx_sampler, tx_coord); // Diffuse Material Color
+    const float2 tx_coord = float2(in.tx_coord);
+    const half4 Kd        = tx_ambient.sample(tx_sampler, tx_coord);  // Diffuse Material Color
+    const half4 Ks        = tx_specular.sample(tx_sampler, tx_coord); // Specular Material Color
+
     // TODO: Try collecting final color, instead of storing diffuse/specular/ambient and summing at the end
     // - See if this improves the generated code/instruction count/temporary registers.
     // TODO: Try function specialization with `mode`.
     // - How much of an improvement?
-    const float4 diffuse  = select(
+    const half4 diffuse  = select(
                                 0,
                                 Il * ln * Kd,
                                 mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_AmbientDiffuse
                             );
 
-    const float4 Ks       = tx_specular.sample(tx_sampler, tx_coord); // Specular Material Color
-    const float  s        = SPECULAR_SHINENESS;
-    const float4 specular = select(
+    const half  s        = SPECULAR_SHINENESS;
+    const half4 specular = select(
                                 0,
                                 Il * pow(dot(h, n) * Ks, s),
                                 mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_Specular
                             );
 
-    const float  Ia       = 0.1; // Ambient Intensity
-    const float4 Ka       = Kd;  // Ambient Material Color
-    const float4 ambient  = select(
+    const half  Ia       = 0.1; // Ambient Intensity
+    const half4 Ka       = Kd;  // Ambient Material Color
+    const half4 ambient  = select(
                                 0,
                                 Ia * Ka,
                                 mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_Ambient || mode == FragMode_AmbientDiffuse
@@ -122,6 +122,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
 
     return half4(ambient + diffuse + specular);
 };
+
 
 struct LightVertexOut {
     float4 position [[position]];
@@ -138,11 +139,10 @@ light_vertex(constant float4x4 & model_to_proj [[buffer(LightVertexBufferIndex_M
     };
 }
 
-
 fragment half4
 light_fragment(const float2 point_coord [[point_coord]])
 {
-    float dist_from_center = length(point_coord - float2(0.5));
+    half dist_from_center = length(half2(point_coord) - 0.5h);
     if (dist_from_center > 0.5) discard_fragment();
     return half4(1);
 };
