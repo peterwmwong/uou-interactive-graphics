@@ -94,6 +94,7 @@ impl RendererDelgate for Delegate {
                     &library,
                     &base_pipeline_desc,
                     "Render Pipeline",
+                    None,
                     &"main_vertex",
                     VertexBufferIndex_VertexBufferIndex_LENGTH,
                     "main_fragment",

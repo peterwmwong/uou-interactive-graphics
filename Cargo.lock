@@ -391,6 +391,7 @@ dependencies = [
  "core-graphics-types",
  "dispatch",
  "display-link",
+ "foreign-types",
  "half",
  "metal",
  "objc",

@@ -3,6 +3,8 @@
 
 using namespace metal;
 
+constant float SPECULAR_SHINENESS [[function_constant(FC_SPECULAR_SHINENESS)]];
+
 struct VertexOut
 {
     float4 position [[position]];
@@ -103,7 +105,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
                             );
 
     const float4 Ks       = tx_specular.sample(tx_sampler, tx_coord); // Specular Material Color
-    const float  s        = 200; // Specular Shineness
+    const float  s        = SPECULAR_SHINENESS;
     const float4 specular = select(
                                 0,
                                 Il * pow(dot(h, n) * Ks, s),

@@ -20,7 +20,7 @@ const INITIAL_MODE: FragMode = FragMode_FragMode_AmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
-fn load_texture_from_png<T: AsRef<Path>>(path_to_png: T, device: &Device) -> Texture {
+fn load_texture_from_png<T: AsRef<Path>>(label: &str, path_to_png: T, device: &Device) -> Texture {
     use png::ColorType::*;
     use std::fs::File;
     let mut decoder = png::Decoder::new(File::open(path_to_png).unwrap());
@@ -46,6 +46,7 @@ fn load_texture_from_png<T: AsRef<Path>>(path_to_png: T, device: &Device) -> Tex
     desc.set_usage(MTLTextureUsage::ShaderRead);
 
     let texture = device.new_texture(&desc);
+    texture.set_label(label);
     texture.replace_region(
         MTLRegion {
             origin: MTLOrigin { x: 0, y: 0, z: 0 },
@@ -109,15 +110,17 @@ impl RendererDelgate for Delegate {
             .expect("Failed to load materials data")
             .pop()
             .expect("Failed to load material, expected atleast one material");
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // - Should pass this in somehow (buffer bytes? function specialization?)
-        let _specular_shineness = material.shininess;
-        let texture_ambient_diffuse =
-            load_texture_from_png(assets_dir.join(material.ambient_texture), &device);
-        let texture_specular =
-            load_texture_from_png(assets_dir.join(material.specular_texture), &device);
+        let specular_shineness = material.shininess;
+        let texture_ambient_diffuse = load_texture_from_png(
+            "Ambient/Diffuse",
+            assets_dir.join(material.ambient_texture),
+            &device,
+        );
+        let texture_specular = load_texture_from_png(
+            "Specular",
+            assets_dir.join(material.specular_texture),
+            &device,
+        );
 
         let model = models
             .pop()
@@ -185,7 +188,11 @@ impl RendererDelgate for Delegate {
             desc.set_blending_enabled(false);
             desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
         }
-
+        let function_constants = [(
+            (&specular_shineness as *const _) as _,
+            MTLDataType::Float,
+            FC_FC_SPECULAR_SHINENESS,
+        )];
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
@@ -211,7 +218,8 @@ impl RendererDelgate for Delegate {
                 &device,
                 &library,
                 &base_pipeline_desc,
-                "Render Teapot Pipeline",
+                "Teapot",
+                Some(&function_constants),
                 &"main_vertex",
                 VertexBufferIndex_VertexBufferIndex_LENGTH,
                 &"main_fragment",
@@ -221,31 +229,24 @@ impl RendererDelgate for Delegate {
                 &device,
                 &library,
                 &base_pipeline_desc,
-                "Render Light Pipeline",
+                "Light",
+                Some(&function_constants),
                 &"light_vertex",
                 LightVertexBufferIndex_LightVertexBufferIndex_LENGTH,
                 &"light_fragment",
                 0,
             ),
             screen_size: f32x2::default(),
-            vertex_buffer_indices: allocate_new_buffer_with_data(
-                &device,
-                "Vertex Buffer Indices",
-                &indices,
-            ),
-            vertex_buffer_normals: allocate_new_buffer_with_data(
-                &device,
-                "Vertex Buffer Normals",
-                &normals,
-            ),
+            vertex_buffer_indices: allocate_new_buffer_with_data(&device, "Indices", &indices),
+            vertex_buffer_normals: allocate_new_buffer_with_data(&device, "Normals", &normals),
             vertex_buffer_positions: allocate_new_buffer_with_data(
                 &device,
-                "Vertex Buffer Positions",
+                "Positions",
                 &positions,
             ),
             vertex_buffer_texcoords: allocate_new_buffer_with_data(
                 &device,
-                "Vertex Buffer Texcoords",
+                "Texcoords",
                 &texcoords,
             ),
             texture_specular,
@@ -480,7 +481,9 @@ impl Delegate {
         desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
         desc.set_storage_mode(MTLStorageMode::Memoryless);
         desc.set_usage(MTLTextureUsage::RenderTarget);
-        self.depth_texture = Some(self.device.new_texture(&desc));
+        let texture = self.device.new_texture(&desc);
+        texture.set_label("Depth");
+        self.depth_texture = Some(texture);
     }
 
     #[inline]

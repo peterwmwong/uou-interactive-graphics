@@ -392,6 +392,8 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
+pub const FC_FC_SPECULAR_SHINENESS: FC = 0;
+pub type FC = ::std::os::raw::c_uint;
 pub const VertexBufferIndex_VertexBufferIndex_Indices: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;
 pub const VertexBufferIndex_VertexBufferIndex_Normals: VertexBufferIndex = 2;

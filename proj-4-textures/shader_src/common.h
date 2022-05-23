@@ -4,6 +4,11 @@
 #ifndef common_h
 #define common_h
 
+enum FC
+{
+    FC_SPECULAR_SHINENESS = 0,
+};
+
 enum VertexBufferIndex
 {
     VertexBufferIndex_Indices = 0,
