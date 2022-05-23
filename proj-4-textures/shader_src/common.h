@@ -32,6 +32,7 @@ enum FragBufferIndex
     FragBufferIndex_LightPosition,
     FragBufferIndex_CameraPosition,
     FragBufferIndex_AmbientTexture,
+    FragBufferIndex_Specular,
     FragBufferIndex_LENGTH
 };
 

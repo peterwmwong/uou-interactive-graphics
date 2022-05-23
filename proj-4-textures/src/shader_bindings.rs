@@ -412,7 +412,8 @@ pub const FragBufferIndex_FragBufferIndex_ScreenSize: FragBufferIndex = 2;
 pub const FragBufferIndex_FragBufferIndex_LightPosition: FragBufferIndex = 3;
 pub const FragBufferIndex_FragBufferIndex_CameraPosition: FragBufferIndex = 4;
 pub const FragBufferIndex_FragBufferIndex_AmbientTexture: FragBufferIndex = 5;
-pub const FragBufferIndex_FragBufferIndex_LENGTH: FragBufferIndex = 6;
+pub const FragBufferIndex_FragBufferIndex_Specular: FragBufferIndex = 6;
+pub const FragBufferIndex_FragBufferIndex_LENGTH: FragBufferIndex = 7;
 pub type FragBufferIndex = ::std::os::raw::c_uint;
 pub const LightVertexBufferIndex_LightVertexBufferIndex_MatrixWorldToProjection:
     LightVertexBufferIndex = 0;

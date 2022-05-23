@@ -7,7 +7,7 @@ struct VertexOut
 {
     float4 position [[position]];
     float3 normal;
-    float2 texcoord;
+    float2 tx_coord;
 };
 
 vertex VertexOut
@@ -23,11 +23,11 @@ main_vertex(         uint            inst_id         [[instance_id]],
     const uint   idx      = indices[inst_id * 3 + vertex_id];
     const float4 position = float4(positions[idx], 1.0);
     const float3 normal   = normals[idx];
-    const float2 texcoord = texcoords[idx];
+    const float2 tx_coord = texcoords[idx];
     return {
         .position  = model_to_proj * position,
         .normal    = normal_to_world * normal,
-        .texcoord  = texcoord
+        .tx_coord  = tx_coord
     };
 }
 
@@ -39,9 +39,9 @@ main_fragment(         VertexOut   in            [[stage_in]],
               constant float3    & light_pos     [[buffer(FragBufferIndex_LightPosition)]],
               constant float3    & cam_pos       [[buffer(FragBufferIndex_CameraPosition)]],
               // TODO: We should use half precision as much as possible
-              texture2d<float>      texture       [[texture(FragBufferIndex_AmbientTexture)]])
+              texture2d<float>     tx_ambient    [[texture(FragBufferIndex_AmbientTexture)]],
+              texture2d<float>     tx_specular   [[texture(FragBufferIndex_Specular)]])
 {
-
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (mode == FragMode_Normals) {
         return half4(half3(n * float3(1,1,-1)), 1);
@@ -89,15 +89,20 @@ main_fragment(         VertexOut   in            [[stage_in]],
                         ln > 0 && cn > 0
                       );
 
-    constexpr sampler texture_sampler (mag_filter::linear, address::repeat, min_filter::linear);
-    const float4 Kd       = texture.sample(texture_sampler, in.texcoord); // Diffuse Material Color
+    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+    const float2 tx_coord = in.tx_coord;
+    const float4 Kd       = tx_ambient.sample(tx_sampler, tx_coord); // Diffuse Material Color
+    // TODO: Try collecting final color, instead of storing diffuse/specular/ambient and summing at the end
+    // - See if this improves the generated code/instruction count/temporary registers.
+    // TODO: Try function specialization with `mode`.
+    // - How much of an improvement?
     const float4 diffuse  = select(
                                 0,
                                 Il * ln * Kd,
                                 mode == FragMode_AmbientDiffuseSpecular || mode == FragMode_AmbientDiffuse
                             );
 
-    const float4 Ks       = 1;   // Specular Material Color
+    const float4 Ks       = tx_specular.sample(tx_sampler, tx_coord); // Specular Material Color
     const float  s        = 200; // Specular Shineness
     const float4 specular = select(
                                 0,

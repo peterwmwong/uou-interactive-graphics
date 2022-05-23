@@ -1,5 +1,6 @@
 #![feature(portable_simd)]
-use metal_app::{launch_application, metal::*, unwrap_option_dcheck, RendererDelgate};
+use metal_app::metal::*;
+use metal_app::*;
 use std::time::Instant;
 
 struct Delegate {
@@ -8,7 +9,7 @@ struct Delegate {
 
 impl RendererDelgate for Delegate {
     #[inline]
-    fn new(_device: metal_app::metal::Device) -> Self {
+    fn new(_device: Device, _command_queue: &CommandQueue) -> Self {
         Self {
             now: Instant::now(),
         }

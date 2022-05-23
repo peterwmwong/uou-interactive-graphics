@@ -1,10 +1,8 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use metal_app::{
-    allocate_new_buffer_with_data, create_pipeline, encode_vertex_bytes, launch_application,
-    metal::*, unwrap_option_dcheck, MouseButton, RendererDelgate, UserEvent,
-};
+use metal_app::metal::*;
+use metal_app::*;
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -27,7 +25,7 @@ struct Delegate {
 }
 
 impl RendererDelgate for Delegate {
-    fn new(device: metal_app::metal::Device) -> Self {
+    fn new(device: Device, _command_queue: &CommandQueue) -> Self {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("teapot.obj");

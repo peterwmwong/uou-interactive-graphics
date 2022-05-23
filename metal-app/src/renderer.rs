@@ -50,7 +50,7 @@ pub enum UserEvent {
 }
 
 pub trait RendererDelgate {
-    fn new(device: Device) -> Self;
+    fn new(device: Device, command_queue: &CommandQueue) -> Self;
 
     fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef);
 
@@ -76,13 +76,12 @@ impl<R: RendererDelgate> MetalRenderer<R> {
         layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
         layer.set_framebuffer_only(YES);
         layer.set_presents_with_transaction(false);
-        let delegate = R::new(device);
         Self {
             backing_scale_factor,
-            command_queue,
+            delegate: R::new(device, &command_queue),
             layer,
-            delegate,
             screen_size: Simd::splat(0.0),
+            command_queue,
         }
     }
 

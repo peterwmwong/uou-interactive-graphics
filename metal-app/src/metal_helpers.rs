@@ -109,3 +109,24 @@ pub fn create_pipeline(
         "Failed to create render pipeline",
     )
 }
+
+// TODO: Investigate when this improves performance.
+// - In quick performance profiling of proj-4, no performance improvements were observed
+//   - Methodology
+//      - Maximize Window
+//      - Frame Capture
+//      - Profiling GPU in "Maximum" performance state
+//      - Navigate to Fragment Shader (source) that includes line-by-line time percentages in right gutter
+//      - Observe texture sample lines on contribute to ~7% (ambient) and ~1.8% (specular),
+//        regardless whether optimize_textures_for_gpu_access was used or not.
+// - Guess: Only improves non-Apple Silicon CPU/GPU
+pub fn optimize_textures_for_gpu_access(textures: &[&Texture], command_queue: &CommandQueue) {
+    let command_buf = command_queue.new_command_buffer();
+    let enc = command_buf.new_blit_command_encoder();
+    for &texture in textures {
+        enc.optimize_contents_for_gpu_access(texture);
+    }
+    enc.end_encoding();
+    command_buf.commit();
+    command_buf.wait_until_completed();
+}

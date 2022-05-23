@@ -2,11 +2,8 @@
 #![feature(slice_as_chunks)]
 mod shader_bindings;
 
-use metal_app::{
-    allocate_new_buffer_with_data, create_pipeline, encode_fragment_bytes, encode_vertex_bytes,
-    f32x4x4, launch_application, metal::*, unwrap_option_dcheck, ModifierKeys, RendererDelgate,
-    UserEvent,
-};
+use metal_app::metal::*;
+use metal_app::*;
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -45,6 +42,7 @@ fn load_texture_from_png<T: AsRef<Path>>(path_to_png: T, device: &Device) -> Tex
     desc.set_height(height);
     desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
     desc.set_storage_mode(MTLStorageMode::Shared);
+    desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
     desc.set_usage(MTLTextureUsage::ShaderRead);
 
     let texture = device.new_texture(&desc);
@@ -88,18 +86,15 @@ struct Delegate {
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
     vertex_buffer_texcoords: Buffer,
-    color_ambient_diffuse: float4,
-    color_specular: float4,
-    specular_shineness: f32,
-    texture_ambient_specular: Texture,
+    texture_specular: Texture,
     texture_ambient_diffuse: Texture,
 }
 
 impl RendererDelgate for Delegate {
-    fn new(device: metal_app::metal::Device) -> Self {
+    fn new(device: Device, _command_queue: &CommandQueue) -> Self {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
         let teapot_file = assets_dir.join("teapot.obj");
-        let (mut models, mut materials) = tobj::load_obj(
+        let (mut models, materials) = tobj::load_obj(
             teapot_file,
             &LoadOptions {
                 single_index: true,
@@ -114,23 +109,15 @@ impl RendererDelgate for Delegate {
             .expect("Failed to load materials data")
             .pop()
             .expect("Failed to load material, expected atleast one material");
-        let color_ambient_diffuse = float4::new(
-            material.ambient[0],
-            material.ambient[1],
-            material.ambient[2],
-            1.,
-        );
-        let color_specular = float4::new(
-            material.specular[0],
-            material.specular[1],
-            material.specular[2],
-            1.,
-        );
-        let specular_shineness = material.shininess;
-        let texture_ambient_specular =
-            load_texture_from_png(assets_dir.join(material.specular_texture), &device);
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // - Should pass this in somehow (buffer bytes? function specialization?)
+        let _specular_shineness = material.shininess;
         let texture_ambient_diffuse =
             load_texture_from_png(assets_dir.join(material.ambient_texture), &device);
+        let texture_specular =
+            load_texture_from_png(assets_dir.join(material.specular_texture), &device);
 
         let model = models
             .pop()
@@ -261,10 +248,7 @@ impl RendererDelgate for Delegate {
                 "Vertex Buffer Texcoords",
                 &texcoords,
             ),
-            color_ambient_diffuse,
-            color_specular,
-            specular_shineness,
-            texture_ambient_specular,
+            texture_specular,
             texture_ambient_diffuse,
             device,
         };
@@ -380,6 +364,10 @@ impl RendererDelgate for Delegate {
                 FragBufferIndex_FragBufferIndex_AmbientTexture as _,
                 Some(&self.texture_ambient_diffuse),
             );
+            encoder.set_fragment_texture(
+                FragBufferIndex_FragBufferIndex_Specular as _,
+                Some(&self.texture_specular),
+            );
             encoder.draw_primitives_instanced(
                 MTLPrimitiveType::Triangle,
                 0,
@@ -420,7 +408,7 @@ impl RendererDelgate for Delegate {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        use metal_app::MouseButton::*;
+        use MouseButton::*;
         use UserEvent::*;
         match event {
             MouseDrag {
@@ -506,7 +494,7 @@ impl Delegate {
             [0., 0., 1., 0.],
         );
         let w = 2. * n * self.max_bound / INITIAL_CAMERA_DISTANCE;
-        let h = aspect_ratio * w;
+        let h = w / aspect_ratio;
         let orthographic_matrix = {
             f32x4x4::new(
                 [2. / w, 0., 0., 0.],
