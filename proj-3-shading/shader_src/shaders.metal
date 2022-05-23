@@ -71,16 +71,15 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 l  = normalize(light_pos.xyz - pos); // Light  - world space direction from fragment to light
     const float3 c  = normalize(cam_pos.xyz - pos);   // Camera - world space direction from fragment to camera
     const float3 h  = normalize(l + c);               // Half   - half-way vector between Light and Camera
-    const float  ln = dot(l, n); // Cosine angle between Light and Normal
-    const float  cn = dot(c, n); // Cosine angle between Camera and Normal
-    const float  Il = select(    // Light Intensity
-                        0,
-                        1,
-                        // Remove Diffuse and Specular (set Light Intensity to 0) if either...
-                        // 1. Light is hitting the back of the surface
-                        // 2. Camera is viewing the back of the surface
-                        ln > 0 && cn > 0
-                      );
+
+    // Cosine angle between Light and Normal
+    // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
+    const float ln = max(dot(l, n), 0.);
+    // Cosine angle between Camera and Normal
+    // - ceil() to remove Diffuse/Specular when the Camera is viewing the back of the surface
+    const float cn = ceil(dot(c, n));
+    const float Il = 1 * cn;
+
 
     const float3 Kd       = float3(1, 0, 0); // Diffuse Material Color
     const float3 diffuse  = select(
