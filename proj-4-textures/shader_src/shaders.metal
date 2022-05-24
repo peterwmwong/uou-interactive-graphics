@@ -87,15 +87,13 @@ main_fragment(         VertexOut   in            [[stage_in]],
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
     const half ln = max(dot(l, n), 0.h);
     // Cosine angle between Camera and Normal
-    // - ceil() to remove Diffuse/Specular when the Camera is viewing the back of the surface
-    const half cn = ceil(dot(c, n));
+    // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
+    // - Using the XCode Shader Profiler, this performed the best compared to...
+    //      - ceil(saturate(v))
+    //      - trunc(fma(v, .5h, 1.h))
+    const half cn = step(0.h, dot(c, n));
     const half Il = 1 * cn; // Diffuse/Specular Light Intensity
 
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // - If you rotate to right (facing into the spout), there's a weird glitchy blemish in the middle of the teapot
-    // - Seems to be coming from Ambient (doesn't show up in other modes)
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     const float2 tx_coord = float2(in.tx_coord);
     const half4  Kd       = HAS_AMBIENT || HAS_DIFFUSE ? tx_ambient.sample(tx_sampler, tx_coord)  : 0;  // Diffuse Material Color

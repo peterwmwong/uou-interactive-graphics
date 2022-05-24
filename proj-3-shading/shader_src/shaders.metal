@@ -75,9 +75,11 @@ main_fragment(         VertexOut   in            [[stage_in]],
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
     const float ln = max(dot(l, n), 0.);
-    // Cosine angle between Camera and Normal
-    // - ceil() to remove Diffuse/Specular when the Camera is viewing the back of the surface
-    const float cn = ceil(dot(c, n));
+    // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
+    // - Using the XCode Shader Profiler, this performed the best compared to...
+    //      - ceil(saturate(v))
+    //      - trunc(fma(v, .5h, 1.h))
+    const float cn = step(0., dot(c, n));
     const float Il = 1 * cn;
 
 
