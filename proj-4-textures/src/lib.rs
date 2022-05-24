@@ -543,7 +543,7 @@ impl Delegate {
             [0., 0., 1., 0.],
         );
         let w = 2. * n * self.max_bound / INITIAL_CAMERA_DISTANCE;
-        let h = w / aspect_ratio;
+        let h = aspect_ratio * w;
         let orthographic_matrix = {
             f32x4x4::new(
                 [2. / w, 0., 0., 0.],
@@ -572,7 +572,7 @@ impl Delegate {
             self.matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]);
 
         self.screen_size = screen_size;
-        let aspect_ratio = screen_size[0] / screen_size[1];
+        let aspect_ratio = screen_size[1] / screen_size[0];
         self.matrix_world_to_projection =
             self.calc_matrix_camera_to_projection(aspect_ratio) * self.matrix_world_to_camera;
         self.matrix_model_to_projection =
