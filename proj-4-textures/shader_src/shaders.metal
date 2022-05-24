@@ -89,19 +89,24 @@ main_fragment(         VertexOut   in            [[stage_in]],
     // Cosine angle between Camera and Normal
     // - ceil() to remove Diffuse/Specular when the Camera is viewing the back of the surface
     const half cn = ceil(dot(c, n));
-    const half Il = 1 * cn;
+    const half Il = 1 * cn; // Diffuse/Specular Light Intensity
 
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // - If you rotate to right (facing into the spout), there's a weird glitchy blemish in the middle of the teapot
+    // - Seems to be coming from Ambient (doesn't show up in other modes)
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     const float2 tx_coord = float2(in.tx_coord);
-    const half4 Kd        = HAS_AMBIENT || HAS_DIFFUSE ? tx_ambient.sample(tx_sampler, tx_coord)  : 0;  // Diffuse Material Color
-    const half4 Ks        = HAS_SPECULAR               ? tx_specular.sample(tx_sampler, tx_coord) : 0;  // Specular Material Color
+    const half4  Kd       = HAS_AMBIENT || HAS_DIFFUSE ? tx_ambient.sample(tx_sampler, tx_coord)  : 0;  // Diffuse Material Color
+    const half4  Ks       = HAS_SPECULAR               ? tx_specular.sample(tx_sampler, tx_coord) : 0;  // Specular Material Color
 
-    const half4 diffuse  = HAS_AMBIENT ? Il * ln * Kd : 0;
-    const half  s        = SPECULAR_SHINENESS;
-    const half4 specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
+    const half4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
+    const half   s        = SPECULAR_SHINENESS;
+    const half4  specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
 
-    constexpr half  Ia       = 0.1; // Ambient Intensity
-    const half4 ambient  = HAS_AMBIENT ? Ia * Kd : 0;
+    const half   Ia       = 0.1; // Ambient Intensity
+    const half4  ambient  = HAS_AMBIENT ? Ia * Kd : 0;
 
     return half4(ambient + diffuse + specular);
 };

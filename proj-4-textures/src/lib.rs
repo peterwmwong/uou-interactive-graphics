@@ -498,7 +498,7 @@ impl RendererDelgate for Delegate {
                     18 /* 1 */ => Mode::HAS_NORMAL,
                     19 /* 2 */ => Mode::HAS_AMBIENT,
                     20 /* 3 */ => Mode::HAS_AMBIENT | Mode::HAS_DIFFUSE,
-                    21 /* 4 */ => Mode::HAS_DIFFUSE | Mode::HAS_SPECULAR,
+                    21 /* 4 */ => Mode::HAS_SPECULAR,
                     _ => self.mode
                 });
             }
