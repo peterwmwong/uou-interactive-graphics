@@ -28,7 +28,7 @@ impl f32x4x4 {
     }
 
     #[inline]
-    pub fn transpose(&self) -> Self {
+    pub const fn transpose(&self) -> Self {
         f32x4x4 {
             columns: [
                 self.row::<0>(),
@@ -98,7 +98,7 @@ impl f32x4x4 {
     }
 
     #[inline]
-    pub fn zero_translate(&self) -> Self {
+    pub const fn zero_translate(&self) -> Self {
         Self {
             columns: [
                 self.columns[0],
@@ -170,12 +170,12 @@ impl f32x4x4 {
     }
 
     #[inline]
-    pub fn row<const N: usize>(&self) -> f32x4 {
+    pub const fn row<const N: usize>(&self) -> f32x4 {
         f32x4::from_array([
-            self.columns[0][N],
-            self.columns[1][N],
-            self.columns[2][N],
-            self.columns[3][N],
+            self.columns[0].as_array()[N],
+            self.columns[1].as_array()[N],
+            self.columns[2].as_array()[N],
+            self.columns[3].as_array()[N],
         ])
     }
 
@@ -186,20 +186,20 @@ impl f32x4x4 {
     ///
     /// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
     #[inline]
-    pub fn metal_float3x3_upper_left(&self) -> [f32; 12] {
+    pub const fn metal_float3x3_upper_left(&self) -> [f32; 12] {
         // TODO: Create a metal_float3x3 type
         [
-            self.columns[0][0],
-            self.columns[0][1],
-            self.columns[0][2],
+            self.columns[0].as_array()[0],
+            self.columns[0].as_array()[1],
+            self.columns[0].as_array()[2],
             0.,
-            self.columns[1][0],
-            self.columns[1][1],
-            self.columns[1][2],
+            self.columns[1].as_array()[0],
+            self.columns[1].as_array()[1],
+            self.columns[1].as_array()[2],
             0.,
-            self.columns[2][0],
-            self.columns[2][1],
-            self.columns[2][2],
+            self.columns[2].as_array()[0],
+            self.columns[2].as_array()[1],
+            self.columns[2].as_array()[2],
             0.,
         ]
     }
@@ -211,7 +211,7 @@ impl f32x4x4 {
     ///
     /// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
     #[inline]
-    pub fn metal_float4x4(&self) -> &[f32x4; 4] {
+    pub const fn metal_float4x4(&self) -> &[f32x4; 4] {
         &self.columns
     }
 }
