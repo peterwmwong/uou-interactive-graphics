@@ -1,0 +1,12 @@
+- Handle loading textures w/o alpha channels
+- Handle many objects
+    - Each Object has...
+        - Material
+            - ambient/diffuse
+                - texture
+                - color
+            - specular (optional)
+                - texture
+                - color
+                - shiness
+            - FUTURE: Bump Mapping
