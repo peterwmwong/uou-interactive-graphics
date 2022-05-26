@@ -10,7 +10,7 @@
 #define DEF_CONSTANT
 #endif
 
-DEF_CONSTANT const float INITIAL_CAMERA_DISTANCE = 50.0;
+DEF_CONSTANT constexpr float INITIAL_CAMERA_DISTANCE = 50.0;
 
 enum VertexBufferIndex
 {

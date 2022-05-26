@@ -4,13 +4,20 @@
 #ifndef common_h
 #define common_h
 
+#ifdef __METAL_VERSION__
+#define DEF_CONSTANT constant
+#else
+#define DEF_CONSTANT
+#endif
+
+DEF_CONSTANT constexpr unsigned short NO_INDEX_VALUE = ~0;
+
 enum FC
 {
     FC_HAS_AMBIENT = 0,
     FC_HAS_DIFFUSE,
     FC_HAS_NORMAL,
     FC_HAS_SPECULAR,
-    FC_SPECULAR_SHINENESS,
 };
 
 enum VertexBufferIndex

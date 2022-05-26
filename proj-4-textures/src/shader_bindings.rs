@@ -392,11 +392,11 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
+pub const NO_INDEX_VALUE: ::std::os::raw::c_ushort = 65535;
 pub const FC_FC_HAS_AMBIENT: FC = 0;
 pub const FC_FC_HAS_DIFFUSE: FC = 1;
 pub const FC_FC_HAS_NORMAL: FC = 2;
 pub const FC_FC_HAS_SPECULAR: FC = 3;
-pub const FC_FC_SPECULAR_SHINENESS: FC = 4;
 pub type FC = ::std::os::raw::c_uint;
 pub const VertexBufferIndex_VertexBufferIndex_Indices: VertexBufferIndex = 0;
 pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;

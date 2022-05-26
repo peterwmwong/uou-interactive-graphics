@@ -3,7 +3,6 @@
 
 using namespace metal;
 
-constant float SPECULAR_SHINENESS [[function_constant(FC_SPECULAR_SHINENESS)]];
 constant bool  HAS_AMBIENT        [[function_constant(FC_HAS_AMBIENT)]];
 constant bool  HAS_DIFFUSE        [[function_constant(FC_HAS_DIFFUSE)]];
 constant bool  HAS_NORMAL         [[function_constant(FC_HAS_NORMAL)]];
@@ -100,7 +99,8 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const half4  Ks       = HAS_SPECULAR               ? tx_specular.sample(tx_sampler, tx_coord) : 0;  // Specular Material Color
 
     const half4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
-    const half   s        = SPECULAR_SHINENESS;
+    // TODO: Get this from data... somehow.
+    const half   s        = 777.7;
     const half4  specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
 
     const half   Ia       = 0.1; // Ambient Intensity

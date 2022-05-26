@@ -1,6 +1,10 @@
 - Handle loading textures w/o alpha channels
 - Handle many objects
     - Each Object has...
+        - Geometry
+            - vertices
+            - uv coordinates
+            - normals
         - Material
             - ambient/diffuse
                 - texture

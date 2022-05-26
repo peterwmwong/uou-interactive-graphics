@@ -1,17 +1,18 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
+mod model;
 mod shader_bindings;
 
 use bitflags::bitflags;
 use metal_app::metal::*;
 use metal_app::*;
+use model::Model;
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
-    path::{Path, PathBuf},
+    path::PathBuf,
     simd::{f32x2, f32x4},
 };
-use tobj::{LoadOptions, Mesh};
 
 bitflags! {
     struct Mode: u16 {
@@ -31,49 +32,6 @@ const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
-fn load_texture_from_png<T: AsRef<Path>>(label: &str, path_to_png: T, device: &Device) -> Texture {
-    use png::ColorType::*;
-    use std::fs::File;
-    let mut decoder = png::Decoder::new(File::open(path_to_png).unwrap());
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
-
-    let mut reader = decoder.read_info().unwrap();
-    let mut buf = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).unwrap();
-    let width = info.width as _;
-    let height = info.height as _;
-    assert_eq!(
-        info.color_type, Rgba,
-        "Unexpected PNG format, expected RGBA"
-    );
-
-    let desc = TextureDescriptor::new();
-
-    desc.set_width(width);
-    desc.set_height(height);
-    desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
-    desc.set_storage_mode(MTLStorageMode::Shared);
-    desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
-    desc.set_usage(MTLTextureUsage::ShaderRead);
-
-    let texture = device.new_texture(&desc);
-    texture.set_label(label);
-    texture.replace_region(
-        MTLRegion {
-            origin: MTLOrigin { x: 0, y: 0, z: 0 },
-            size: MTLSize {
-                width,
-                height,
-                depth: 1,
-            },
-        },
-        0,
-        buf.as_ptr() as _,
-        width * 4,
-    );
-    texture
-}
-
 struct Delegate {
     camera_distance: f32,
     camera_rotation: f32x2,
@@ -89,26 +47,17 @@ struct Delegate {
     matrix_projection_to_world: f32x4x4,
     matrix_world_to_camera: f32x4x4,
     matrix_world_to_projection: f32x4x4,
-    max_bound: f32,
     mode: Mode,
-    num_triangles: usize,
+    model: Model,
     render_light_pipeline_state: RenderPipelineState,
     render_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
-    specular_shineness: f32,
-    vertex_buffer_indices: Buffer,
-    vertex_buffer_normals: Buffer,
-    vertex_buffer_positions: Buffer,
-    vertex_buffer_texcoords: Buffer,
-    texture_specular: Texture,
-    texture_ambient_diffuse: Texture,
 }
 
 fn create_pipelines(
     device: &Device,
     library: &Library,
     mode: Mode,
-    specular_shineness: f32,
 ) -> (RenderPipelineState, RenderPipelineState) {
     let base_pipeline_desc = RenderPipelineDescriptor::new();
     base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
@@ -134,11 +83,6 @@ fn create_pipelines(
             index as _,
         );
     }
-    function_constants.set_constant_value_at_index(
-        (&specular_shineness as *const _) as _,
-        MTLDataType::Float,
-        FC_FC_SPECULAR_SHINENESS as _,
-    );
     (
         create_pipeline_with_constants(
             &device,
@@ -169,81 +113,10 @@ impl RendererDelgate for Delegate {
     fn new(device: Device, _command_queue: &CommandQueue) -> Self {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
         let teapot_file = assets_dir.join("teapot.obj");
-        let (mut models, materials) = tobj::load_obj(
-            teapot_file,
-            &LoadOptions {
-                single_index: true,
-                triangulate: true,
-                ignore_points: true,
-                ignore_lines: true,
-            },
-        )
-        .expect("Failed to load OBJ file");
 
-        let material = materials
-            .expect("Failed to load materials data")
-            .pop()
-            .expect("Failed to load material, expected atleast one material");
-        let specular_shineness = material.shininess;
-        let texture_ambient_diffuse = load_texture_from_png(
-            "Ambient/Diffuse",
-            assets_dir.join(material.ambient_texture),
-            &device,
-        );
-        let texture_specular = load_texture_from_png(
-            "Specular",
-            assets_dir.join(material.specular_texture),
-            &device,
-        );
-
-        let model = models
-            .pop()
-            .expect("Failed to parse model, expecting atleast one model (teapot)");
-        let Mesh {
-            positions,
-            indices,
-            normals,
-            texcoords,
-            ..
-        } = model.mesh;
-
-        debug_assert_eq!(
-            indices.len() % 3,
-            0,
-            "`mesh.indices` should contain triples (triangle vertices). Model should have been loaded with `triangulate`, guaranteeing all faces have 3 vertices."
-        );
-        debug_assert_eq!(
-            positions.len() % 3,
-            0,
-            "`mesh.positions` should contain triples (3D position)"
-        );
-        debug_assert_eq!(
-            normals.len(),
-            positions.len(),
-            "`mesh.normals` should contain triples (3D vector)"
-        );
-        debug_assert_eq!(
-            texcoords.len() % 2,
-            0,
-            "`mesh.texcoords` should contain pairs (UV coordinates)"
-        );
-        debug_assert_eq!(
-            texcoords.len() / 2,
-            positions.len() / 3,
-            "`mesh.texcoords` shoud contain UV coordinate for each position"
-        );
-
-        let (positions3, ..) = positions.as_chunks::<3>();
-        let mut mins = f32x4::splat(f32::MAX);
-        let mut maxs = f32x4::splat(f32::MIN);
-        for &[x, y, z] in positions3 {
-            let input = f32x4::from_array([x, y, z, 0.0]);
-            mins = mins.min(input);
-            maxs = maxs.max(input);
-        }
-        let max_bound = mins.reduce_min().abs().max(maxs.reduce_max());
+        let max_bounds: f32x4 = f32x4::default();
         let matrix_model_to_world = {
-            let height_of_teapot = maxs[2] - mins[2];
+            let height_of_teapot = max_bounds[1];
             f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
         };
 
@@ -253,7 +126,7 @@ impl RendererDelgate for Delegate {
 
         let mode = INITIAL_MODE;
         let (render_pipeline_state, render_light_pipeline_state) =
-            create_pipelines(&device, &library, mode, specular_shineness);
+            create_pipelines(&device, &library, mode);
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
@@ -273,27 +146,11 @@ impl RendererDelgate for Delegate {
             matrix_projection_to_world: f32x4x4::identity(),
             matrix_world_to_camera: f32x4x4::identity(),
             matrix_world_to_projection: f32x4x4::identity(),
-            max_bound,
             mode,
-            num_triangles: indices.len() / 3,
+            model: todo!(),
             render_pipeline_state,
             render_light_pipeline_state,
             screen_size: f32x2::default(),
-            specular_shineness,
-            texture_specular,
-            texture_ambient_diffuse,
-            vertex_buffer_indices: allocate_new_buffer_with_data(&device, "Indices", &indices),
-            vertex_buffer_normals: allocate_new_buffer_with_data(&device, "Normals", &normals),
-            vertex_buffer_positions: allocate_new_buffer_with_data(
-                &device,
-                "Positions",
-                &positions,
-            ),
-            vertex_buffer_texcoords: allocate_new_buffer_with_data(
-                &device,
-                "Texcoords",
-                &texcoords,
-            ),
             device,
         };
         delegate.update_light(delegate.light_xy_rotation);
