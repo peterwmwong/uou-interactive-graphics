@@ -16,7 +16,7 @@ const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
-const INITIAL_MODE: FragMode = FragMode_FragMode_AmbientDiffuseSpecular;
+const INITIAL_MODE: FragMode = FragMode::AmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
@@ -145,9 +145,9 @@ impl RendererDelgate for Delegate {
                 "Render Teapot Pipeline",
                 None,
                 &"main_vertex",
-                VertexBufferIndex_VertexBufferIndex_LENGTH,
+                VertexBufferIndex::LENGTH as _,
                 &"main_fragment",
-                FragBufferIndex_FragBufferIndex_LENGTH,
+                FragBufferIndex::LENGTH as _,
             ),
             render_light_pipeline_state: create_pipeline(
                 &device,
@@ -156,7 +156,7 @@ impl RendererDelgate for Delegate {
                 "Render Light Pipeline",
                 None,
                 &"light_vertex",
-                LightVertexBufferIndex_LightVertexBufferIndex_LENGTH,
+                LightVertexBufferIndex::LENGTH as _,
                 &"light_fragment",
                 0,
             ),
@@ -220,23 +220,23 @@ impl RendererDelgate for Delegate {
         // Render Teapot
         {
             encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Indices as _,
+                VertexBufferIndex::Indices as _,
                 Some(&self.vertex_buffer_indices),
                 0,
             );
             encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Positions as _,
+                VertexBufferIndex::Positions as _,
                 Some(&self.vertex_buffer_positions),
                 0,
             );
             encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Normals as _,
+                VertexBufferIndex::Normals as _,
                 Some(&self.vertex_buffer_normals),
                 0,
             );
             encode_vertex_bytes(
                 &encoder,
-                VertexBufferIndex_VertexBufferIndex_MatrixNormalToWorld,
+                VertexBufferIndex::MatrixNormalToWorld as _,
                 // IMPORTANT: In the shader, this maps to a float3x3. This works because...
                 // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
                 //   - Since normals are directions (not positions), translations are meaningless and
@@ -249,36 +249,32 @@ impl RendererDelgate for Delegate {
             );
             encode_vertex_bytes(
                 &encoder,
-                VertexBufferIndex_VertexBufferIndex_MatrixModelToProjection,
+                VertexBufferIndex::MatrixModelToProjection as _,
                 self.matrix_model_to_projection.metal_float4x4(),
             );
+            encode_fragment_bytes(&encoder, FragBufferIndex::FragMode as _, &self.mode);
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_FragMode,
-                &self.mode,
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex_FragBufferIndex_MatrixProjectionToWorld,
+                FragBufferIndex::MatrixProjectionToWorld as _,
                 self.matrix_projection_to_world.metal_float4x4(),
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_LightPosition,
+                FragBufferIndex::LightPosition as _,
                 // IMPORTANT: In the shader, this maps to a float3. This works because the float4
                 // and float3 have the same size and alignment.
                 &light_world_position,
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_CameraPosition,
+                FragBufferIndex::CameraPosition as _,
                 // IMPORTANT: In the shader, this maps to a float3. This works because the float4
                 // and float3 have the same size and alignment.
                 &float4::from(self.camera_world_position),
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_ScreenSize,
+                FragBufferIndex::ScreenSize as _,
                 &float2::from(self.screen_size),
             );
             encoder.draw_primitives_instanced(
@@ -294,23 +290,23 @@ impl RendererDelgate for Delegate {
             // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(
                 0,
-                &[None; VertexBufferIndex_VertexBufferIndex_LENGTH as _],
-                &[0; VertexBufferIndex_VertexBufferIndex_LENGTH as _],
+                &[None; VertexBufferIndex::LENGTH as _],
+                &[0; VertexBufferIndex::LENGTH as _],
             );
             encoder.set_fragment_buffers(
                 0,
-                &[None; FragBufferIndex_FragBufferIndex_LENGTH as _],
-                &[0; FragBufferIndex_FragBufferIndex_LENGTH as _],
+                &[None; FragBufferIndex::LENGTH as _],
+                &[0; FragBufferIndex::LENGTH as _],
             );
             encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             encode_vertex_bytes(
                 &encoder,
-                LightVertexBufferIndex_LightVertexBufferIndex_MatrixWorldToProjection,
+                LightVertexBufferIndex::MatrixWorldToProjection as _,
                 self.matrix_world_to_projection.metal_float4x4(),
             );
             encode_vertex_bytes(
                 &encoder,
-                LightVertexBufferIndex_LightVertexBufferIndex_LightPosition,
+                LightVertexBufferIndex::LightPosition as _,
                 &light_world_position,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
@@ -368,11 +364,11 @@ impl RendererDelgate for Delegate {
             }
             KeyDown { key_code, .. } => {
                 self.mode = match key_code {
-                    29 /* 0 */ => FragMode_FragMode_AmbientDiffuseSpecular,
-                    18 /* 1 */ => FragMode_FragMode_Normals,
-                    19 /* 2 */ => FragMode_FragMode_Ambient,
-                    20 /* 3 */ => FragMode_FragMode_AmbientDiffuse,
-                    21 /* 4 */ => FragMode_FragMode_Specular,
+                    29 /* 0 */ => FragMode::AmbientDiffuseSpecular,
+                    18 /* 1 */ => FragMode::Normals,
+                    19 /* 2 */ => FragMode::Ambient,
+                    20 /* 3 */ => FragMode::AmbientDiffuse,
+                    21 /* 4 */ => FragMode::Specular,
                     _ => self.mode
                 };
             }

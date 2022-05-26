@@ -392,31 +392,42 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
-pub const VertexBufferIndex_VertexBufferIndex_Indices: VertexBufferIndex = 0;
-pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;
-pub const VertexBufferIndex_VertexBufferIndex_Normals: VertexBufferIndex = 2;
-pub const VertexBufferIndex_VertexBufferIndex_MatrixModelToProjection: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndex_MatrixNormalToWorld: VertexBufferIndex = 4;
-pub const VertexBufferIndex_VertexBufferIndex_LENGTH: VertexBufferIndex = 5;
-pub type VertexBufferIndex = ::std::os::raw::c_uint;
-pub const FragMode_FragMode_Normals: FragMode = 0;
-pub const FragMode_FragMode_Ambient: FragMode = 1;
-pub const FragMode_FragMode_AmbientDiffuse: FragMode = 2;
-pub const FragMode_FragMode_Specular: FragMode = 3;
-pub const FragMode_FragMode_AmbientDiffuseSpecular: FragMode = 4;
-pub type FragMode = ::std::os::raw::c_uint;
-pub const FragBufferIndex_FragBufferIndex_FragMode: FragBufferIndex = 0;
-pub const FragBufferIndex_FragBufferIndex_MatrixProjectionToWorld: FragBufferIndex = 1;
-pub const FragBufferIndex_FragBufferIndex_ScreenSize: FragBufferIndex = 2;
-pub const FragBufferIndex_FragBufferIndex_LightPosition: FragBufferIndex = 3;
-pub const FragBufferIndex_FragBufferIndex_CameraPosition: FragBufferIndex = 4;
-pub const FragBufferIndex_FragBufferIndex_LENGTH: FragBufferIndex = 5;
-pub type FragBufferIndex = ::std::os::raw::c_uint;
-pub const LightVertexBufferIndex_LightVertexBufferIndex_MatrixWorldToProjection:
-    LightVertexBufferIndex = 0;
-pub const LightVertexBufferIndex_LightVertexBufferIndex_LightPosition: LightVertexBufferIndex = 1;
-pub const LightVertexBufferIndex_LightVertexBufferIndex_LENGTH: LightVertexBufferIndex = 2;
-pub type LightVertexBufferIndex = ::std::os::raw::c_uint;
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum VertexBufferIndex {
+    Indices = 0,
+    Positions = 1,
+    Normals = 2,
+    MatrixModelToProjection = 3,
+    MatrixNormalToWorld = 4,
+    LENGTH = 5,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FragMode {
+    Normals = 0,
+    Ambient = 1,
+    AmbientDiffuse = 2,
+    Specular = 3,
+    AmbientDiffuseSpecular = 4,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FragBufferIndex {
+    FragMode = 0,
+    MatrixProjectionToWorld = 1,
+    ScreenSize = 2,
+    LightPosition = 3,
+    CameraPosition = 4,
+    LENGTH = 5,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum LightVertexBufferIndex {
+    MatrixWorldToProjection = 0,
+    LightPosition = 1,
+    LENGTH = 2,
+}
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.

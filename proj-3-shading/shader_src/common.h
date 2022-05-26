@@ -4,40 +4,40 @@
 #ifndef common_h
 #define common_h
 
-enum VertexBufferIndex
+enum struct VertexBufferIndex
 {
-    VertexBufferIndex_Indices = 0,
-    VertexBufferIndex_Positions,
-    VertexBufferIndex_Normals,
-    VertexBufferIndex_MatrixModelToProjection,
-    VertexBufferIndex_MatrixNormalToWorld,
-    VertexBufferIndex_LENGTH
+    Indices = 0,
+    Positions,
+    Normals,
+    MatrixModelToProjection,
+    MatrixNormalToWorld,
+    LENGTH
 };
 
-enum FragMode
+enum struct FragMode
 {
-    FragMode_Normals = 0,
-    FragMode_Ambient,
-    FragMode_AmbientDiffuse,
-    FragMode_Specular,
-    FragMode_AmbientDiffuseSpecular,
+    Normals = 0,
+    Ambient,
+    AmbientDiffuse,
+    Specular,
+    AmbientDiffuseSpecular,
 };
 
-enum FragBufferIndex
+enum struct FragBufferIndex
 {
-    FragBufferIndex_FragMode = 0,
-    FragBufferIndex_MatrixProjectionToWorld,
-    FragBufferIndex_ScreenSize,
-    FragBufferIndex_LightPosition,
-    FragBufferIndex_CameraPosition,
-    FragBufferIndex_LENGTH
+    FragMode = 0,
+    MatrixProjectionToWorld,
+    ScreenSize,
+    LightPosition,
+    CameraPosition,
+    LENGTH,
 };
 
-enum LightVertexBufferIndex
+enum struct LightVertexBufferIndex
 {
-    LightVertexBufferIndex_MatrixWorldToProjection = 0,
-    LightVertexBufferIndex_LightPosition,
-    LightVertexBufferIndex_LENGTH,
+    MatrixWorldToProjection = 0,
+    LightPosition,
+    LENGTH,
 };
 
 #endif

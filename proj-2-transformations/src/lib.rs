@@ -96,7 +96,7 @@ impl RendererDelgate for Delegate {
                     "Render Pipeline",
                     None,
                     &"main_vertex",
-                    VertexBufferIndex_VertexBufferIndex_LENGTH,
+                    VertexBufferIndex::LENGTH as _,
                     "main_fragment",
                     0,
                 )
@@ -130,32 +130,32 @@ impl RendererDelgate for Delegate {
         });
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndex_MaxPositionValue,
+            VertexBufferIndex::MaxPositionValue as _,
             &self.mins_maxs,
         );
         encoder.set_vertex_buffer(
-            VertexBufferIndex_VertexBufferIndex_Positions as _,
+            VertexBufferIndex::Positions as _,
             Some(&self.vertex_buffer_positions),
             0,
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndex_CameraRotation,
+            VertexBufferIndex::CameraRotation as _,
             &(self.camera_rotation + self.camera_rotation_offset),
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndex_CameraDistance,
+            VertexBufferIndex::CameraDistance as _,
             &(self.camera_distance + self.camera_distance_offset),
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndex_ScreenSize,
+            VertexBufferIndex::ScreenSize as _,
             &self.screen_size,
         );
         encode_vertex_bytes(
             &encoder,
-            VertexBufferIndex_VertexBufferIndex_UsePerspective,
+            VertexBufferIndex::UsePerspective as _,
             &self.use_perspective,
         );
         encoder.set_render_pipeline_state(&self.render_pipeline_state);

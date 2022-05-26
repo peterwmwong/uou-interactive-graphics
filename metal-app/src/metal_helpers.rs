@@ -33,28 +33,28 @@ pub fn allocate_new_buffer_with_data<T: Sized>(
 }
 
 #[inline]
-pub fn encode_vertex_bytes<I: Into<u64>, T: Sized + Copy + Clone>(
+pub fn encode_vertex_bytes<T: Sized + Copy + Clone>(
     encoder: &RenderCommandEncoderRef,
-    buffer_index: I,
+    buffer_index: u64,
     v: &T,
 ) {
     let ptr: *const T = v;
     encoder.set_vertex_bytes(
-        buffer_index.into(),
+        buffer_index,
         std::mem::size_of::<T>() as _,
         ptr as *const c_void,
     );
 }
 
 #[inline]
-pub fn encode_fragment_bytes<I: Into<u64>, T: Sized + Copy + Clone>(
+pub fn encode_fragment_bytes<T: Sized + Copy + Clone>(
     encoder: &RenderCommandEncoderRef,
-    buffer_index: I,
+    buffer_index: u64,
     v: &T,
 ) {
     let ptr: *const T = v;
     encoder.set_fragment_bytes(
-        buffer_index.into(),
+        buffer_index,
         std::mem::size_of::<T>() as _,
         ptr as *const c_void,
     );

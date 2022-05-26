@@ -393,14 +393,17 @@ fn bindgen_test_layout_packed_float4() {
     );
 }
 pub const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
-pub const VertexBufferIndex_VertexBufferIndex_MaxPositionValue: VertexBufferIndex = 0;
-pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;
-pub const VertexBufferIndex_VertexBufferIndex_ScreenSize: VertexBufferIndex = 2;
-pub const VertexBufferIndex_VertexBufferIndex_CameraRotation: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndex_CameraDistance: VertexBufferIndex = 4;
-pub const VertexBufferIndex_VertexBufferIndex_UsePerspective: VertexBufferIndex = 5;
-pub const VertexBufferIndex_VertexBufferIndex_LENGTH: VertexBufferIndex = 6;
-pub type VertexBufferIndex = ::std::os::raw::c_uint;
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum VertexBufferIndex {
+    MaxPositionValue = 0,
+    Positions = 1,
+    ScreenSize = 2,
+    CameraRotation = 3,
+    CameraDistance = 4,
+    UsePerspective = 5,
+    LENGTH = 6,
+}
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.

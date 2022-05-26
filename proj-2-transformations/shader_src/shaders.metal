@@ -58,12 +58,12 @@ struct VertexOut
 // a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
 main_vertex(         uint            vertex_id        [[instance_id]],
-            constant packed_float4 * mins_maxs        [[buffer(VertexBufferIndex_MaxPositionValue)]],
-            constant packed_float3 * positions        [[buffer(VertexBufferIndex_Positions)]],
-            constant float2        & screen_size      [[buffer(VertexBufferIndex_ScreenSize)]],
-            constant float2        & camera_rotation  [[buffer(VertexBufferIndex_CameraRotation)]],
-            constant float         & camera_distance  [[buffer(VertexBufferIndex_CameraDistance)]],
-            constant bool          & use_perspective  [[buffer(VertexBufferIndex_UsePerspective)]])
+            constant packed_float4 * mins_maxs        [[buffer(VertexBufferIndex::MaxPositionValue)]],
+            constant packed_float3 * positions        [[buffer(VertexBufferIndex::Positions)]],
+            constant float2        & screen_size      [[buffer(VertexBufferIndex::ScreenSize)]],
+            constant float2        & camera_rotation  [[buffer(VertexBufferIndex::CameraRotation)]],
+            constant float         & camera_distance  [[buffer(VertexBufferIndex::CameraDistance)]],
+            constant bool          & use_perspective  [[buffer(VertexBufferIndex::UsePerspective)]])
 {
     const float4 model_position = float4(positions[vertex_id], 1.0); // Make homogenous coordinate
     const float4 mins           = mins_maxs[0];

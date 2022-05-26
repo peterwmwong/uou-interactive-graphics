@@ -70,6 +70,9 @@ fn generate_rust_shader_bindings() {
             .clang_arg("-xc++")
             .clang_arg("-std=c++17")
             .derive_eq(true)
+            .default_enum_style(bindgen::EnumVariation::Rust {
+                non_exhaustive: false,
+            })
             .derive_debug(cfg!(debug_assertions))
             .parse_callbacks(Box::new(bindgen::CargoCallbacks))
             .generate()

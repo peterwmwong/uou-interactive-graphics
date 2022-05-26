@@ -12,15 +12,15 @@
 
 DEF_CONSTANT constexpr float INITIAL_CAMERA_DISTANCE = 50.0;
 
-enum VertexBufferIndex
+enum struct VertexBufferIndex
 {
-    VertexBufferIndex_MaxPositionValue = 0,
-    VertexBufferIndex_Positions,
-    VertexBufferIndex_ScreenSize,
-    VertexBufferIndex_CameraRotation,
-    VertexBufferIndex_CameraDistance,
-    VertexBufferIndex_UsePerspective,
-    VertexBufferIndex_LENGTH,
+    MaxPositionValue = 0,
+    Positions,
+    ScreenSize,
+    CameraRotation,
+    CameraDistance,
+    UsePerspective,
+    LENGTH,
 };
 
 #endif

@@ -6,6 +6,7 @@ pub fn main() {
     let rust_bindgen_only_vector_types_header =
         String::from_utf8_lossy(include_bytes!("src/rust-bindgen-only-vector-types.h"));
 
+    // TODO: Figure out a way to keep this in-sync with lib.rs
     bindgen::Builder::default()
         .header_contents(
             "rust-bindgen-only-vector-types.h",
@@ -13,6 +14,9 @@ pub fn main() {
         )
         .clang_arg("-xc++")
         .clang_arg("-std=c++17")
+        .default_enum_style(bindgen::EnumVariation::Rust {
+            non_exhaustive: false,
+        })
         .derive_eq(true)
         .derive_debug(cfg!(debug_assertions))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
