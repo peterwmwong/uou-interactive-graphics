@@ -15,11 +15,11 @@ use std::{
 };
 
 bitflags! {
-    struct Mode: u16 {
-        const HAS_AMBIENT = 1 << FC_FC_HAS_AMBIENT;
-        const HAS_DIFFUSE = 1 << FC_FC_HAS_DIFFUSE;
-        const HAS_NORMAL = 1 << FC_FC_HAS_NORMAL;
-        const HAS_SPECULAR = 1 << FC_FC_HAS_SPECULAR;
+    struct Mode: u8 {
+        const HAS_AMBIENT = 1 << FC::HAS_AMBIENT as u8;
+        const HAS_DIFFUSE = 1 << FC::HAS_DIFFUSE as u8;
+        const HAS_NORMAL = 1 << FC::HAS_NORMAL as u8;
+        const HAS_SPECULAR = 1 << FC::HAS_SPECULAR as u8;
         const DEFAULT = Self::HAS_AMBIENT.bits | Self::HAS_DIFFUSE.bits | Self::HAS_SPECULAR.bits;
     }
 }
@@ -72,10 +72,10 @@ fn create_pipelines(
 
     let function_constants = FunctionConstantValues::new();
     for index in [
-        FC_FC_HAS_AMBIENT,
-        FC_FC_HAS_DIFFUSE,
-        FC_FC_HAS_SPECULAR,
-        FC_FC_HAS_NORMAL,
+        FC::HAS_AMBIENT as usize,
+        FC::HAS_DIFFUSE as usize,
+        FC::HAS_SPECULAR as usize,
+        FC::HAS_NORMAL as usize,
     ] {
         function_constants.set_constant_value_at_index(
             (&mode.contains(Mode::from_bits_truncate(1 << index)) as *const _) as _,
@@ -91,9 +91,9 @@ fn create_pipelines(
             "Teapot",
             Some(&function_constants),
             &"main_vertex",
-            VertexBufferIndex_VertexBufferIndex_LENGTH,
+            VertexBufferIndex::LENGTH as _,
             &"main_fragment",
-            FragBufferIndex_FragBufferIndex_LENGTH,
+            FragBufferIndex::LENGTH as _,
         ),
         create_pipeline_with_constants(
             &device,
@@ -102,7 +102,7 @@ fn create_pipelines(
             "Light",
             Some(&function_constants),
             &"light_vertex",
-            LightVertexBufferIndex_LightVertexBufferIndex_LENGTH,
+            LightVertexBufferIndex::LENGTH as _,
             &"light_fragment",
             0,
         ),
@@ -111,22 +111,26 @@ fn create_pipelines(
 
 impl RendererDelgate for Delegate {
     fn new(device: Device, _command_queue: &CommandQueue) -> Self {
-        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
-        let teapot_file = assets_dir.join("teapot.obj");
-
-        let max_bounds: f32x4 = f32x4::default();
-        let matrix_model_to_world = {
-            let height_of_teapot = max_bounds[1];
-            f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
-        };
-
+        let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets")
+            .join("teapot.obj");
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
-
         let mode = INITIAL_MODE;
         let (render_pipeline_state, render_light_pipeline_state) =
             create_pipelines(&device, &library, mode);
+        // TODO: We should update create_pipelines and create_pipeline_with_constants to return the
+        // the functions, so it can be used here.
+        let vertex_fn: Function = todo!();
+        let frag_fn: Function = todo!();
+        let model = Model::from_file(
+            teapot_file,
+            &device,
+            &vertex_fn.new_argument_encoder(VertexBufferIndex::ObjectGeometry as _),
+            &frag_fn.new_argument_encoder(FragBufferIndex::Material as _),
+        );
+
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
@@ -142,12 +146,12 @@ impl RendererDelgate for Delegate {
             light_world_position: f32x4::default(),
             light_xy_rotation: INITIAL_LIGHT_ROTATION,
             matrix_model_to_projection: f32x4x4::identity(),
-            matrix_model_to_world,
+            matrix_model_to_world: f32x4x4::identity(),
             matrix_projection_to_world: f32x4x4::identity(),
             matrix_world_to_camera: f32x4x4::identity(),
             matrix_world_to_projection: f32x4x4::identity(),
             mode,
-            model: todo!(),
+            model,
             render_pipeline_state,
             render_light_pipeline_state,
             screen_size: f32x2::default(),
@@ -192,31 +196,17 @@ impl RendererDelgate for Delegate {
 
         let light_world_position = float4::from(self.light_world_position);
 
-        // Render Teapot
-        {
+        // Render Model
+        for (i, model_object) in self.model.objects.iter().enumerate() {
+            encoder.push_debug_group(&model_object.name);
             encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Indices as _,
-                Some(&self.vertex_buffer_indices),
-                0,
-            );
-            encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Positions as _,
-                Some(&self.vertex_buffer_positions),
-                0,
-            );
-            encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Normals as _,
-                Some(&self.vertex_buffer_normals),
-                0,
-            );
-            encoder.set_vertex_buffer(
-                VertexBufferIndex_VertexBufferIndex_Texcoords as _,
-                Some(&self.vertex_buffer_texcoords),
-                0,
+                VertexBufferIndex::ObjectGeometry as _,
+                Some(&self.model.object_geometries_buffer),
+                (i as u64) * self.model.object_geometry_arg_encoded_length,
             );
             encode_vertex_bytes(
                 &encoder,
-                VertexBufferIndex_VertexBufferIndex_MatrixNormalToWorld,
+                VertexBufferIndex::MatrixNormalToWorld as _,
                 // IMPORTANT: In the shader, this maps to a float3x3. This works because...
                 // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
                 //   - Since normals are directions (not positions), translations are meaningless and
@@ -229,47 +219,45 @@ impl RendererDelgate for Delegate {
             );
             encode_vertex_bytes(
                 &encoder,
-                VertexBufferIndex_VertexBufferIndex_MatrixModelToProjection,
+                VertexBufferIndex::MatrixModelToProjection as _,
                 self.matrix_model_to_projection.metal_float4x4(),
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_MatrixProjectionToWorld,
+                FragBufferIndex::MatrixProjectionToWorld as _,
                 self.matrix_projection_to_world.metal_float4x4(),
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_ScreenSize,
+                FragBufferIndex::ScreenSize as _,
                 &float2::from(self.screen_size),
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_LightPosition,
+                FragBufferIndex::LightPosition as _,
                 // IMPORTANT: In the shader, this maps to a float3. This works because the float4
                 // and float3 have the same size and alignment.
                 &light_world_position,
             );
             encode_fragment_bytes(
                 &encoder,
-                FragBufferIndex_FragBufferIndex_CameraPosition,
+                FragBufferIndex::CameraPosition as _,
                 // IMPORTANT: In the shader, this maps to a float3. This works because the float4
                 // and float3 have the same size and alignment.
                 &float4::from(self.camera_world_position),
             );
-            encoder.set_fragment_texture(
-                FragBufferIndex_FragBufferIndex_AmbientTexture as _,
-                Some(&self.texture_ambient_diffuse),
-            );
-            encoder.set_fragment_texture(
-                FragBufferIndex_FragBufferIndex_Specular as _,
-                Some(&self.texture_specular),
+            encoder.set_fragment_buffer(
+                FragBufferIndex::Material as _,
+                Some(&self.model.materials_buffer),
+                (i as u64) * self.model.material_arg_encoded_length,
             );
             encoder.draw_primitives_instanced(
                 MTLPrimitiveType::Triangle,
                 0,
                 3,
-                self.num_triangles as _,
+                model_object.num_triangles as _,
             );
+            encoder.pop_debug_group();
         }
 
         // Render Light
@@ -277,23 +265,23 @@ impl RendererDelgate for Delegate {
             // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(
                 0,
-                &[None; VertexBufferIndex_VertexBufferIndex_LENGTH as _],
-                &[0; VertexBufferIndex_VertexBufferIndex_LENGTH as _],
+                &[None; VertexBufferIndex::LENGTH as _],
+                &[0; VertexBufferIndex::LENGTH as _],
             );
             encoder.set_fragment_buffers(
                 0,
-                &[None; FragBufferIndex_FragBufferIndex_LENGTH as _],
-                &[0; FragBufferIndex_FragBufferIndex_LENGTH as _],
+                &[None; FragBufferIndex::LENGTH as _],
+                &[0; FragBufferIndex::LENGTH as _],
             );
             encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             encode_vertex_bytes(
                 &encoder,
-                LightVertexBufferIndex_LightVertexBufferIndex_MatrixWorldToProjection,
+                LightVertexBufferIndex::MatrixWorldToProjection as _,
                 self.matrix_world_to_projection.metal_float4x4(),
             );
             encode_vertex_bytes(
                 &encoder,
-                LightVertexBufferIndex_LightVertexBufferIndex_LightPosition,
+                LightVertexBufferIndex::LightPosition as _,
                 &light_world_position,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
@@ -373,7 +361,7 @@ impl Delegate {
         if mode != self.mode {
             self.mode = mode;
             (self.render_pipeline_state, self.render_light_pipeline_state) =
-                create_pipelines(&self.device, &self.library, mode, self.specular_shineness);
+                create_pipelines(&self.device, &self.library, mode);
         }
     }
 
@@ -399,7 +387,9 @@ impl Delegate {
             [0., 0., n + f, -n * f],
             [0., 0., 1., 0.],
         );
-        let w = 2. * n * self.max_bound / INITIAL_CAMERA_DISTANCE;
+        // TODO: This should really be more sophisticated, handle tall/skinny and short/fat models
+        let max_width: f32 = todo!();
+        let w = 2. * n * max_width / INITIAL_CAMERA_DISTANCE;
         let h = aspect_ratio * w;
         let orthographic_matrix = {
             f32x4x4::new(

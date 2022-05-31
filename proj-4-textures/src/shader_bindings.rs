@@ -392,33 +392,56 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
-pub const NO_INDEX_VALUE: ::std::os::raw::c_ushort = 65535;
-pub const FC_FC_HAS_AMBIENT: FC = 0;
-pub const FC_FC_HAS_DIFFUSE: FC = 1;
-pub const FC_FC_HAS_NORMAL: FC = 2;
-pub const FC_FC_HAS_SPECULAR: FC = 3;
-pub type FC = ::std::os::raw::c_uint;
-pub const VertexBufferIndex_VertexBufferIndex_Indices: VertexBufferIndex = 0;
-pub const VertexBufferIndex_VertexBufferIndex_Positions: VertexBufferIndex = 1;
-pub const VertexBufferIndex_VertexBufferIndex_Normals: VertexBufferIndex = 2;
-pub const VertexBufferIndex_VertexBufferIndex_Texcoords: VertexBufferIndex = 3;
-pub const VertexBufferIndex_VertexBufferIndex_MatrixModelToProjection: VertexBufferIndex = 4;
-pub const VertexBufferIndex_VertexBufferIndex_MatrixNormalToWorld: VertexBufferIndex = 5;
-pub const VertexBufferIndex_VertexBufferIndex_LENGTH: VertexBufferIndex = 6;
-pub type VertexBufferIndex = ::std::os::raw::c_uint;
-pub const FragBufferIndex_FragBufferIndex_MatrixProjectionToWorld: FragBufferIndex = 0;
-pub const FragBufferIndex_FragBufferIndex_ScreenSize: FragBufferIndex = 1;
-pub const FragBufferIndex_FragBufferIndex_LightPosition: FragBufferIndex = 2;
-pub const FragBufferIndex_FragBufferIndex_CameraPosition: FragBufferIndex = 3;
-pub const FragBufferIndex_FragBufferIndex_AmbientTexture: FragBufferIndex = 4;
-pub const FragBufferIndex_FragBufferIndex_Specular: FragBufferIndex = 5;
-pub const FragBufferIndex_FragBufferIndex_LENGTH: FragBufferIndex = 6;
-pub type FragBufferIndex = ::std::os::raw::c_uint;
-pub const LightVertexBufferIndex_LightVertexBufferIndex_MatrixWorldToProjection:
-    LightVertexBufferIndex = 0;
-pub const LightVertexBufferIndex_LightVertexBufferIndex_LightPosition: LightVertexBufferIndex = 1;
-pub const LightVertexBufferIndex_LightVertexBufferIndex_LENGTH: LightVertexBufferIndex = 2;
-pub type LightVertexBufferIndex = ::std::os::raw::c_uint;
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FC {
+    HAS_AMBIENT = 0,
+    HAS_DIFFUSE = 1,
+    HAS_NORMAL = 2,
+    HAS_SPECULAR = 3,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum ObjectGeometryID {
+    indices = 0,
+    positions = 1,
+    normals = 2,
+    tx_coords = 3,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum MaterialID {
+    diffuse_color = 0,
+    specular_color = 1,
+    diffuse_texture = 2,
+    specular_texture = 3,
+    specular_shineness = 4,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum VertexBufferIndex {
+    ObjectGeometry = 0,
+    MatrixModelToProjection = 1,
+    MatrixNormalToWorld = 2,
+    LENGTH = 3,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FragBufferIndex {
+    MatrixProjectionToWorld = 0,
+    ScreenSize = 1,
+    LightPosition = 2,
+    CameraPosition = 3,
+    Material = 4,
+    LENGTH = 5,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum LightVertexBufferIndex {
+    MatrixWorldToProjection = 0,
+    LightPosition = 1,
+    LENGTH = 2,
+}
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.

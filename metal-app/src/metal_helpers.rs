@@ -5,17 +5,17 @@ use objc::runtime::Object;
 use std::ffi::{c_void, CStr};
 
 #[inline]
-pub fn allocate_new_buffer(
+pub fn allocate_new_buffer<T: Sized>(
     device: &DeviceRef,
     label: &'static str,
     bytes: usize,
-) -> (*mut c_void, Buffer) {
+) -> (*mut T, Buffer) {
     let buf = device.new_buffer(
         bytes as u64,
         MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
     );
     buf.set_label(label);
-    (buf.contents(), buf)
+    (buf.contents() as *mut T, buf)
 }
 
 #[inline]
@@ -25,9 +25,9 @@ pub fn allocate_new_buffer_with_data<T: Sized>(
     data: &[T],
 ) -> Buffer {
     let (contents, buffer) =
-        allocate_new_buffer(&device, label, std::mem::size_of::<T>() * data.len());
+        allocate_new_buffer::<T>(&device, label, std::mem::size_of::<T>() * data.len());
     unsafe {
-        std::ptr::copy_nonoverlapping(data.as_ptr(), contents as *mut T, data.len());
+        std::ptr::copy_nonoverlapping(data.as_ptr(), contents, data.len());
     }
     buffer
 }

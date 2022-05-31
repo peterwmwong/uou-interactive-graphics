@@ -1,4 +1,4 @@
-// Header containing types and enum constants shared between Metal shaders and Rust source code
+// Header containing types and enum struct constants shared between Metal shaders and Rust source code
 //
 // These are used to generate Rust types in the `build.rs` build script.
 #ifndef common_h
@@ -10,43 +10,54 @@
 #define DEF_CONSTANT
 #endif
 
-DEF_CONSTANT constexpr unsigned short NO_INDEX_VALUE = ~0;
-
-enum FC
+enum struct FC
 {
-    FC_HAS_AMBIENT = 0,
-    FC_HAS_DIFFUSE,
-    FC_HAS_NORMAL,
-    FC_HAS_SPECULAR,
+    HAS_AMBIENT = 0,
+    HAS_DIFFUSE,
+    HAS_NORMAL,
+    HAS_SPECULAR,
 };
 
-enum VertexBufferIndex
+enum struct ObjectGeometryID
 {
-    VertexBufferIndex_Indices = 0,
-    VertexBufferIndex_Positions,
-    VertexBufferIndex_Normals,
-    VertexBufferIndex_Texcoords,
-    VertexBufferIndex_MatrixModelToProjection,
-    VertexBufferIndex_MatrixNormalToWorld,
-    VertexBufferIndex_LENGTH
+    indices = 0,
+    positions,
+    normals,
+    tx_coords,
 };
 
-enum FragBufferIndex
+enum struct MaterialID
 {
-    FragBufferIndex_MatrixProjectionToWorld = 0,
-    FragBufferIndex_ScreenSize,
-    FragBufferIndex_LightPosition,
-    FragBufferIndex_CameraPosition,
-    FragBufferIndex_AmbientTexture,
-    FragBufferIndex_Specular,
-    FragBufferIndex_LENGTH
+    diffuse_color = 0,
+    specular_color,
+    diffuse_texture,
+    specular_texture,
+    specular_shineness,
 };
 
-enum LightVertexBufferIndex
+enum struct VertexBufferIndex
 {
-    LightVertexBufferIndex_MatrixWorldToProjection = 0,
-    LightVertexBufferIndex_LightPosition,
-    LightVertexBufferIndex_LENGTH,
+    ObjectGeometry = 0,
+    MatrixModelToProjection,
+    MatrixNormalToWorld,
+    LENGTH
+};
+
+enum struct FragBufferIndex
+{
+    MatrixProjectionToWorld = 0,
+    ScreenSize,
+    LightPosition,
+    CameraPosition,
+    Material,
+    LENGTH
+};
+
+enum struct LightVertexBufferIndex
+{
+    MatrixWorldToProjection = 0,
+    LightPosition,
+    LENGTH,
 };
 
 #endif

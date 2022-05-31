@@ -1,27 +1,33 @@
-use metal_app::{f32x4x4, metal::*};
-use std::{
-    path::{Path, PathBuf},
-    simd::f32x4,
-};
-use tobj::{LoadOptions, Mesh};
+use crate::shader_bindings::{float4, MaterialID};
+use metal_app::{allocate_new_buffer, metal::*};
+use std::path::{Path, PathBuf};
+use tobj::LoadOptions;
 
-pub enum AmbientDiffuseMaterial {
-    Color(f32x4),
-    Texture(Texture),
-}
-
-pub enum SpecularMaterial {
-    Color { shineness: f32, color: f32x4 },
-    Texture { shineness: f32, texture: Texture },
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// - Rethink how this will actually be used and name/structure accordingly
+// - In the renderer, really we need this for 2 things
+//      1. Setup Model-to-World Matrix, translate the center of the model to (0,0,0)
+//      2. Setup the Orthographic projection matrix, width of the near field
+pub struct MaxBounds {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 pub struct ModelObject {
-    ambient_diffuse: AmbientDiffuseMaterial,
-    specular: SpecularMaterial,
+    pub name: String,
+    pub num_triangles: usize,
 }
 
 pub struct Model {
-    objects: Vec<ModelObject>,
+    pub max_bounds: MaxBounds,
+    pub objects: Vec<ModelObject>,
+    pub object_geometries_buffer: Buffer,
+    pub object_geometry_arg_encoded_length: u64,
+    pub materials_buffer: Buffer,
+    pub material_arg_encoded_length: u64,
 }
 
 fn load_texture_from_png<T: AsRef<Path>>(label: &str, path_to_png: T, device: &Device) -> Texture {
@@ -67,14 +73,169 @@ fn load_texture_from_png<T: AsRef<Path>>(label: &str, path_to_png: T, device: &D
     texture
 }
 
+fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T) -> (isize, *mut T) {
+    unsafe {
+        std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
+        let new_contents = dst.add(src.len());
+        let offset = new_contents.offset_from(dst);
+        (offset, new_contents)
+    }
+}
+
+const fn byte_len<T: Sized>(slice: &[T]) -> usize {
+    slice.len() * std::mem::size_of::<T>()
+}
+
+fn load_object_geometries(
+    objs: &[tobj::Model],
+    device: &Device,
+    obj_geo_encoder: &ArgumentEncoder,
+) -> (Vec<ModelObject>, Buffer, u64, MaxBounds) {
+    let obj_geo_arg_encoded_length = obj_geo_encoder.encoded_length();
+    let length = obj_geo_arg_encoded_length * objs.len() as u64;
+    let buf = device.new_buffer(
+        length,
+        MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
+    );
+
+    // Create a shared buffer (shared between all objects) for each ObjectGeometry member.
+    // Calculate the size of each buffer...
+    let mut indices_buf_length = 0;
+    let mut positions_buf_length = 0;
+    let mut normals_buf_length = 0;
+    let mut texcoords_buf_length = 0;
+    let mut objects: Vec<ModelObject> = vec![];
+    for tobj::Model { mesh, name } in objs {
+        assert!(
+            (mesh.positions.len() % 3) == 0 &&
+            (mesh.normals.len() % 3) == 0 &&
+            (mesh.texcoords.len() % 2) == 0,
+            "Unexpected number of positions, normals, or texcoords. Expected each to be triples, triples, and pairs (respectively)"
+        );
+        let num_triangles = mesh.positions.len() / 3;
+        assert!(
+            num_triangles == mesh.indices.len() &&
+            (mesh.normals.len() / 3) == mesh.indices.len() &&
+            (mesh.texcoords.len() / 2) == mesh.indices.len(),
+            "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
+        );
+        indices_buf_length += byte_len(&mesh.indices);
+        positions_buf_length += byte_len(&mesh.positions);
+        normals_buf_length += byte_len(&mesh.normals);
+        texcoords_buf_length += byte_len(&mesh.texcoords);
+        objects.push(ModelObject {
+            name: name.to_owned(),
+            num_triangles,
+        });
+    }
+
+    // Allocate buffers...
+    let mut indices_offset = 0;
+    let (mut indices_contents, indices_buf) =
+        allocate_new_buffer::<u32>(device, "indices", indices_buf_length as _);
+    let mut positions_offset = 0;
+    let (mut positions_contents, positions_buf) =
+        allocate_new_buffer::<f32>(device, "positions", positions_buf_length as _);
+    let mut normals_offset = 0;
+    let (mut normals_contents, normals_buf) =
+        allocate_new_buffer::<f32>(device, "normals", normals_buf_length as _);
+    let mut texcoords_offset = 0;
+    let (mut texcoords_contents, texcoords_buf) =
+        allocate_new_buffer::<f32>(device, "texcoords", texcoords_buf_length as _);
+
+    let buffers: [&BufferRef; 4] = [&indices_buf, &positions_buf, &normals_buf, &texcoords_buf];
+    for (i, tobj::Model { mesh, .. }) in objs.iter().enumerate() {
+        obj_geo_encoder.set_argument_buffer_to_element(i as _, &buf, 0);
+        // TODO: Figure out a way of asserting the index -> buffer mapping.
+        obj_geo_encoder.set_buffers(
+            0,
+            &buffers,
+            &[
+                indices_offset as _,
+                positions_offset as _,
+                normals_offset as _,
+                texcoords_offset as _,
+            ],
+        );
+        (indices_offset, indices_contents) = copy_into_buffer(&mesh.indices, indices_contents);
+        (positions_offset, positions_contents) =
+            copy_into_buffer(&mesh.positions, positions_contents);
+        (normals_offset, normals_contents) = copy_into_buffer(&mesh.normals, normals_contents);
+        (texcoords_offset, texcoords_contents) =
+            copy_into_buffer(&mesh.texcoords, texcoords_contents);
+    }
+
+    (
+        objects,
+        buf,
+        obj_geo_arg_encoded_length,
+        MaxBounds {
+            x: todo!(),
+            y: todo!(),
+            z: todo!(),
+        },
+    )
+}
+
+fn load_materials(
+    mats: &[tobj::Material],
+    material_file_dir: PathBuf,
+    device: &Device,
+    mat_encoder: &ArgumentEncoder,
+) -> Buffer {
+    let mat_arg_encoded_length = mat_encoder.encoded_length();
+    let length = mat_arg_encoded_length * mats.len() as u64;
+    let buf = device.new_buffer(
+        length,
+        MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
+    );
+
+    for (i, mat) in mats.iter().enumerate() {
+        mat_encoder.set_argument_buffer_to_element(i as _, &buf, 0);
+        unsafe {
+            *(mat_encoder.constant_data(MaterialID::diffuse_color as _) as *mut float4) =
+                float4::new(0., 0., 0., 0.)
+        };
+        unsafe {
+            *(mat_encoder.constant_data(MaterialID::specular_color as _) as *mut float4) =
+                float4::new(0., 0., 0., 0.)
+        };
+        assert_eq!(
+            (MaterialID::diffuse_texture as u32) + 1,
+            MaterialID::specular_texture as u32,
+            "Following call to set_textures() expects IDs diffuse_texture + 1 == specular_texture"
+        );
+        let set_texture = |id: MaterialID, texture_file: &str| {
+            if !texture_file.is_empty() {
+                let tx = load_texture_from_png(
+                    &texture_file,
+                    &material_file_dir.join(texture_file),
+                    device,
+                );
+                mat_encoder.set_texture(id as _, &tx);
+            }
+        };
+        set_texture(MaterialID::diffuse_texture, &mat.diffuse_texture);
+        set_texture(MaterialID::specular_texture, &mat.specular_texture);
+        unsafe {
+            *(mat_encoder.constant_data(MaterialID::specular_shineness as _) as *mut f32) =
+                mat.shininess
+        };
+    }
+
+    buf
+}
+
 impl Model {
-    pub fn from_file<T: AsRef<Path>>(obj_file: T, device: &Device) -> Self {
+    pub fn from_file<T: AsRef<Path>>(
+        obj_file: T,
+        device: &Device,
+        object_geometry_arg_encoder: &ArgumentEncoder,
+        material_arg_encoder: &ArgumentEncoder,
+    ) -> Self {
         let obj_file_ref = obj_file.as_ref();
-        let obj_parent_dir = PathBuf::from(obj_file_ref)
-            .parent()
-            .expect("Could not get parent directory of object file");
         let (mut models, materials) = tobj::load_obj(
-            obj_file.as_ref(),
+            obj_file_ref,
             &LoadOptions {
                 single_index: true,
                 triangulate: true,
@@ -84,97 +245,49 @@ impl Model {
         )
         .expect("Failed to load OBJ file");
 
-        let material = materials
-            .expect("Failed to load materials data")
-            .pop()
-            .expect("Failed to load material, expected atleast one material");
-        let specular_shineness = material.shininess;
-        let texture_ambient_diffuse = load_texture_from_png(
-            "Ambient/Diffuse",
-            obj_parent_dir.join(material.ambient_texture),
-            &device,
-        );
-        let texture_specular = load_texture_from_png(
-            "Specular",
-            obj_parent_dir.join(material.specular_texture),
-            &device,
+        let (objects, object_geometries_buffer, object_geometry_arg_encoded_length, max_bounds) =
+            load_object_geometries(&models, device, &object_geometry_arg_encoder);
+
+        let materials = materials.expect("Failed to load materials data");
+        let materials_buffer = load_materials(
+            &materials,
+            PathBuf::from(obj_file_ref).join(".."),
+            device,
+            &material_arg_encoder,
         );
 
-        let model = models
-            .pop()
-            .expect("Failed to parse model, expecting atleast one model (teapot)");
-        let Mesh {
-            positions,
-            indices,
-            normals,
-            texcoords,
-            ..
-        } = model.mesh;
-
-        debug_assert_eq!(
-            indices.len() % 3,
-            0,
-            "`mesh.indices` should contain triples (triangle vertices). Model should have been loaded with `triangulate`, guaranteeing all faces have 3 vertices."
-        );
-        debug_assert_eq!(
-            positions.len() % 3,
-            0,
-            "`mesh.positions` should contain triples (3D position)"
-        );
-        debug_assert_eq!(
-            normals.len(),
-            positions.len(),
-            "`mesh.normals` should contain triples (3D vector)"
-        );
-        debug_assert_eq!(
-            texcoords.len() % 2,
-            0,
-            "`mesh.texcoords` should contain pairs (UV coordinates)"
-        );
-        debug_assert_eq!(
-            texcoords.len() / 2,
-            positions.len() / 3,
-            "`mesh.texcoords` shoud contain UV coordinate for each position"
-        );
-
-        let (positions3, ..) = positions.as_chunks::<3>();
-        let mut mins = f32x4::splat(f32::MAX);
-        let mut maxs = f32x4::splat(f32::MIN);
-        for &[x, y, z] in positions3 {
-            let input = f32x4::from_array([x, y, z, 0.0]);
-            mins = mins.min(input);
-            maxs = maxs.max(input);
+        Self {
+            objects: todo!(),
+            object_geometries_buffer,
+            object_geometry_arg_encoded_length,
+            max_bounds,
+            materials_buffer,
+            material_arg_encoded_length: material_arg_encoder.encoded_length(),
         }
-        let max_bound = mins.reduce_min().abs().max(maxs.reduce_max());
-
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Use Argument Buffers
-        // - metal-rs example: https://github.com/gfx-rs/metal-rs/blob/master/examples/argument-buffer/main.rs
-        // - Apple Metal guide: https://developer.apple.com/documentation/metal/buffers/managing_groups_of_resources_with_argument_buffers
-        // - Vertex Argument Buffer
-        //   - What will the shader's structs look like?
-        //   - Add parameters to from_file to allow caller to set the [[id(???)]] for...
-        //      - positions
-        //      - texture_coords
-        //      - normals
-        //      - material_id
-        //   - Create/use an argument encoder
-        //   - Create an argument buffer
-        //   - Add getter fn geometry_argument_buffer()
-        // - Fragment Argument Buffer
-        //   - What will the shader's structs look like?
-        //   - Add parameters to from_file to allow caller to set the [[id(???)]] for...
-        //      - texture<2d> diffuse_texture
-        //      - float4 diffuse_color
-        //      - texture<2d> specular_texture
-        //      - float4 specular_color
-        //      - float specular_shineness
-        //   - Create an argument encoder
-        //   - Create an argument buffer
-        //   - Add getter fn materials_argument_buffer()
-
-        Self { objects: todo!() }
     }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::ptr::null;
+
+    const fn yolo() {
+        #[repr(C)]
+        struct Yolo {
+            p1: [u8; 4],
+            p2: u8,
+        }
+        let a: *const Yolo = null();
+        unsafe {
+            null::<Yolo>().offset_from(a);
+        };
+        let b = unsafe {
+            #[allow(deref_nullptr)]
+            (&(*(null::<Yolo>())).p1[1] as *const u8).offset_from(null())
+        };
+    }
+
+    #[test]
+    fn test() {}
 }
