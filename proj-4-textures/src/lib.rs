@@ -56,14 +56,12 @@ struct Delegate {
     screen_size: f32x2,
 }
 
-fn create_pipelines(
-    device: &Device,
-    library: &Library,
-    mode: Mode,
-) -> (
-    (Function, Function, RenderPipelineState),
-    RenderPipelineState,
-) {
+struct PipelineResults {
+    model: CreateRenderPipelineResults,
+    light: CreateRenderPipelineResults,
+}
+
+fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
     let base_pipeline_desc = RenderPipelineDescriptor::new();
     base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
     {
@@ -88,8 +86,8 @@ fn create_pipelines(
             index as _,
         );
     }
-    (
-        create_pipeline_with_constants(
+    PipelineResults {
+        model: create_pipeline(
             &device,
             &library,
             &base_pipeline_desc,
@@ -100,7 +98,7 @@ fn create_pipelines(
             &"main_fragment",
             FragBufferIndex::LENGTH as _,
         ),
-        create_pipeline_with_constants(
+        light: create_pipeline(
             &device,
             &library,
             &base_pipeline_desc,
@@ -110,9 +108,8 @@ fn create_pipelines(
             LightVertexBufferIndex::LENGTH as _,
             &"light_fragment",
             0,
-        )
-        .2,
-    )
+        ),
+    }
 }
 
 impl RendererDelgate for Delegate {
@@ -124,13 +121,18 @@ impl RendererDelgate for Delegate {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let mode = INITIAL_MODE;
-        let ((vertex_fn, frag_fn, render_pipeline_state), render_light_pipeline_state) =
-            create_pipelines(&device, &library, mode);
+        let pipelines = create_pipelines(&device, &library, mode);
         let model = Model::from_file(
             teapot_file,
             &device,
-            &vertex_fn.new_argument_encoder(VertexBufferIndex::ObjectGeometry as _),
-            &frag_fn.new_argument_encoder(FragBufferIndex::Material as _),
+            &pipelines
+                .model
+                .vertex_function
+                .new_argument_encoder(VertexBufferIndex::ObjectGeometry as _),
+            &pipelines
+                .model
+                .fragment_function
+                .new_argument_encoder(FragBufferIndex::Material as _),
         );
 
         let mut delegate = Self {
@@ -161,8 +163,8 @@ impl RendererDelgate for Delegate {
             matrix_world_to_projection: f32x4x4::identity(),
             mode,
             model,
-            render_pipeline_state,
-            render_light_pipeline_state,
+            render_pipeline_state: pipelines.model.pipeline_state,
+            render_light_pipeline_state: pipelines.light.pipeline_state,
             screen_size: f32x2::default(),
             device,
         };
@@ -370,10 +372,9 @@ impl Delegate {
     fn update_mode(&mut self, mode: Mode) {
         if mode != self.mode {
             self.mode = mode;
-            (
-                (_, _, self.render_pipeline_state),
-                self.render_light_pipeline_state,
-            ) = create_pipelines(&self.device, &self.library, mode);
+            let results = create_pipelines(&self.device, &self.library, mode);
+            self.render_pipeline_state = results.model.pipeline_state;
+            self.render_light_pipeline_state = results.light.pipeline_state;
         }
     }
 

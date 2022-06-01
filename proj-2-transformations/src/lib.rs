@@ -100,7 +100,7 @@ impl RendererDelgate for Delegate {
                     "main_fragment",
                     0,
                 )
-                .2
+                .pipeline_state
             },
             use_perspective: true,
             vertex_buffer_positions: allocate_new_buffer_with_data(
