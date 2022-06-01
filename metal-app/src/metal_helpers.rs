@@ -4,6 +4,27 @@ use metal::*;
 use objc::runtime::Object;
 use std::ffi::{c_void, CStr};
 
+#[inline(always)]
+pub fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usize {
+    (size + (size & (align - 1) + align)) as _
+}
+
+#[inline]
+pub fn allocate_new_buffer_with_heap<T: Sized>(
+    heap: &Heap,
+    label: &'static str,
+    bytes: usize,
+) -> (*mut T, Buffer) {
+    let buf = heap
+        .new_buffer(
+            bytes as u64,
+            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
+        )
+        .expect(&format!("Failed to allocate buffer for {label}"));
+    buf.set_label(label);
+    (buf.contents() as *mut T, buf)
+}
+
 #[inline]
 pub fn allocate_new_buffer<T: Sized>(
     device: &DeviceRef,

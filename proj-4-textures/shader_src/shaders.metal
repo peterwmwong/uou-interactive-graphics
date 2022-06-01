@@ -116,11 +116,13 @@ main_fragment(         VertexOut   in            [[stage_in]],
 
     // Ambient/Diffuse Material Color
     const float2 tx_coord = float2(in.tx_coord);
-    const half4  Kd       = HAS_AMBIENT || HAS_DIFFUSE ? material.diffuse_texture.sample(tx_sampler, tx_coord)  : 0;
+    // TODO: Use material.diffuse_color
+    const half4  Kd       = HAS_AMBIENT || HAS_DIFFUSE ? material.diffuse_texture.sample(tx_sampler, tx_coord) : 0;
 
     // Specular Material Color
     const texture2d<half> tx_spec     = material.specular_texture;
     const bool            has_tx_spec = !is_null_texture(tx_spec);
+    // TODO: Use material.specular_color
     const half4           Ks          = HAS_SPECULAR && has_tx_spec ? tx_spec.sample(tx_sampler, tx_coord) : 0;
 
     const half4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
