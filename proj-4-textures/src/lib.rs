@@ -1,3 +1,5 @@
+#![feature(array_methods)]
+#![feature(const_ptr_offset_from)]
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod model;
@@ -6,7 +8,7 @@ mod shader_bindings;
 use bitflags::bitflags;
 use metal_app::metal::*;
 use metal_app::*;
-use model::Model;
+use model::{MaxBounds, Model};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -58,7 +60,10 @@ fn create_pipelines(
     device: &Device,
     library: &Library,
     mode: Mode,
-) -> (RenderPipelineState, RenderPipelineState) {
+) -> (
+    (Function, Function, RenderPipelineState),
+    RenderPipelineState,
+) {
     let base_pipeline_desc = RenderPipelineDescriptor::new();
     base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
     {
@@ -105,7 +110,8 @@ fn create_pipelines(
             LightVertexBufferIndex::LENGTH as _,
             &"light_fragment",
             0,
-        ),
+        )
+        .2,
     )
 }
 
@@ -118,12 +124,8 @@ impl RendererDelgate for Delegate {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let mode = INITIAL_MODE;
-        let (render_pipeline_state, render_light_pipeline_state) =
+        let ((vertex_fn, frag_fn, render_pipeline_state), render_light_pipeline_state) =
             create_pipelines(&device, &library, mode);
-        // TODO: We should update create_pipelines and create_pipeline_with_constants to return the
-        // the functions, so it can be used here.
-        let vertex_fn: Function = todo!();
-        let frag_fn: Function = todo!();
         let model = Model::from_file(
             teapot_file,
             &device,
@@ -146,7 +148,14 @@ impl RendererDelgate for Delegate {
             light_world_position: f32x4::default(),
             light_xy_rotation: INITIAL_LIGHT_ROTATION,
             matrix_model_to_projection: f32x4x4::identity(),
-            matrix_model_to_world: f32x4x4::identity(),
+            matrix_model_to_world: {
+                // TODO: START HERE 3
+                // TODO: START HERE 3
+                // TODO: START HERE 3
+                // This should be based on model bounds
+                let height_of_teapot = 15.75;
+                f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
+            },
             matrix_projection_to_world: f32x4x4::identity(),
             matrix_world_to_camera: f32x4x4::identity(),
             matrix_world_to_projection: f32x4x4::identity(),
@@ -192,17 +201,17 @@ impl RendererDelgate for Delegate {
             desc
         });
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
+        self.model.encode_use_resources(&encoder);
         encoder.set_depth_stencil_state(&self.depth_state);
 
         let light_world_position = float4::from(self.light_world_position);
 
         // Render Model
-        for (i, model_object) in self.model.objects.iter().enumerate() {
-            encoder.push_debug_group(&model_object.name);
-            encoder.set_vertex_buffer(
+        for o in self.model.object_iter() {
+            encoder.push_debug_group(&o.name());
+            o.encode_vertex_buffer_for_geometry_argument_buffer(
+                encoder,
                 VertexBufferIndex::ObjectGeometry as _,
-                Some(&self.model.object_geometries_buffer),
-                (i as u64) * self.model.object_geometry_arg_encoded_length,
             );
             encode_vertex_bytes(
                 &encoder,
@@ -246,22 +255,22 @@ impl RendererDelgate for Delegate {
                 // and float3 have the same size and alignment.
                 &float4::from(self.camera_world_position),
             );
-            encoder.set_fragment_buffer(
+            o.encode_fragment_buffer_for_material_argument_buffer(
+                encoder,
                 FragBufferIndex::Material as _,
-                Some(&self.model.materials_buffer),
-                (i as u64) * self.model.material_arg_encoded_length,
             );
             encoder.draw_primitives_instanced(
                 MTLPrimitiveType::Triangle,
                 0,
                 3,
-                model_object.num_triangles as _,
+                o.num_triangles() as _,
             );
             encoder.pop_debug_group();
         }
 
         // Render Light
         {
+            encoder.push_debug_group("Light");
             // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(
                 0,
@@ -285,6 +294,7 @@ impl RendererDelgate for Delegate {
                 &light_world_position,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
+            encoder.pop_debug_group();
         }
         encoder.end_encoding();
         command_buffer.present_drawable(drawable);
@@ -360,8 +370,10 @@ impl Delegate {
     fn update_mode(&mut self, mode: Mode) {
         if mode != self.mode {
             self.mode = mode;
-            (self.render_pipeline_state, self.render_light_pipeline_state) =
-                create_pipelines(&self.device, &self.library, mode);
+            (
+                (_, _, self.render_pipeline_state),
+                self.render_light_pipeline_state,
+            ) = create_pipelines(&self.device, &self.library, mode);
         }
     }
 
@@ -379,6 +391,10 @@ impl Delegate {
 
     #[inline]
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
+        // TODO: START HERE 4
+        // TODO: START HERE 4
+        // TODO: START HERE 4
+        // TODO: Calculate once, constantify
         let n = 0.1;
         let f = 1000.0;
         let perspective_matrix = f32x4x4::new(
@@ -387,10 +403,20 @@ impl Delegate {
             [0., 0., n + f, -n * f],
             [0., 0., 1., 0.],
         );
-        // TODO: This should really be more sophisticated, handle tall/skinny and short/fat models
-        let max_width: f32 = todo!();
-        let w = 2. * n * max_width / INITIAL_CAMERA_DISTANCE;
-        let h = aspect_ratio * w;
+        // TODO: START HERE 5
+        // TODO: START HERE 5
+        // TODO: START HERE 5
+        // TODO: Calculate once
+        let MaxBounds { width, height } = self.model.max_bounds;
+        let (w, h) = if width > height {
+            let w = n * width / INITIAL_CAMERA_DISTANCE;
+            let h = aspect_ratio * w;
+            (w, h)
+        } else {
+            let h = n * height / INITIAL_CAMERA_DISTANCE;
+            let w = h / aspect_ratio;
+            (w, h)
+        };
         let orthographic_matrix = {
             f32x4x4::new(
                 [2. / w, 0., 0., 0.],

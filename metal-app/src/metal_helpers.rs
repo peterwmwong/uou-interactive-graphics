@@ -136,7 +136,11 @@ fn make_function_constant_values(
     })
 }
 
-// TODO: Consolidate with create_pipeline_with_constants() and create helpers for creating function constants.
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// 1. Create a return type
+// 2. Consolidate with create_pipeline_with_constants() and create helpers for creating function constants.
 pub fn create_pipeline(
     device: &Device,
     library: &Library,
@@ -147,7 +151,7 @@ pub fn create_pipeline(
     num_vertex_immutable_buffers: u32,
     frag_func_name: &str,
     num_frag_immutable_buffers: u32,
-) -> RenderPipelineState {
+) -> (Function, Function, RenderPipelineState) {
     create_pipeline_with_constants(
         device,
         library,
@@ -171,15 +175,15 @@ pub fn create_pipeline_with_constants(
     num_vertex_immutable_buffers: u32,
     frag_func_name: &str,
     num_frag_immutable_buffers: u32,
-) -> RenderPipelineState {
+) -> (Function, Function, RenderPipelineState) {
     base_pipeline_desc.set_label(label);
 
     let fcs = func_constants;
-    let fun = unwrap_result_dcheck(
+    let vertex_fn = unwrap_result_dcheck(
         new_function_from_library(library, vertex_func_name, fcs),
         "Failed to access vertex shader function from metal library",
     );
-    base_pipeline_desc.set_vertex_function(Some(&fun));
+    base_pipeline_desc.set_vertex_function(Some(&vertex_fn));
 
     let buffers = base_pipeline_desc
         .vertex_buffers()
@@ -192,11 +196,11 @@ pub fn create_pipeline_with_constants(
         .set_mutability(MTLMutability::Immutable);
     }
 
-    let fun = unwrap_result_dcheck(
+    let frag_fn = unwrap_result_dcheck(
         new_function_from_library(library, frag_func_name, fcs),
         "Failed to access fragment shader function from metal library",
     );
-    base_pipeline_desc.set_fragment_function(Some(&fun));
+    base_pipeline_desc.set_fragment_function(Some(&frag_fn));
 
     let buffers = base_pipeline_desc
         .fragment_buffers()
@@ -209,9 +213,13 @@ pub fn create_pipeline_with_constants(
         .set_mutability(MTLMutability::Immutable);
     }
 
-    unwrap_result_dcheck(
-        device.new_render_pipeline_state(&base_pipeline_desc),
-        "Failed to create render pipeline",
+    (
+        vertex_fn,
+        frag_fn,
+        unwrap_result_dcheck(
+            device.new_render_pipeline_state(&base_pipeline_desc),
+            "Failed to create render pipeline",
+        ),
     )
 }
 

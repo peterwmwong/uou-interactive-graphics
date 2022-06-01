@@ -1,36 +1,45 @@
 use crate::shader_bindings::{float4, MaterialID};
 use metal_app::{allocate_new_buffer, metal::*};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    simd::f32x4,
+};
 use tobj::LoadOptions;
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// - Rethink how this will actually be used and name/structure accordingly
-// - In the renderer, really we need this for 2 things
-//      1. Setup Model-to-World Matrix, translate the center of the model to (0,0,0)
-//      2. Setup the Orthographic projection matrix, width of the near field
 pub struct MaxBounds {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    pub width: f32,
+    pub height: f32,
+    // TODO: Calculate the xyz center of the model
 }
 
-pub struct ModelObject {
-    pub name: String,
-    pub num_triangles: usize,
+struct ModelObject {
+    name: String,
+    num_triangles: u32,
 }
 
+// TODO: START HERE 2
+// TODO: START HERE 2
+// TODO: START HERE 2
+// Consider using a Metal Heap
+// - Should reduce encode_use_resources() to a single call for the heap
+// - See https://developer.apple.com/documentation/metal/buffers/using_argument_buffers_with_resource_heaps
 pub struct Model {
     pub max_bounds: MaxBounds,
-    pub objects: Vec<ModelObject>,
-    pub object_geometries_buffer: Buffer,
-    pub object_geometry_arg_encoded_length: u64,
-    pub materials_buffer: Buffer,
-    pub material_arg_encoded_length: u64,
+    objects: Vec<ModelObject>,
+    object_geometries_arg_buffer: Buffer,
+    object_geometries_arg_encoded_length: u32,
+    // TODO: Create a type (ObjectGeometryBuffers { indices, positions, normals, tx_coords })
+    object_geometry_buffers: [Buffer; 4],
+    materials_arg_buffer: Buffer,
+    materials_arg_encoded_length: u32,
+    material_textures: Vec<Texture>,
 }
 
-fn load_texture_from_png<T: AsRef<Path>>(label: &str, path_to_png: T, device: &Device) -> Texture {
+fn load_texture_from_png<T: AsRef<Path> + std::fmt::Debug>(
+    label: &str,
+    path_to_png: T,
+    device: &Device,
+) -> Texture {
     use png::ColorType::*;
     use std::fs::File;
     let mut decoder = png::Decoder::new(File::open(path_to_png).unwrap());
@@ -73,6 +82,7 @@ fn load_texture_from_png<T: AsRef<Path>>(label: &str, path_to_png: T, device: &D
     texture
 }
 
+#[inline]
 fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T) -> (isize, *mut T) {
     unsafe {
         std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
@@ -82,19 +92,21 @@ fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T) -> (isize, *mut T) {
     }
 }
 
+#[inline(always)]
 const fn byte_len<T: Sized>(slice: &[T]) -> usize {
     slice.len() * std::mem::size_of::<T>()
 }
 
+// TODO: Create a return type
 fn load_object_geometries(
     objs: &[tobj::Model],
     device: &Device,
-    obj_geo_encoder: &ArgumentEncoder,
-) -> (Vec<ModelObject>, Buffer, u64, MaxBounds) {
-    let obj_geo_arg_encoded_length = obj_geo_encoder.encoded_length();
-    let length = obj_geo_arg_encoded_length * objs.len() as u64;
+    arg_encoder: &ArgumentEncoder,
+) -> (Vec<ModelObject>, Buffer, u32, MaxBounds, [Buffer; 4]) {
+    let arg_encoded_length = arg_encoder.encoded_length() as u32;
+    let length = arg_encoded_length * objs.len() as u32;
     let buf = device.new_buffer(
-        length,
+        length as _,
         MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
     );
 
@@ -105,29 +117,54 @@ fn load_object_geometries(
     let mut normals_buf_length = 0;
     let mut texcoords_buf_length = 0;
     let mut objects: Vec<ModelObject> = vec![];
-    for tobj::Model { mesh, name } in objs {
+    let mut mins = f32x4::splat(f32::MAX);
+    let mut maxs = f32x4::splat(f32::MIN);
+    for tobj::Model {
+        mesh:
+            tobj::Mesh {
+                indices,
+                positions,
+                normals,
+                texcoords,
+                ..
+            },
+        name,
+    } in objs
+    {
         assert!(
-            (mesh.positions.len() % 3) == 0 &&
-            (mesh.normals.len() % 3) == 0 &&
-            (mesh.texcoords.len() % 2) == 0,
+            (indices.len() % 3) == 0 &&
+            (positions.len() % 3) == 0 &&
+            (normals.len() % 3) == 0 &&
+            (texcoords.len() % 2) == 0,
             "Unexpected number of positions, normals, or texcoords. Expected each to be triples, triples, and pairs (respectively)"
         );
-        let num_triangles = mesh.positions.len() / 3;
+        let num_positions = positions.len() / 3;
         assert!(
-            num_triangles == mesh.indices.len() &&
-            (mesh.normals.len() / 3) == mesh.indices.len() &&
-            (mesh.texcoords.len() / 2) == mesh.indices.len(),
+            (normals.len() / 3) == num_positions &&
+            (texcoords.len() / 2) == num_positions,
             "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
         );
-        indices_buf_length += byte_len(&mesh.indices);
-        positions_buf_length += byte_len(&mesh.positions);
-        normals_buf_length += byte_len(&mesh.normals);
-        texcoords_buf_length += byte_len(&mesh.texcoords);
+        for &[x, y, z] in positions.as_chunks::<3>().0 {
+            let input = f32x4::from_array([x, y, z, 0.0]);
+            mins = mins.min(input);
+            maxs = maxs.max(input);
+        }
+
+        indices_buf_length += byte_len(&indices);
+        positions_buf_length += byte_len(&positions);
+        normals_buf_length += byte_len(&normals);
+        texcoords_buf_length += byte_len(&texcoords);
         objects.push(ModelObject {
             name: name.to_owned(),
-            num_triangles,
+            num_triangles: (indices.len() / 3) as _,
         });
     }
+    let max_bounds = mins.abs().max(maxs);
+    // TODO: Find the actual center, width, and height of the model.
+    // - Currently ASSUMES a symmetrical model or, at the very least, a model where (0,0,0) is the
+    // center.
+    let width = max_bounds[0] * 2.;
+    let height = max_bounds[1] * 2.;
 
     // Allocate buffers...
     let mut indices_offset = 0;
@@ -143,13 +180,21 @@ fn load_object_geometries(
     let (mut texcoords_contents, texcoords_buf) =
         allocate_new_buffer::<f32>(device, "texcoords", texcoords_buf_length as _);
 
-    let buffers: [&BufferRef; 4] = [&indices_buf, &positions_buf, &normals_buf, &texcoords_buf];
+    let buffers = [indices_buf, positions_buf, normals_buf, texcoords_buf];
+    let buf_refs: [&BufferRef; 4] = [
+        buffers[0].as_ref(),
+        buffers[1].as_ref(),
+        buffers[2].as_ref(),
+        buffers[3].as_ref(),
+    ];
     for (i, tobj::Model { mesh, .. }) in objs.iter().enumerate() {
-        obj_geo_encoder.set_argument_buffer_to_element(i as _, &buf, 0);
+        arg_encoder.set_argument_buffer_to_element(i as _, &buf, 0);
         // TODO: Figure out a way of asserting the index -> buffer mapping.
-        obj_geo_encoder.set_buffers(
+        // - Currently the Shader Binding ObjectGeometryID is completely unused/un-enforced!
+        // - Maybe set_buffers() isn't worth it and we should just call set_buffer(ObjectGeometryID::_, buffer, offset)
+        arg_encoder.set_buffers(
             0,
-            &buffers,
+            &buf_refs,
             &[
                 indices_offset as _,
                 positions_offset as _,
@@ -168,28 +213,28 @@ fn load_object_geometries(
     (
         objects,
         buf,
-        obj_geo_arg_encoded_length,
-        MaxBounds {
-            x: todo!(),
-            y: todo!(),
-            z: todo!(),
-        },
+        arg_encoded_length,
+        MaxBounds { width, height },
+        buffers,
     )
 }
 
+// TODO: Create a return type
 fn load_materials(
     mats: &[tobj::Material],
     material_file_dir: PathBuf,
     device: &Device,
     mat_encoder: &ArgumentEncoder,
-) -> Buffer {
-    let mat_arg_encoded_length = mat_encoder.encoded_length();
-    let length = mat_arg_encoded_length * mats.len() as u64;
+) -> (Buffer, Vec<Texture>, u32) {
+    let mat_arg_encoded_length = mat_encoder.encoded_length() as u32;
+    let length = (mat_arg_encoded_length as u64) * mats.len() as u64;
     let buf = device.new_buffer(
         length,
         MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
     );
 
+    // Assume all materials have a diffuse and specular texture
+    let mut all_textures = Vec::with_capacity(mats.len() * 2);
     for (i, mat) in mats.iter().enumerate() {
         mat_encoder.set_argument_buffer_to_element(i as _, &buf, 0);
         unsafe {
@@ -205,7 +250,10 @@ fn load_materials(
             MaterialID::specular_texture as u32,
             "Following call to set_textures() expects IDs diffuse_texture + 1 == specular_texture"
         );
-        let set_texture = |id: MaterialID, texture_file: &str| {
+        for (id, texture_file) in [
+            (MaterialID::diffuse_texture, &mat.diffuse_texture),
+            (MaterialID::specular_texture, &mat.specular_texture),
+        ] {
             if !texture_file.is_empty() {
                 let tx = load_texture_from_png(
                     &texture_file,
@@ -213,17 +261,86 @@ fn load_materials(
                     device,
                 );
                 mat_encoder.set_texture(id as _, &tx);
+                all_textures.push(tx);
             }
-        };
-        set_texture(MaterialID::diffuse_texture, &mat.diffuse_texture);
-        set_texture(MaterialID::specular_texture, &mat.specular_texture);
+        }
         unsafe {
             *(mat_encoder.constant_data(MaterialID::specular_shineness as _) as *mut f32) =
                 mat.shininess
         };
     }
 
-    buf
+    (buf, all_textures, mat_arg_encoded_length)
+}
+
+pub struct ModelObjectIterResult<'a> {
+    i: usize,
+    model: &'a Model,
+    object: &'a ModelObject,
+}
+
+impl<'a> ModelObjectIterResult<'a> {
+    #[inline(always)]
+    pub fn num_triangles(&self) -> u32 {
+        self.object.num_triangles
+    }
+
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        &self.object.name
+    }
+
+    #[inline(always)]
+    pub fn encode_vertex_buffer_for_geometry_argument_buffer(
+        &self,
+        encoder: &RenderCommandEncoderRef,
+        buffer_index: u64,
+    ) {
+        encoder.set_vertex_buffer(
+            buffer_index,
+            Some(self.model.object_geometries_arg_buffer.as_ref()),
+            (self.i as u64) * (self.model.object_geometries_arg_encoded_length as u64),
+        );
+    }
+
+    #[inline(always)]
+    pub fn encode_fragment_buffer_for_material_argument_buffer(
+        &self,
+        encoder: &RenderCommandEncoderRef,
+        buffer_index: u64,
+    ) {
+        encoder.set_fragment_buffer(
+            buffer_index,
+            Some(self.model.materials_arg_buffer.as_ref()),
+            (self.i as u64) * (self.model.materials_arg_encoded_length as u64),
+        );
+    }
+}
+
+struct ModelObjectIter<'a, T: Iterator<Item = (usize, &'a ModelObject)>> {
+    iter: T,
+    model: &'a Model,
+}
+
+impl<'a, T: Iterator<Item = (usize, &'a ModelObject)>> Iterator for ModelObjectIter<'a, T> {
+    type Item = ModelObjectIterResult<'a>;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(i, object)| ModelObjectIterResult {
+            i,
+            model: &self.model,
+            object,
+        })
+    }
+}
+impl<'a, T: Iterator<Item = (usize, &'a ModelObject)>> ExactSizeIterator
+    for ModelObjectIter<'a, T>
+{
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.model.objects.len()
+    }
 }
 
 impl Model {
@@ -234,7 +351,7 @@ impl Model {
         material_arg_encoder: &ArgumentEncoder,
     ) -> Self {
         let obj_file_ref = obj_file.as_ref();
-        let (mut models, materials) = tobj::load_obj(
+        let (models, materials) = tobj::load_obj(
             obj_file_ref,
             &LoadOptions {
                 single_index: true,
@@ -245,24 +362,55 @@ impl Model {
         )
         .expect("Failed to load OBJ file");
 
-        let (objects, object_geometries_buffer, object_geometry_arg_encoded_length, max_bounds) =
-            load_object_geometries(&models, device, &object_geometry_arg_encoder);
-
-        let materials = materials.expect("Failed to load materials data");
-        let materials_buffer = load_materials(
-            &materials,
-            PathBuf::from(obj_file_ref).join(".."),
-            device,
-            &material_arg_encoder,
-        );
-
-        Self {
-            objects: todo!(),
+        let (
+            objects,
             object_geometries_buffer,
             object_geometry_arg_encoded_length,
             max_bounds,
-            materials_buffer,
-            material_arg_encoded_length: material_arg_encoder.encoded_length(),
+            object_geometry_buffers,
+        ) = load_object_geometries(&models, device, &object_geometry_arg_encoder);
+
+        let materials = materials.expect("Failed to load materials data");
+        let (materials_arg_buffer, material_textures, materials_arg_encoded_length) =
+            load_materials(
+                &materials,
+                PathBuf::from(
+                    obj_file_ref
+                        .parent()
+                        .expect("Failed to get obj file's parent directory"),
+                ),
+                device,
+                &material_arg_encoder,
+            );
+
+        Self {
+            objects,
+            object_geometries_arg_buffer: object_geometries_buffer,
+            object_geometries_arg_encoded_length: object_geometry_arg_encoded_length,
+            object_geometry_buffers,
+            max_bounds,
+            materials_arg_buffer,
+            materials_arg_encoded_length,
+            material_textures,
+        }
+    }
+
+    pub fn encode_use_resources(&self, encoder: &RenderCommandEncoderRef) {
+        let bufs = &self.object_geometry_buffers;
+        encoder.use_resources(
+            &[&bufs[0], &bufs[1], &bufs[2], &bufs[3]],
+            MTLResourceUsage::Read,
+            MTLRenderStages::Vertex,
+        );
+        for texture in &self.material_textures {
+            encoder.use_resource_at(texture, MTLResourceUsage::Sample, MTLRenderStages::Fragment);
+        }
+    }
+
+    pub fn object_iter(&self) -> impl Iterator<Item = ModelObjectIterResult> {
+        ModelObjectIter {
+            model: self,
+            iter: self.objects.iter().enumerate(),
         }
     }
 }

@@ -148,7 +148,8 @@ impl RendererDelgate for Delegate {
                 VertexBufferIndex::LENGTH as _,
                 &"main_fragment",
                 FragBufferIndex::LENGTH as _,
-            ),
+            )
+            .2,
             render_light_pipeline_state: create_pipeline(
                 &device,
                 &library,
@@ -159,7 +160,8 @@ impl RendererDelgate for Delegate {
                 LightVertexBufferIndex::LENGTH as _,
                 &"light_fragment",
                 0,
-            ),
+            )
+            .2,
             screen_size: f32x2::default(),
             vertex_buffer_indices: allocate_new_buffer_with_data(
                 &device,

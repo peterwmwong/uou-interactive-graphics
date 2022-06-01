@@ -113,13 +113,18 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const half Il = 1 * cn; // Diffuse/Specular Light Intensity
 
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+
+    // Ambient/Diffuse Material Color
     const float2 tx_coord = float2(in.tx_coord);
-    const half4  Kd       = HAS_AMBIENT || HAS_DIFFUSE ? material.diffuse_texture.sample(tx_sampler, tx_coord)  : 0;  // Diffuse Material Color
-    const half4  Ks       = HAS_SPECULAR               ? material.specular_texture.sample(tx_sampler, tx_coord) : 0;  // Specular Material Color
+    const half4  Kd       = HAS_AMBIENT || HAS_DIFFUSE ? material.diffuse_texture.sample(tx_sampler, tx_coord)  : 0;
+
+    // Specular Material Color
+    const texture2d<half> tx_spec     = material.specular_texture;
+    const bool            has_tx_spec = !is_null_texture(tx_spec);
+    const half4           Ks          = HAS_SPECULAR && has_tx_spec ? tx_spec.sample(tx_sampler, tx_coord) : 0;
 
     const half4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
-    // TODO: Get this from data... somehow.
-    const half   s        = 777.7;
+    const half   s        = material.specular_shineness;
     const half4  specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
 
     const half   Ia       = 0.1; // Ambient Intensity
