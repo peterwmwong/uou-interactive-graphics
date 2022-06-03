@@ -2,5 +2,6 @@
 members = [
     "metal-app",
     "metal-build",
+    "png-add-alpha",
     "proj-*/"
 ]
