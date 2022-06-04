@@ -87,7 +87,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
             &device,
             &library,
             &base_pipeline_desc,
-            "Teapot",
+            "Model",
             Some(&function_constants),
             &"main_vertex",
             VertexBufferIndex::LENGTH as _,
@@ -233,6 +233,7 @@ impl RendererDelgate for Delegate {
         });
         // Render Model
         {
+            encoder.push_debug_group("Model");
             encoder.set_render_pipeline_state(&self.render_pipeline_state);
             encoder.set_depth_stencil_state(&self.depth_state);
             self.model.encode_use_resources(&encoder);
@@ -251,11 +252,12 @@ impl RendererDelgate for Delegate {
                 VertexBufferIndex::Geometry as _,
                 FragBufferIndex::Material as _,
             );
+            encoder.pop_debug_group();
         }
         // Render Light
         {
-            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             encoder.push_debug_group("Light");
+            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             // // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(
                 0,
