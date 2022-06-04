@@ -5,3 +5,6 @@ members = [
     "png-add-alpha",
     "proj-*/"
 ]
+
+[profile.dev.package."*"]
+opt-level = 3
