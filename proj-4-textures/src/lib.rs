@@ -1,5 +1,5 @@
 #![feature(array_methods)]
-#![feature(const_ptr_offset_from)]
+#![feature(pointer_byte_offsets)]
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod model;
@@ -26,13 +26,13 @@ bitflags! {
     }
 }
 
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
-const INITIAL_CAMERA_DISTANCE: f32 = 50.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
+const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
+const INITIAL_CAMERA_DISTANCE: f32 = 2000.;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
-const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
+const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE;
 
 struct Delegate {
     camera_distance: f32,
@@ -114,16 +114,17 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 
 impl RendererDelgate for Delegate {
     fn new(device: Device, _command_queue: &CommandQueue) -> Self {
-        let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let model_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
-            .join("teapot.obj");
+            .join("yoda")
+            .join("yoda.obj");
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let mode = INITIAL_MODE;
         let pipelines = create_pipelines(&device, &library, mode);
         let model = Model::from_file(
-            teapot_file,
+            model_file,
             &device,
             &pipelines
                 .model
@@ -155,8 +156,12 @@ impl RendererDelgate for Delegate {
                 // TODO: START HERE 3
                 // TODO: START HERE 3
                 // This should be based on model bounds
-                let height_of_teapot = 15.75;
-                f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
+                // let height_of_teapot = 15.75;
+                // f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
+                let center = model.max_bounds.center;
+                f32x4x4::y_rotate(PI)
+                    * f32x4x4::x_rotate(PI / 2.)
+                    * f32x4x4::translate(-center[0], -center[1], -center[2])
             },
             matrix_projection_to_world: f32x4x4::identity(),
             matrix_world_to_camera: f32x4x4::identity(),
@@ -320,7 +325,7 @@ impl RendererDelgate for Delegate {
                         Left => {
                             camera_rotation += {
                                 let adjacent = f32x2::splat(self.camera_distance);
-                                let offsets = drag_amount / f32x2::splat(4.);
+                                let offsets = drag_amount * f32x2::splat(4.);
                                 let ratio = offsets / adjacent;
                                 f32x2::from_array([
                                     ratio[1].atan(), // Rotation on x-axis
@@ -328,14 +333,14 @@ impl RendererDelgate for Delegate {
                                 ])
                             }
                         }
-                        Right => camera_distance += -drag_amount[1] / 8.0,
+                        Right => camera_distance += -drag_amount[1] * 8.0,
                     }
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::CONTROL) {
                     match button {
                         Left => {
                             let adjacent = f32x2::splat(self.camera_distance);
-                            let opposite = -drag_amount / f32x2::splat(16.);
+                            let opposite = -drag_amount * f32x2::splat(4.);
                             let ratio = opposite / adjacent;
                             self.update_light(
                                 self.light_xy_rotation
@@ -397,7 +402,7 @@ impl Delegate {
         // TODO: START HERE 4
         // TODO: Calculate once, constantify
         let n = 0.1;
-        let f = 1000.0;
+        let f = 100000.0;
         let perspective_matrix = f32x4x4::new(
             [n, 0., 0., 0.],
             [0., n, 0., 0.],
@@ -408,13 +413,13 @@ impl Delegate {
         // TODO: START HERE 5
         // TODO: START HERE 5
         // TODO: Calculate once
-        let MaxBounds { width, height } = self.model.max_bounds;
-        let (w, h) = if width > height {
-            let w = n * width / INITIAL_CAMERA_DISTANCE;
+        let MaxBounds { size, .. } = self.model.max_bounds;
+        let (w, h) = if size[0] > size[1] {
+            let w = n * size[0] / INITIAL_CAMERA_DISTANCE;
             let h = aspect_ratio * w;
             (w, h)
         } else {
-            let h = n * height / INITIAL_CAMERA_DISTANCE;
+            let h = n * size[1] / INITIAL_CAMERA_DISTANCE;
             let w = h / aspect_ratio;
             (w, h)
         };

@@ -7,14 +7,15 @@ use std::{
 use tobj::LoadOptions;
 
 pub struct MaxBounds {
-    pub width: f32,
-    pub height: f32,
+    pub center: f32x4,
+    pub size: f32x4,
     // TODO: Calculate the xyz center of the model
 }
 
 struct ModelObject {
     name: String,
     num_triangles: u32,
+    material_id: u32,
 }
 
 pub struct Model {
@@ -36,8 +37,7 @@ fn get_png_reader<T: AsRef<Path> + std::fmt::Debug>(
     path_to_png: T,
 ) -> (png::Reader<std::fs::File>, TextureDescriptor) {
     use std::fs::File;
-    let mut decoder = png::Decoder::new(File::open(path_to_png).unwrap());
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let decoder = png::Decoder::new(File::open(path_to_png).unwrap());
 
     let reader = decoder.read_info().unwrap();
     let desc = {
@@ -46,7 +46,7 @@ fn get_png_reader<T: AsRef<Path> + std::fmt::Debug>(
         assert_eq!(
             info.color_type,
             png::ColorType::Rgba,
-            "Unexpected PNG format, expected RGBA"
+            "Unexpected PNG color format, expected RGBA"
         );
         desc.set_width(info.width as _);
         desc.set_height(info.height as _);
@@ -64,7 +64,7 @@ struct GeometryResults {
     indices_buf_length: usize,
     positions_buf_length: usize,
     normals_buf_length: usize,
-    texcoords_buf_length: usize,
+    tx_coords_buf_length: usize,
     objects: Vec<ModelObject>,
 }
 
@@ -76,7 +76,7 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
     let mut indices_buf_length = 0;
     let mut positions_buf_length = 0;
     let mut normals_buf_length = 0;
-    let mut texcoords_buf_length = 0;
+    let mut tx_coords_buf_length = 0;
     let mut objects: Vec<ModelObject> = vec![];
     for tobj::Model {
         mesh:
@@ -85,6 +85,7 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
                 positions,
                 normals,
                 texcoords,
+                material_id,
                 ..
             },
         name,
@@ -108,10 +109,11 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
         indices_buf_length += byte_len(&indices);
         positions_buf_length += byte_len(&positions);
         normals_buf_length += byte_len(&normals);
-        texcoords_buf_length += byte_len(&texcoords);
+        tx_coords_buf_length += byte_len(&texcoords);
         objects.push(ModelObject {
             name: name.to_owned(),
             num_triangles: (indices.len() / 3) as _,
+            material_id: material_id.expect("No material found for object.") as _,
         });
     }
 
@@ -128,7 +130,7 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
         MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
     ));
     heap_size += align_size(device.heap_buffer_size_and_align(
-        texcoords_buf_length as _,
+        tx_coords_buf_length as _,
         MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
     ));
 
@@ -137,7 +139,7 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
         indices_buf_length,
         positions_buf_length,
         normals_buf_length,
-        texcoords_buf_length,
+        tx_coords_buf_length,
         objects,
     }
 }
@@ -150,10 +152,13 @@ fn get_total_material_texture_size(
     let mut size = 0;
     for mat in materials {
         for texture_file in [&mat.diffuse_texture, &mat.specular_texture] {
-            // TODO: Try to reuse the reader later to load the texture, instead of calling get_png_reader again in load_texture_from_png.
-            let (_, desc) = get_png_reader(&material_file_dir.join(texture_file));
-            let size_align = device.heap_texture_size_and_align(&desc);
-            size += align_size(size_align);
+            if !texture_file.is_empty() {
+                // TODO: Try to reuse the reader later to load the texture, instead of calling get_png_reader again in load_texture_from_png.
+                let (_, desc) = get_png_reader(&material_file_dir.join(texture_file));
+                let size_align = device.heap_texture_size_and_align(&desc);
+                let texture_size = align_size(size_align);
+                size += texture_size;
+            }
         }
     }
     size
@@ -165,6 +170,8 @@ fn load_texture_from_png(
     (mut reader, desc): (png::Reader<std::fs::File>, TextureDescriptor),
     heap: &Heap,
 ) -> Texture {
+    // TODO: Allocate this buf once
+    // - Get the maximum output_buffer_size() of all the textures
     let mut buf = vec![0; reader.output_buffer_size()];
     reader.next_frame(&mut buf).expect("Failed to load texture");
 
@@ -183,18 +190,19 @@ fn load_texture_from_png(
         },
         0,
         buf.as_ptr() as _,
+        // TODO: What is 4? Constantize and give it a name.
         desc.width() * 4,
     );
     texture
 }
 
 #[inline]
-fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T) -> (isize, *mut T) {
+fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, old_offset: isize) -> (isize, *mut T) {
     unsafe {
         std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
         let new_contents = dst.add(src.len());
-        let offset = new_contents.offset_from(dst);
-        (offset, new_contents)
+        let offset = new_contents.byte_offset_from(dst);
+        (old_offset + offset, new_contents)
     }
 }
 
@@ -212,7 +220,7 @@ fn load_geometry(
     indices_buf_length: usize,
     positions_buf_length: usize,
     normals_buf_length: usize,
-    texcoords_buf_length: usize,
+    tx_coords_buf_length: usize,
 ) -> (Buffer, u32, MaxBounds, [Buffer; 4]) {
     let arg_encoded_length = geometry_arg_encoder.encoded_length() as u32;
     let length = arg_encoded_length * objs.len() as u32;
@@ -232,13 +240,13 @@ fn load_geometry(
     let mut normals_offset = 0;
     let (mut normals_contents, normals_buf) =
         allocate_new_buffer_with_heap::<f32>(heap, "normals", normals_buf_length as _);
-    let mut texcoords_offset = 0;
-    let (mut texcoords_contents, texcoords_buf) =
-        allocate_new_buffer_with_heap::<f32>(heap, "texcoords", texcoords_buf_length as _);
+    let mut tx_coords_offset = 0;
+    let (mut tx_coords_contents, tx_coords_buf) =
+        allocate_new_buffer_with_heap::<f32>(heap, "tx_coords", tx_coords_buf_length as _);
 
     let mut mins = f32x4::splat(f32::MAX);
     let mut maxs = f32x4::splat(f32::MIN);
-    let buffers = [indices_buf, positions_buf, normals_buf, texcoords_buf];
+    let buffers = [indices_buf, positions_buf, normals_buf, tx_coords_buf];
     let buffer_refs: [&BufferRef; 4] = [
         buffers[0].as_ref(),
         buffers[1].as_ref(),
@@ -257,33 +265,40 @@ fn load_geometry(
                 indices_offset as _,
                 positions_offset as _,
                 normals_offset as _,
-                texcoords_offset as _,
+                tx_coords_offset as _,
             ],
         );
-        (indices_offset, indices_contents) = copy_into_buffer(&mesh.indices, indices_contents);
-        (normals_offset, normals_contents) = copy_into_buffer(&mesh.normals, normals_contents);
-        (texcoords_offset, texcoords_contents) =
-            copy_into_buffer(&mesh.texcoords, texcoords_contents);
+
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Make copy_into_buffer just return offset and remove the need to update dst pointer
+        // - copy_into_buffer will just do dst.byte_add(indices_offset)
+        //      - IMPORTANT: byte_add()
+        //      - IMPORTANT: byte_add()
+        //      - IMPORTANT: byte_add()
+        (indices_offset, indices_contents) =
+            copy_into_buffer(&mesh.indices, indices_contents, indices_offset);
+        (normals_offset, normals_contents) =
+            copy_into_buffer(&mesh.normals, normals_contents, normals_offset);
+        (tx_coords_offset, tx_coords_contents) =
+            copy_into_buffer(&mesh.texcoords, tx_coords_contents, tx_coords_offset);
 
         let positions = &mesh.positions;
-        (positions_offset, positions_contents) = copy_into_buffer(&positions, positions_contents);
+        (positions_offset, positions_contents) =
+            copy_into_buffer(&positions, positions_contents, positions_offset);
         for &[x, y, z] in positions.as_chunks::<3>().0 {
             let input = f32x4::from_array([x, y, z, 0.0]);
             mins = mins.min(input);
             maxs = maxs.max(input);
         }
     }
-    let max_bounds = mins.abs().max(maxs);
-    // TODO: Find the actual center, width, and height of the model.
-    // - Currently ASSUMES a symmetrical model or, at the very least, a model where (0,0,0) is the
-    // center.
-    let width = max_bounds[0] * 2.;
-    let height = max_bounds[1] * 2.;
-
+    let size = maxs - mins;
+    let center = mins + (size * f32x4::splat(0.5));
     (
         arg_buffer,
         arg_encoded_length,
-        MaxBounds { width, height },
+        MaxBounds { center, size },
         buffers,
     )
 }
@@ -317,16 +332,18 @@ fn load_materials(
             *(materials_arg_encoder.constant_data(MaterialID::specular_color as _) as *mut float4) =
                 float4::new(0., 0., 0., 0.)
         };
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Handle multiple materials using the same texture image.
+        // - The Yoda model reuses the body texture for Body and Body_1 materials
         for (id, texture_file) in [
             (MaterialID::diffuse_texture, &mat.diffuse_texture),
             (MaterialID::specular_texture, &mat.specular_texture),
         ] {
             if !texture_file.is_empty() {
-                let tx = load_texture_from_png(
-                    &texture_file,
-                    get_png_reader(&material_file_dir.join(texture_file)),
-                    heap,
-                );
+                let png_reader_and_desc = get_png_reader(&material_file_dir.join(texture_file));
+                let tx = load_texture_from_png(&texture_file, png_reader_and_desc, heap);
                 materials_arg_encoder.set_texture(id as _, &tx);
                 textures.push(tx);
             }
@@ -376,10 +393,11 @@ impl<'a> ModelObjectIterResult<'a> {
         encoder: &RenderCommandEncoderRef,
         buffer_index: u64,
     ) {
+        let i = self.object.material_id as u64;
         encoder.set_fragment_buffer(
             buffer_index,
             Some(self.model.materials_arg_buffer.as_ref()),
-            (self.i as u64) * (self.model.materials_arg_encoded_length as u64),
+            (i as u64) * (self.model.materials_arg_encoded_length as u64),
         );
     }
 }
@@ -440,7 +458,8 @@ impl Model {
         let mut heap_size = 0;
         let geometry = get_total_geometry_buffers_size(&models, device);
         heap_size += geometry.heap_size;
-        heap_size += get_total_material_texture_size(&materials, &material_file_dir, device);
+        // TODO: Figure out why this is "* 2"!
+        heap_size += get_total_material_texture_size(&materials, &material_file_dir, device) * 2;
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
@@ -459,7 +478,7 @@ impl Model {
                 geometry.indices_buf_length,
                 geometry.positions_buf_length,
                 geometry.normals_buf_length,
-                geometry.texcoords_buf_length,
+                geometry.tx_coords_buf_length,
             );
 
         let (materials_arg_buffer, material_textures, materials_arg_encoded_length) =
@@ -497,29 +516,4 @@ impl Model {
             iter: self.objects.iter().enumerate(),
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use std::ptr::null;
-
-    const fn yolo() {
-        #[repr(C)]
-        struct Yolo {
-            p1: [u8; 4],
-            p2: u8,
-        }
-        let a: *const Yolo = null();
-        unsafe {
-            null::<Yolo>().offset_from(a);
-        };
-        let b = unsafe {
-            #[allow(deref_nullptr)]
-            (&(*(null::<Yolo>())).p1[1] as *const u8).offset_from(null())
-        };
-    }
-
-    #[test]
-    fn test() {}
 }
