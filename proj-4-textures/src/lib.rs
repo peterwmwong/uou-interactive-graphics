@@ -160,6 +160,9 @@ impl RendererDelgate for Delegate {
                 // TODO: START HERE 3
                 // TODO: START HERE 3
                 // This should be based on model bounds
+                // 1. Translate/Rotate
+                // 2. Scale to normalize coordinate range to -1 to 1
+                //    - This prevents FS from using half precision more
                 // let height_of_teapot = 15.75;
                 // f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
                 let center = model.max_bounds.center;

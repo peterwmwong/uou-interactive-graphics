@@ -37,8 +37,8 @@ struct Geometry {
 struct VertexOut
 {
     float4 position [[position]];
-    float3 normal;
-    float2 tx_coord;
+    half3  normal;
+    half2  tx_coord;
 };
 
 vertex VertexOut
@@ -52,42 +52,43 @@ main_vertex(         uint       vertex_id [[vertex_id]],
     const float2 tx_coord = geometry.tx_coords[idx];
     return {
         .position  = world.matrix_model_to_projection * position,
-        .normal    = float3(world.matrix_normal_to_world * normal),
+        .normal    = half3(world.matrix_normal_to_world * normal),
         // TODO: Should flipping-x be determined by some data in the material?
-        .tx_coord  = float2(tx_coord.x, 1.0 - tx_coord.y)
+        .tx_coord  = half2(tx_coord.x, 1.0 - tx_coord.y)
     };
 }
 
 struct Material {
     float4          diffuse_color      [[id(MaterialID::diffuse_color)]];
     float4          specular_color     [[id(MaterialID::specular_color)]];
-    texture2d<float> diffuse_texture    [[id(MaterialID::diffuse_texture)]];
-    texture2d<float> specular_texture   [[id(MaterialID::specular_texture)]];
+    texture2d<half> diffuse_texture    [[id(MaterialID::diffuse_texture)]];
+    texture2d<half> specular_texture   [[id(MaterialID::specular_texture)]];
     float           specular_shineness [[id(MaterialID::specular_shineness)]];
 };
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Go back to half precision
-fragment float4
+fragment half4
 main_fragment(         VertexOut   in       [[stage_in]],
               constant Material  & material [[buffer(FragBufferIndex::Material)]],
               constant World     & world    [[buffer(FragBufferIndex::World)]])
 {
-    const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
+    const half3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (HAS_NORMAL) {
-        return float4(n.xy, n.z * -1, 1);
+        return half4(n.xy, n.z * -1, 1);
     }
 
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
     // 1. Viewport Coordinate -> Normalized Device Coordinate (aka Projected w/Perspective)
-    const float2  screen_pos   = float2(in.position.xy);
-    const float2  proj_pos_xy  = fma(float2(2, -2), (screen_pos / float2(world.screen_size)), float2(-1, 1));
+    const half2  screen_pos   = half2(in.position.xy);
+    const half2  proj_pos_xy  = fma(half2(2, -2), (screen_pos / half2(world.screen_size)), half2(-1, 1));
     // 2. Projected Coordinate -> World Space position
     const float4 proj_pos     = float4(float2(proj_pos_xy), in.position.z, 1);
     const float4 pos_w_persp  = world.matrix_projection_to_world * proj_pos;
-    const float3  pos          = float3(pos_w_persp.xyz / pos_w_persp.w);
+    // TODO: Use half precision
+    // - Unfortunately for the Yoda model, the model space (changing world space) bounds are yuuuge
+    //   ([-1000, 1000] coordinate range) causing terrible precision errors with half precisions.
+    // - Consider some preprocessing step that normalizes model space coordinates
+    // - Should this be the matrix_model_to_world?
+    const float3 pos          = pos_w_persp.xyz / pos_w_persp.w;
 
     /*
     ================================================================
@@ -108,44 +109,43 @@ main_fragment(         VertexOut   in       [[stage_in]],
     -------   ---------   ---------------
     Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
     */
-    const float3 l  = normalize(float3(world.light_position.xyz) - pos);  // Light  - world space direction from fragment to light
-    const float3 c  = normalize(float3(world.camera_position.xyz) - pos); // Camera - world space direction from fragment to camera
-    const float3 h  = normalize(l + c);                                   // Half   - half-way vector between Light and Camera
+    const half3 l  = half3(normalize(world.light_position.xyz - pos));  // Light  - world space direction from fragment to light
+    const half3 c  = half3(normalize(world.camera_position.xyz - pos)); // Camera - world space direction from fragment to camera
+    const half3 h  = normalize(l + c);                                  // Half   - half-way vector between Light and Camera
 
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
-    const float ln = max(dot(l, n), 0.);
+    const half ln = max(dot(l, n), 0.h);
     // Cosine angle between Camera and Normal
     // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
     // - Using the XCode Shader Profiler, this performed the best compared to...
     //      - ceil(saturate(v))
     //      - trunc(fma(v, .5h, 1.h))
-    const float cn = step(0., dot(c, n));
-    const float Il = 1 * cn; // Diffuse/Specular Light Intensity
+    const half cn = step(0.h, dot(c, n));
+    const half Il = 1 * cn; // Diffuse/Specular Light Intensity
 
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
 
     // Ambient/Diffuse Material Color
-    const float2 tx_coord = float2(in.tx_coord);
-    const texture2d<float> tx_diffuse     = material.diffuse_texture;
+    const texture2d<half> tx_diffuse     = material.diffuse_texture;
     const bool            has_tx_diffuse = !is_null_texture(tx_diffuse);
     // TODO: Use material.diffuse_color
-    const float4  Kd       = (HAS_AMBIENT || HAS_DIFFUSE) && has_tx_diffuse ? tx_diffuse.sample(tx_sampler, tx_coord) : 1.0;
+    const half4  Kd       = (HAS_AMBIENT || HAS_DIFFUSE) && has_tx_diffuse ? tx_diffuse.sample(tx_sampler, float2(in.tx_coord)) : 1.0;
 
     // Specular Material Color
-    const texture2d<float> tx_spec     = material.specular_texture;
+    const texture2d<half> tx_spec     = material.specular_texture;
     const bool            has_tx_spec = !is_null_texture(tx_spec);
     // TODO: Use material.specular_color
-    const float4           Ks          = HAS_SPECULAR && has_tx_spec ? tx_spec.sample(tx_sampler, tx_coord) : 1.0;
+    const half4           Ks          = HAS_SPECULAR && has_tx_spec ? tx_spec.sample(tx_sampler, float2(in.tx_coord)) : 1.0;
 
-    const float4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
-    const float   s        = material.specular_shineness;
-    const float4  specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
+    const half4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
+    const half   s        = material.specular_shineness;
+    const half4  specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
 
-    const float   Ia       = 0.1; // Ambient Intensity
-    const float4  ambient  = HAS_AMBIENT ? Ia * Kd : 0;
+    const half   Ia       = 0.1; // Ambient Intensity
+    const half4  ambient  = HAS_AMBIENT ? Ia * Kd : 0;
 
-    return float4(ambient + diffuse + specular);
+    return half4(ambient + diffuse + specular);
 };
 
 
