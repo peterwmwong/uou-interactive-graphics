@@ -1,6 +1,7 @@
 use crate::shader_bindings::{float4, MaterialID};
 use metal_app::{align_size, allocate_new_buffer_with_heap, metal::*};
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     simd::f32x4,
 };
@@ -14,7 +15,7 @@ pub struct MaxBounds {
 
 struct ModelObject {
     name: String,
-    num_triangles: u32,
+    num_indices: u32,
     material_id: u32,
 }
 
@@ -77,7 +78,7 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
     let mut positions_buf_length = 0;
     let mut normals_buf_length = 0;
     let mut tx_coords_buf_length = 0;
-    let mut objects: Vec<ModelObject> = vec![];
+    let mut objects = Vec::<ModelObject>::with_capacity(objs.len());
     for tobj::Model {
         mesh:
             tobj::Mesh {
@@ -112,7 +113,7 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
         tx_coords_buf_length += byte_len(&texcoords);
         objects.push(ModelObject {
             name: name.to_owned(),
-            num_triangles: (indices.len() / 3) as _,
+            num_indices: indices.len() as _,
             material_id: material_id.expect("No material found for object.") as _,
         });
     }
@@ -153,6 +154,9 @@ fn get_total_material_texture_size(
     for mat in materials {
         for texture_file in [&mat.diffuse_texture, &mat.specular_texture] {
             if !texture_file.is_empty() {
+                // TODO: START HERE 2
+                // TODO: START HERE 2
+                // TODO: START HERE 2
                 // TODO: Try to reuse the reader later to load the texture, instead of calling get_png_reader again in load_texture_from_png.
                 let (_, desc) = get_png_reader(&material_file_dir.join(texture_file));
                 let size_align = device.heap_texture_size_and_align(&desc);
@@ -172,7 +176,9 @@ fn load_texture_from_png(
 ) -> Texture {
     // TODO: Allocate this buf once
     // - Get the maximum output_buffer_size() of all the textures
-    let mut buf = vec![0; reader.output_buffer_size()];
+    let buf_size = reader.output_buffer_size();
+    let mut buf = Vec::with_capacity(buf_size);
+    unsafe { buf.set_len(buf_size) };
     reader.next_frame(&mut buf).expect("Failed to load texture");
 
     let texture = heap
@@ -197,12 +203,11 @@ fn load_texture_from_png(
 }
 
 #[inline]
-fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, old_offset: isize) -> (isize, *mut T) {
+fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, offset: usize) -> usize {
     unsafe {
-        std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
-        let new_contents = dst.add(src.len());
-        let offset = new_contents.byte_offset_from(dst);
-        (old_offset + offset, new_contents)
+        let count = src.len();
+        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(offset), count);
+        offset + std::mem::size_of::<T>() * count
     }
 }
 
@@ -232,16 +237,16 @@ fn load_geometry(
 
     // Allocate buffers...
     let mut indices_offset = 0;
-    let (mut indices_contents, indices_buf) =
+    let (indices_ptr, indices_buf) =
         allocate_new_buffer_with_heap::<u32>(heap, "indices", indices_buf_length as _);
     let mut positions_offset = 0;
-    let (mut positions_contents, positions_buf) =
+    let (positions_ptr, positions_buf) =
         allocate_new_buffer_with_heap::<f32>(heap, "positions", positions_buf_length as _);
     let mut normals_offset = 0;
-    let (mut normals_contents, normals_buf) =
+    let (normals_ptr, normals_buf) =
         allocate_new_buffer_with_heap::<f32>(heap, "normals", normals_buf_length as _);
     let mut tx_coords_offset = 0;
-    let (mut tx_coords_contents, tx_coords_buf) =
+    let (tx_coords_ptr, tx_coords_buf) =
         allocate_new_buffer_with_heap::<f32>(heap, "tx_coords", tx_coords_buf_length as _);
 
     let mut mins = f32x4::splat(f32::MAX);
@@ -269,24 +274,12 @@ fn load_geometry(
             ],
         );
 
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Make copy_into_buffer just return offset and remove the need to update dst pointer
-        // - copy_into_buffer will just do dst.byte_add(indices_offset)
-        //      - IMPORTANT: byte_add()
-        //      - IMPORTANT: byte_add()
-        //      - IMPORTANT: byte_add()
-        (indices_offset, indices_contents) =
-            copy_into_buffer(&mesh.indices, indices_contents, indices_offset);
-        (normals_offset, normals_contents) =
-            copy_into_buffer(&mesh.normals, normals_contents, normals_offset);
-        (tx_coords_offset, tx_coords_contents) =
-            copy_into_buffer(&mesh.texcoords, tx_coords_contents, tx_coords_offset);
+        indices_offset = copy_into_buffer(&mesh.indices, indices_ptr, indices_offset);
+        normals_offset = copy_into_buffer(&mesh.normals, normals_ptr, normals_offset);
+        tx_coords_offset = copy_into_buffer(&mesh.texcoords, tx_coords_ptr, tx_coords_offset);
 
         let positions = &mesh.positions;
-        (positions_offset, positions_contents) =
-            copy_into_buffer(&positions, positions_contents, positions_offset);
+        positions_offset = copy_into_buffer(&positions, positions_ptr, positions_offset);
         for &[x, y, z] in positions.as_chunks::<3>().0 {
             let input = f32x4::from_array([x, y, z, 0.0]);
             mins = mins.min(input);
@@ -319,8 +312,8 @@ fn load_materials(
     );
     arg_buffer.set_label("Materials Argument Buffer");
 
-    // Assume all materials have a diffuse and specular texture
-    let mut textures = Vec::with_capacity(mats.len() * 2);
+    // Assume all materials have 2 textures: diffuse and specular
+    let mut texture_map: HashMap<&str, Texture> = HashMap::with_capacity(mats.len() * 2);
     for (i, mat) in mats.iter().enumerate() {
         materials_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
         // TODO: Actually load diffuse and specular color
@@ -332,20 +325,16 @@ fn load_materials(
             *(materials_arg_encoder.constant_data(MaterialID::specular_color as _) as *mut float4) =
                 float4::new(0., 0., 0., 0.)
         };
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Handle multiple materials using the same texture image.
-        // - The Yoda model reuses the body texture for Body and Body_1 materials
         for (id, texture_file) in [
             (MaterialID::diffuse_texture, &mat.diffuse_texture),
             (MaterialID::specular_texture, &mat.specular_texture),
         ] {
             if !texture_file.is_empty() {
-                let png_reader_and_desc = get_png_reader(&material_file_dir.join(texture_file));
-                let tx = load_texture_from_png(&texture_file, png_reader_and_desc, heap);
+                let tx = texture_map.entry(&texture_file).or_insert_with(|| {
+                    let png_reader_and_desc = get_png_reader(&material_file_dir.join(texture_file));
+                    load_texture_from_png(&texture_file, png_reader_and_desc, heap)
+                });
                 materials_arg_encoder.set_texture(id as _, &tx);
-                textures.push(tx);
             }
         }
         unsafe {
@@ -353,79 +342,9 @@ fn load_materials(
                 as *mut f32) = mat.shininess
         };
     }
+    let textures = texture_map.into_values().collect();
 
     (arg_buffer, textures, arg_encoded_length)
-}
-
-pub struct ModelObjectIterResult<'a> {
-    i: usize,
-    model: &'a Model,
-    object: &'a ModelObject,
-}
-
-impl<'a> ModelObjectIterResult<'a> {
-    #[inline(always)]
-    pub fn num_triangles(&self) -> u32 {
-        self.object.num_triangles
-    }
-
-    #[inline(always)]
-    pub fn name(&self) -> &str {
-        &self.object.name
-    }
-
-    #[inline(always)]
-    pub fn encode_vertex_buffer_for_geometry_argument_buffer(
-        &self,
-        encoder: &RenderCommandEncoderRef,
-        buffer_index: u64,
-    ) {
-        encoder.set_vertex_buffer(
-            buffer_index,
-            Some(self.model.geometry_arg_buffer.as_ref()),
-            (self.i as u64) * (self.model.geometry_arg_encoded_length as u64),
-        );
-    }
-
-    #[inline(always)]
-    pub fn encode_fragment_buffer_for_material_argument_buffer(
-        &self,
-        encoder: &RenderCommandEncoderRef,
-        buffer_index: u64,
-    ) {
-        let i = self.object.material_id as u64;
-        encoder.set_fragment_buffer(
-            buffer_index,
-            Some(self.model.materials_arg_buffer.as_ref()),
-            (i as u64) * (self.model.materials_arg_encoded_length as u64),
-        );
-    }
-}
-
-struct ModelObjectIter<'a, T: Iterator<Item = (usize, &'a ModelObject)>> {
-    iter: T,
-    model: &'a Model,
-}
-
-impl<'a, T: Iterator<Item = (usize, &'a ModelObject)>> Iterator for ModelObjectIter<'a, T> {
-    type Item = ModelObjectIterResult<'a>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, object)| ModelObjectIterResult {
-            i,
-            model: &self.model,
-            object,
-        })
-    }
-}
-impl<'a, T: Iterator<Item = (usize, &'a ModelObject)>> ExactSizeIterator
-    for ModelObjectIter<'a, T>
-{
-    #[inline(always)]
-    fn len(&self) -> usize {
-        self.model.objects.len()
-    }
 }
 
 impl Model {
@@ -503,6 +422,7 @@ impl Model {
         }
     }
 
+    #[inline]
     pub fn encode_use_resources(&self, encoder: &RenderCommandEncoderRef) {
         encoder.use_heap_at(
             &self.heap,
@@ -510,10 +430,49 @@ impl Model {
         )
     }
 
-    pub fn object_iter(&self) -> impl Iterator<Item = ModelObjectIterResult> {
-        ModelObjectIter {
-            model: self,
-            iter: self.objects.iter().enumerate(),
+    #[inline]
+    pub fn encode_draws(
+        &self,
+        encoder: &RenderCommandEncoderRef,
+        vertex_geometry_arg_buffer_id: u8,
+        fragment_material_arg_buffer_id: u8,
+    ) {
+        let mut geometry_arg_buffer_offset = 0;
+        for o in &self.objects {
+            encoder.push_debug_group(&o.name);
+
+            let material_arg_buffer_offset = o.material_id * self.materials_arg_encoded_length;
+
+            // For the first object, encode the vertex/fragment buffer.
+            if geometry_arg_buffer_offset == 0 {
+                encoder.set_vertex_buffer(
+                    vertex_geometry_arg_buffer_id as _,
+                    Some(self.geometry_arg_buffer.as_ref()),
+                    0,
+                );
+                encoder.set_fragment_buffer(
+                    fragment_material_arg_buffer_id as _,
+                    Some(self.materials_arg_buffer.as_ref()),
+                    material_arg_buffer_offset as _,
+                );
+            }
+            // Subsequent objects, just move the vertex/fragment buffer offsets
+            else {
+                encoder.set_vertex_buffer_offset(
+                    vertex_geometry_arg_buffer_id as _,
+                    geometry_arg_buffer_offset as _,
+                );
+
+                encoder.set_fragment_buffer_offset(
+                    fragment_material_arg_buffer_id as _,
+                    material_arg_buffer_offset as _,
+                );
+            }
+            geometry_arg_buffer_offset += self.geometry_arg_encoded_length;
+
+            encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, o.num_indices as _);
+
+            encoder.pop_debug_group();
         }
     }
 }

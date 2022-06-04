@@ -31,13 +31,12 @@ struct VertexOut
 };
 
 vertex VertexOut
-main_vertex(         uint             inst_id         [[instance_id]],
-                     uint             vertex_id       [[vertex_id]],
+main_vertex(         uint             vertex_id       [[vertex_id]],
             constant ObjectGeometry & obj_geo         [[buffer(VertexBufferIndex::ObjectGeometry)]],
             constant float4x4       & model_to_proj   [[buffer(VertexBufferIndex::MatrixModelToProjection)]],
             constant float3x3       & normal_to_world [[buffer(VertexBufferIndex::MatrixNormalToWorld)]])
 {
-    const uint   idx      = obj_geo.indices[inst_id * 3 + vertex_id];
+    const uint   idx      = obj_geo.indices[vertex_id];
     const float4 position = float4(obj_geo.positions[idx], 1.0);
     const float3 normal   = obj_geo.normals[idx];
     const float2 tx_coord = obj_geo.tx_coords[idx];

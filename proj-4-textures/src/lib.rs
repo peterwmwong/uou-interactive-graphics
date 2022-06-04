@@ -208,77 +208,69 @@ impl RendererDelgate for Delegate {
             desc
         });
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
-        self.model.encode_use_resources(&encoder);
         encoder.set_depth_stencil_state(&self.depth_state);
+        self.model.encode_use_resources(&encoder);
 
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Move all these vertex/fragment inputs (shared by all draws) into a single argument buffer.
         let light_world_position = float4::from(self.light_world_position);
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex::MatrixNormalToWorld as _,
+            // IMPORTANT: In the shader, this maps to a float3x3. This works because...
+            // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
+            //   - Since normals are directions (not positions), translations are meaningless and
+            //     should not be applied.
+            // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
+            //
+            // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
+            //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
+            &self.matrix_model_to_world,
+        );
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex::MatrixModelToProjection as _,
+            self.matrix_model_to_projection.metal_float4x4(),
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex::MatrixProjectionToWorld as _,
+            self.matrix_projection_to_world.metal_float4x4(),
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex::ScreenSize as _,
+            &float2::from(self.screen_size),
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex::LightPosition as _,
+            // IMPORTANT: In the shader, this maps to a float3. This works because the float4
+            // and float3 have the same size and alignment.
+            &light_world_position,
+        );
+        encode_fragment_bytes(
+            &encoder,
+            FragBufferIndex::CameraPosition as _,
+            // IMPORTANT: In the shader, this maps to a float3. This works because the float4
+            // and float3 have the same size and alignment.
+            &float4::from(self.camera_world_position),
+        );
 
         // Render Model
-        for o in self.model.object_iter() {
-            encoder.push_debug_group(&o.name());
-            o.encode_vertex_buffer_for_geometry_argument_buffer(
-                encoder,
-                VertexBufferIndex::ObjectGeometry as _,
-            );
-            encode_vertex_bytes(
-                &encoder,
-                VertexBufferIndex::MatrixNormalToWorld as _,
-                // IMPORTANT: In the shader, this maps to a float3x3. This works because...
-                // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
-                //   - Since normals are directions (not positions), translations are meaningless and
-                //     should not be applied.
-                // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
-                //
-                // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
-                //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
-                &self.matrix_model_to_world,
-            );
-            encode_vertex_bytes(
-                &encoder,
-                VertexBufferIndex::MatrixModelToProjection as _,
-                self.matrix_model_to_projection.metal_float4x4(),
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex::MatrixProjectionToWorld as _,
-                self.matrix_projection_to_world.metal_float4x4(),
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex::ScreenSize as _,
-                &float2::from(self.screen_size),
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex::LightPosition as _,
-                // IMPORTANT: In the shader, this maps to a float3. This works because the float4
-                // and float3 have the same size and alignment.
-                &light_world_position,
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex::CameraPosition as _,
-                // IMPORTANT: In the shader, this maps to a float3. This works because the float4
-                // and float3 have the same size and alignment.
-                &float4::from(self.camera_world_position),
-            );
-            o.encode_fragment_buffer_for_material_argument_buffer(
-                encoder,
-                FragBufferIndex::Material as _,
-            );
-            encoder.draw_primitives_instanced(
-                MTLPrimitiveType::Triangle,
-                0,
-                3,
-                o.num_triangles() as _,
-            );
-            encoder.pop_debug_group();
-        }
+        self.model.encode_draws(
+            &encoder,
+            VertexBufferIndex::ObjectGeometry as _,
+            FragBufferIndex::Material as _,
+        );
 
         // Render Light
         {
+            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             encoder.push_debug_group("Light");
-            // TODO: Figure out a better way to unset this buffers from the previous draw call
+            // // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(
                 0,
                 &[None; VertexBufferIndex::LENGTH as _],
@@ -289,7 +281,6 @@ impl RendererDelgate for Delegate {
                 &[None; FragBufferIndex::LENGTH as _],
                 &[0; FragBufferIndex::LENGTH as _],
             );
-            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             encode_vertex_bytes(
                 &encoder,
                 LightVertexBufferIndex::MatrixWorldToProjection as _,
