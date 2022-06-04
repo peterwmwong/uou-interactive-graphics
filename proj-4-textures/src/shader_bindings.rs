@@ -410,6 +410,17 @@ pub enum ObjectGeometryID {
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum WorldID {
+    matrix_model_to_projection = 0,
+    matrix_world_to_projection = 1,
+    matrix_normal_to_world = 2,
+    matrix_projection_to_world = 3,
+    screen_size = 4,
+    light_position = 5,
+    camera_position = 6,
+}
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum MaterialID {
     diffuse_color = 0,
     specular_color = 1,
@@ -420,27 +431,22 @@ pub enum MaterialID {
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {
-    ObjectGeometry = 0,
-    MatrixModelToProjection = 1,
-    MatrixNormalToWorld = 2,
-    LENGTH = 3,
+    Geometry = 0,
+    World = 1,
+    LENGTH = 2,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragBufferIndex {
-    MatrixProjectionToWorld = 0,
-    ScreenSize = 1,
-    LightPosition = 2,
-    CameraPosition = 3,
-    Material = 4,
-    LENGTH = 5,
+    Material = 0,
+    World = 1,
+    LENGTH = 2,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum LightVertexBufferIndex {
-    MatrixWorldToProjection = 0,
-    LightPosition = 1,
-    LENGTH = 2,
+    World = 0,
+    LENGTH = 1,
 }
 
 /**************************************************************************************************

@@ -28,7 +28,7 @@ bitflags! {
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 2000.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::splat(0.);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -37,23 +37,19 @@ const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE;
 struct Delegate {
     camera_distance: f32,
     camera_rotation: f32x2,
-    camera_world_position: f32x4,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
     library: Library,
-    light_world_position: f32x4,
     light_xy_rotation: f32x2,
-    matrix_model_to_projection: f32x4x4,
     matrix_model_to_world: f32x4x4,
-    matrix_projection_to_world: f32x4x4,
-    matrix_world_to_camera: f32x4x4,
-    matrix_world_to_projection: f32x4x4,
     mode: Mode,
     model: Model,
     render_light_pipeline_state: RenderPipelineState,
     render_pipeline_state: RenderPipelineState,
-    screen_size: f32x2,
+    world_arg_buffer: Buffer,
+    world_arg_encoder: ArgumentEncoder,
+    world_changed: bool,
 }
 
 struct PipelineResults {
@@ -129,17 +125,27 @@ impl RendererDelgate for Delegate {
             &pipelines
                 .model
                 .vertex_function
-                .new_argument_encoder(VertexBufferIndex::ObjectGeometry as _),
+                .new_argument_encoder(VertexBufferIndex::Geometry as _),
             &pipelines
                 .model
                 .fragment_function
                 .new_argument_encoder(FragBufferIndex::Material as _),
         );
 
+        let world_arg_encoder = pipelines
+            .model
+            .fragment_function
+            .new_argument_encoder(FragBufferIndex::World as _);
+        let world_arg_buffer = device.new_buffer(
+            world_arg_encoder.encoded_length(),
+            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
+        );
+        world_arg_buffer.set_label("World Argument Buffer");
+        world_arg_encoder.set_argument_buffer(&world_arg_buffer, 0);
+
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
-            camera_world_position: f32x4::default(),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -148,9 +154,7 @@ impl RendererDelgate for Delegate {
             },
             depth_texture: None,
             library,
-            light_world_position: f32x4::default(),
             light_xy_rotation: INITIAL_LIGHT_ROTATION,
-            matrix_model_to_projection: f32x4x4::identity(),
             matrix_model_to_world: {
                 // TODO: START HERE 3
                 // TODO: START HERE 3
@@ -163,27 +167,44 @@ impl RendererDelgate for Delegate {
                     * f32x4x4::x_rotate(PI / 2.)
                     * f32x4x4::translate(-center[0], -center[1], -center[2])
             },
-            matrix_projection_to_world: f32x4x4::identity(),
-            matrix_world_to_camera: f32x4x4::identity(),
-            matrix_world_to_projection: f32x4x4::identity(),
             mode,
             model,
             render_pipeline_state: pipelines.model.pipeline_state,
             render_light_pipeline_state: pipelines.light.pipeline_state,
-            screen_size: f32x2::default(),
+            world_arg_buffer,
+            world_arg_encoder,
+            world_changed: false,
             device,
         };
+
+        // IMPORTANT: Not a mistake, using Model-to-World 4x4 Matrix for Normal-to-World 3x3 Matrix.
+        // This works because...
+        // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
+        //   - Since normals are directions (not positions, relative to a point on a surface),
+        //     translations are meaningless and should not be applied.
+        // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
+        //
+        // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
+        //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
+        delegate.update_world(
+            WorldID::matrix_normal_to_world,
+            delegate.matrix_model_to_world,
+        );
         delegate.update_light(delegate.light_xy_rotation);
         delegate.update_camera(
-            delegate.screen_size,
+            Some(f32x2::default()),
             delegate.camera_rotation,
             delegate.camera_distance,
         );
+        delegate.reset_world_changed();
         delegate
     }
 
     #[inline]
     fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
+        if !self.reset_world_changed() {
+            return;
+        }
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
@@ -207,65 +228,27 @@ impl RendererDelgate for Delegate {
             }
             desc
         });
-        encoder.set_render_pipeline_state(&self.render_pipeline_state);
-        encoder.set_depth_stencil_state(&self.depth_state);
-        self.model.encode_use_resources(&encoder);
-
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Move all these vertex/fragment inputs (shared by all draws) into a single argument buffer.
-        let light_world_position = float4::from(self.light_world_position);
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::MatrixNormalToWorld as _,
-            // IMPORTANT: In the shader, this maps to a float3x3. This works because...
-            // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
-            //   - Since normals are directions (not positions), translations are meaningless and
-            //     should not be applied.
-            // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
-            //
-            // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
-            //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
-            &self.matrix_model_to_world,
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::MatrixModelToProjection as _,
-            self.matrix_model_to_projection.metal_float4x4(),
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex::MatrixProjectionToWorld as _,
-            self.matrix_projection_to_world.metal_float4x4(),
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex::ScreenSize as _,
-            &float2::from(self.screen_size),
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex::LightPosition as _,
-            // IMPORTANT: In the shader, this maps to a float3. This works because the float4
-            // and float3 have the same size and alignment.
-            &light_world_position,
-        );
-        encode_fragment_bytes(
-            &encoder,
-            FragBufferIndex::CameraPosition as _,
-            // IMPORTANT: In the shader, this maps to a float3. This works because the float4
-            // and float3 have the same size and alignment.
-            &float4::from(self.camera_world_position),
-        );
-
         // Render Model
-        self.model.encode_draws(
-            &encoder,
-            VertexBufferIndex::ObjectGeometry as _,
-            FragBufferIndex::Material as _,
-        );
-
+        {
+            encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            encoder.set_depth_stencil_state(&self.depth_state);
+            self.model.encode_use_resources(&encoder);
+            encoder.set_vertex_buffer(
+                VertexBufferIndex::World as _,
+                Some(&self.world_arg_buffer),
+                0,
+            );
+            encoder.set_fragment_buffer(
+                FragBufferIndex::World as _,
+                Some(&self.world_arg_buffer),
+                0,
+            );
+            self.model.encode_draws(
+                &encoder,
+                VertexBufferIndex::Geometry as _,
+                FragBufferIndex::Material as _,
+            );
+        }
         // Render Light
         {
             encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
@@ -281,15 +264,10 @@ impl RendererDelgate for Delegate {
                 &[None; FragBufferIndex::LENGTH as _],
                 &[0; FragBufferIndex::LENGTH as _],
             );
-            encode_vertex_bytes(
-                &encoder,
-                LightVertexBufferIndex::MatrixWorldToProjection as _,
-                self.matrix_world_to_projection.metal_float4x4(),
-            );
-            encode_vertex_bytes(
-                &encoder,
-                LightVertexBufferIndex::LightPosition as _,
-                &light_world_position,
+            encoder.set_vertex_buffer(
+                LightVertexBufferIndex::World as _,
+                Some(&self.world_arg_buffer),
+                0,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
             encoder.pop_debug_group();
@@ -326,7 +304,7 @@ impl RendererDelgate for Delegate {
                         }
                         Right => camera_distance += -drag_amount[1] * 8.0,
                     }
-                    self.update_camera(self.screen_size, camera_rotation, camera_distance);
+                    self.update_camera(None, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::CONTROL) {
                     match button {
                         Left => {
@@ -357,7 +335,7 @@ impl RendererDelgate for Delegate {
             }
             WindowResize { size, .. } => {
                 self.update_depth_texture_size(size);
-                self.update_camera(size, self.camera_rotation, self.camera_distance);
+                self.update_camera(Some(size), self.camera_rotation, self.camera_distance);
             }
             _ => {}
         }
@@ -365,6 +343,11 @@ impl RendererDelgate for Delegate {
 }
 
 impl Delegate {
+    #[inline(always)]
+    fn reset_world_changed(&mut self) -> bool {
+        std::mem::replace(&mut self.world_changed, false)
+    }
+
     fn update_mode(&mut self, mode: Mode) {
         if mode != self.mode {
             self.mode = mode;
@@ -426,28 +409,65 @@ impl Delegate {
         orthographic_matrix * perspective_matrix
     }
 
-    fn update_light(&mut self, light_xy_rotation: f32x2) {
-        self.light_xy_rotation = light_xy_rotation;
-        self.light_world_position =
-            f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
-                * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.])
+    #[inline(always)]
+    fn update_world<T: Sized>(&mut self, id: WorldID, value: T) {
+        unsafe {
+            *(self.world_arg_encoder.constant_data(id as _) as *mut T) = value;
+        };
+        self.world_changed = true;
     }
 
-    fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
+    fn update_light(&mut self, light_xy_rotation: f32x2) {
+        self.light_xy_rotation = light_xy_rotation;
+        let light_position =
+            f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
+                * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]);
+        self.update_world(WorldID::light_position, light_position);
+    }
+
+    fn update_camera(
+        &mut self,
+        screen_size: Option<f32x2>,
+        camera_rotation: f32x2,
+        camera_distance: f32,
+    ) {
         self.camera_rotation = camera_rotation;
         self.camera_distance = camera_distance;
-        self.matrix_world_to_camera = f32x4x4::translate(0., 0., self.camera_distance)
+        let matrix_world_to_camera = f32x4x4::translate(0., 0., self.camera_distance)
             * f32x4x4::rotate(-self.camera_rotation[0], -self.camera_rotation[1], 0.);
-        self.camera_world_position =
-            self.matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]);
+        self.update_world(
+            WorldID::camera_position,
+            matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]),
+        );
 
-        self.screen_size = screen_size;
+        let screen_size_ptr = self
+            .world_arg_encoder
+            .constant_data(WorldID::screen_size as _) as *mut f32x2;
+        let screen_size = unsafe {
+            if let Some(size) = screen_size {
+                *screen_size_ptr = size;
+                size
+            } else {
+                *screen_size_ptr
+            }
+        };
+
         let aspect_ratio = screen_size[1] / screen_size[0];
-        self.matrix_world_to_projection =
-            self.calc_matrix_camera_to_projection(aspect_ratio) * self.matrix_world_to_camera;
-        self.matrix_model_to_projection =
-            self.matrix_world_to_projection * self.matrix_model_to_world;
-        self.matrix_projection_to_world = self.matrix_world_to_projection.inverse();
+        let matrix_world_to_projection =
+            self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
+
+        self.update_world(
+            WorldID::matrix_world_to_projection,
+            *matrix_world_to_projection.metal_float4x4(),
+        );
+        self.update_world(
+            WorldID::matrix_model_to_projection,
+            *(matrix_world_to_projection * self.matrix_model_to_world).metal_float4x4(),
+        );
+        self.update_world(
+            WorldID::matrix_projection_to_world,
+            *matrix_world_to_projection.inverse().metal_float4x4(),
+        );
     }
 }
 

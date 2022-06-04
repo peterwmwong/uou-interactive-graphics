@@ -26,6 +26,17 @@ enum struct ObjectGeometryID
     tx_coords,
 };
 
+enum struct WorldID
+{
+    matrix_model_to_projection = 0,
+    matrix_world_to_projection,
+    matrix_normal_to_world,
+    matrix_projection_to_world,
+    screen_size,
+    light_position,
+    camera_position,
+};
+
 enum struct MaterialID
 {
     diffuse_color = 0,
@@ -37,26 +48,21 @@ enum struct MaterialID
 
 enum struct VertexBufferIndex
 {
-    ObjectGeometry = 0,
-    MatrixModelToProjection,
-    MatrixNormalToWorld,
+    Geometry = 0,
+    World,
     LENGTH
 };
 
 enum struct FragBufferIndex
 {
-    MatrixProjectionToWorld = 0,
-    ScreenSize,
-    LightPosition,
-    CameraPosition,
-    Material,
+    Material = 0,
+    World,
     LENGTH
 };
 
 enum struct LightVertexBufferIndex
 {
-    MatrixWorldToProjection = 0,
-    LightPosition,
+    World = 0,
     LENGTH,
 };
 

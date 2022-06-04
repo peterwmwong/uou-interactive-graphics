@@ -13,6 +13,8 @@ pub struct f32x4x4 {
     columns: [f32x4; 4],
 }
 
+pub type MetalFloat4x4 = [f32x4; 4];
+
 impl f32x4x4 {
     #[inline]
     pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
@@ -211,7 +213,7 @@ impl f32x4x4 {
     ///
     /// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
     #[inline]
-    pub const fn metal_float4x4(&self) -> &[f32x4; 4] {
+    pub const fn metal_float4x4(&self) -> &MetalFloat4x4 {
         &self.columns
     }
 }

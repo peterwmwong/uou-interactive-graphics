@@ -8,15 +8,26 @@ constant bool  HAS_DIFFUSE        [[function_constant(static_cast<uint>(FC::HAS_
 constant bool  HAS_NORMAL         [[function_constant(static_cast<uint>(FC::HAS_NORMAL))]];
 constant bool  HAS_SPECULAR       [[function_constant(static_cast<uint>(FC::HAS_SPECULAR))]];
 
+struct World {
+    float4x4 matrix_model_to_projection [[id(WorldID::matrix_model_to_projection)]];
+    float4x4 matrix_world_to_projection [[id(WorldID::matrix_world_to_projection)]];
+    float3x3 matrix_normal_to_world     [[id(WorldID::matrix_normal_to_world)]];
+    float4x4 matrix_projection_to_world [[id(WorldID::matrix_projection_to_world)]];
+
+    float2   screen_size                [[id(WorldID::screen_size)]];
+    float4   light_position             [[id(WorldID::light_position)]];
+    float4   camera_position            [[id(WorldID::camera_position)]];
+};
+
 // TODO: Re-layout memory to be more cache-friendly
 // - Currently, with 3 separate arrays for position, normals, and tx_coords, a VS instance must
 //   access 3 separate, disjoint memory addresses
 // - What if we pack position, normal, and tx_coord as tuple and then have an array of tuples
 //   struct VertexData { position; normal; coord; }
-//   struct ObjectGeometry { const VertexData * vertex_data; }
+//   struct Geometry { const VertexData * vertex_data; }
 // - Downside: Data Duplication
 //   - Assess size difference
-struct ObjectGeometry {
+struct Geometry {
     constant uint          * indices   [[id(ObjectGeometryID::indices)]];
     constant packed_float3 * positions [[id(ObjectGeometryID::positions)]];
     constant packed_float3 * normals   [[id(ObjectGeometryID::normals)]];
@@ -31,18 +42,17 @@ struct VertexOut
 };
 
 vertex VertexOut
-main_vertex(         uint             vertex_id       [[vertex_id]],
-            constant ObjectGeometry & obj_geo         [[buffer(VertexBufferIndex::ObjectGeometry)]],
-            constant float4x4       & model_to_proj   [[buffer(VertexBufferIndex::MatrixModelToProjection)]],
-            constant float3x3       & normal_to_world [[buffer(VertexBufferIndex::MatrixNormalToWorld)]])
+main_vertex(         uint       vertex_id [[vertex_id]],
+            constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]],
+            constant World    & world     [[buffer(VertexBufferIndex::World)]])
 {
-    const uint   idx      = obj_geo.indices[vertex_id];
-    const float4 position = float4(obj_geo.positions[idx], 1.0);
-    const float3 normal   = obj_geo.normals[idx];
-    const float2 tx_coord = obj_geo.tx_coords[idx];
+    const uint   idx      = geometry.indices[vertex_id];
+    const float4 position = float4(geometry.positions[idx], 1.0);
+    const float3 normal   = geometry.normals[idx];
+    const float2 tx_coord = geometry.tx_coords[idx];
     return {
-        .position  = model_to_proj * position,
-        .normal    = float3(normal_to_world * normal),
+        .position  = world.matrix_model_to_projection * position,
+        .normal    = float3(world.matrix_normal_to_world * normal),
         // TODO: Should flipping-x be determined by some data in the material?
         .tx_coord  = float2(tx_coord.x, 1.0 - tx_coord.y)
     };
@@ -61,12 +71,9 @@ struct Material {
 // TODO: START HERE
 // Go back to half precision
 fragment float4
-main_fragment(         VertexOut   in            [[stage_in]],
-              constant float4x4  & proj_to_world [[buffer(FragBufferIndex::MatrixProjectionToWorld)]],
-              constant float2    & screen_size   [[buffer(FragBufferIndex::ScreenSize)]],
-              constant float3    & light_pos     [[buffer(FragBufferIndex::LightPosition)]],
-              constant float3    & cam_pos       [[buffer(FragBufferIndex::CameraPosition)]],
-              constant Material  & material      [[buffer(FragBufferIndex::Material)]])
+main_fragment(         VertexOut   in       [[stage_in]],
+              constant Material  & material [[buffer(FragBufferIndex::Material)]],
+              constant World     & world    [[buffer(FragBufferIndex::World)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (HAS_NORMAL) {
@@ -76,10 +83,10 @@ main_fragment(         VertexOut   in            [[stage_in]],
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
     // 1. Viewport Coordinate -> Normalized Device Coordinate (aka Projected w/Perspective)
     const float2  screen_pos   = float2(in.position.xy);
-    const float2  proj_pos_xy  = fma(float2(2, -2), (screen_pos / float2(screen_size)), float2(-1, 1));
+    const float2  proj_pos_xy  = fma(float2(2, -2), (screen_pos / float2(world.screen_size)), float2(-1, 1));
     // 2. Projected Coordinate -> World Space position
     const float4 proj_pos     = float4(float2(proj_pos_xy), in.position.z, 1);
-    const float4 pos_w_persp  = proj_to_world * proj_pos;
+    const float4 pos_w_persp  = world.matrix_projection_to_world * proj_pos;
     const float3  pos          = float3(pos_w_persp.xyz / pos_w_persp.w);
 
     /*
@@ -101,9 +108,9 @@ main_fragment(         VertexOut   in            [[stage_in]],
     -------   ---------   ---------------
     Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
     */
-    const float3 l  = normalize(float3(light_pos.xyz) - pos); // Light  - world space direction from fragment to light
-    const float3 c  = normalize(float3(cam_pos.xyz) - pos);   // Camera - world space direction from fragment to camera
-    const float3 h  = normalize(l + c);                      // Half   - half-way vector between Light and Camera
+    const float3 l  = normalize(float3(world.light_position.xyz) - pos);  // Light  - world space direction from fragment to light
+    const float3 c  = normalize(float3(world.camera_position.xyz) - pos); // Camera - world space direction from fragment to camera
+    const float3 h  = normalize(l + c);                                   // Half   - half-way vector between Light and Camera
 
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
@@ -148,11 +155,10 @@ struct LightVertexOut {
 };
 
 vertex LightVertexOut
-light_vertex(constant float4x4 & model_to_proj [[buffer(LightVertexBufferIndex::MatrixWorldToProjection)]],
-             constant float4   & light_pos     [[buffer(LightVertexBufferIndex::LightPosition)]])
+light_vertex(constant World & world [[buffer(LightVertexBufferIndex::World)]])
 {
     return {
-        .position = model_to_proj * light_pos,
+        .position = world.matrix_world_to_projection * world.light_position,
         .size = 50,
     };
 }
