@@ -6,7 +6,7 @@ use std::ffi::{c_void, CStr};
 
 #[inline(always)]
 pub fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usize {
-    (size + (size & (align - 1) + align)) as _
+    (size + (align - (size & (align - 1)))) as _
 }
 
 #[inline]
