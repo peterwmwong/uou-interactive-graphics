@@ -3,7 +3,7 @@ use cocoa::appkit::CGFloat;
 use core_graphics::display::CGSize;
 use metal::*;
 use objc::{rc::autoreleasepool, runtime::YES};
-use std::{os::raw::c_ushort, simd::*};
+use std::{os::raw::c_ushort, simd::f32x2};
 
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -52,10 +52,15 @@ pub enum UserEvent {
 pub trait RendererDelgate {
     fn new(device: Device, command_queue: &CommandQueue) -> Self;
 
-    fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef);
+    fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef);
 
     #[inline]
     fn on_event(&mut self, _event: UserEvent) {}
+
+    #[inline]
+    fn needs_render(&self) -> bool {
+        true
+    }
 }
 
 pub(crate) struct MetalRenderer<R: RendererDelgate> {
@@ -65,6 +70,8 @@ pub(crate) struct MetalRenderer<R: RendererDelgate> {
     screen_size: f32x2,
     delegate: R,
 }
+
+unsafe impl<R: RendererDelgate> Send for MetalRenderer<R> {}
 
 impl<R: RendererDelgate> MetalRenderer<R> {
     #[inline]
@@ -80,14 +87,14 @@ impl<R: RendererDelgate> MetalRenderer<R> {
             backing_scale_factor,
             delegate: R::new(device, &command_queue),
             layer,
-            screen_size: Simd::splat(0.0),
+            screen_size: f32x2::splat(0.0),
             command_queue,
         }
     }
 
     #[inline]
     pub(crate) fn update_size(&mut self, size: f32x2) {
-        let size = size * Simd::splat(self.backing_scale_factor);
+        let size = size * f32x2::splat(self.backing_scale_factor);
         if self.screen_size != size {
             self.layer
                 .set_drawable_size(CGSize::new(size[0] as CGFloat, size[1] as CGFloat));
@@ -97,10 +104,15 @@ impl<R: RendererDelgate> MetalRenderer<R> {
     }
 
     #[inline]
+    pub(crate) fn needs_render(&mut self) -> bool {
+        self.delegate.needs_render()
+    }
+
+    #[inline]
     pub(crate) fn render(&mut self) {
         autoreleasepool(|| {
             if let Some(drawable) = self.layer.next_drawable() {
-                self.delegate.draw(&self.command_queue, drawable);
+                self.delegate.render(&self.command_queue, drawable);
             };
         });
     }

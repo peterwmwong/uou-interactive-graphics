@@ -20,17 +20,7 @@ use objc::{
     rc::autoreleasepool,
     runtime::{Object, Sel, BOOL, YES},
 };
-use std::{
-    os::raw::c_void,
-    simd::f32x2,
-    sync::{Arc, Mutex},
-};
-
-pub struct ApplicationManager<R: RendererDelgate + 'static> {
-    renderer: MetalRenderer<R>,
-}
-
-unsafe impl<R: RendererDelgate + 'static> Send for ApplicationManager<R> {}
+use std::{os::raw::c_void, simd::f32x2};
 
 #[inline]
 fn parse_modifier_keys(ns_modifiers: NSEventModifierFlags) -> ModifierKeys {
@@ -57,224 +47,222 @@ fn parse_modifier_keys(ns_modifiers: NSEventModifierFlags) -> ModifierKeys {
     modifiers
 }
 
-impl<R: RendererDelgate + 'static> ApplicationManager<R> {
-    // Important: Call within `autoreleasepool()`.
-    pub fn from_nswindow(nswindow: *mut Object) -> DisplayLink {
-        let nswindow = debug_assert_objc_class(nswindow, &"NSWindow");
-        let mut manager = Box::new(Self {
-            renderer: MetalRenderer::new(unsafe { nswindow.backingScaleFactor() as f32 }),
-        });
-        manager.init_window_event_handlers(nswindow);
-        manager.init_and_attach_view(nswindow);
+// Important: Call within `autoreleasepool()`.
+pub fn from_nswindow<R: RendererDelgate + 'static>(nswindow: *mut Object) -> DisplayLink {
+    let nswindow = debug_assert_objc_class(nswindow, &"NSWindow");
+    let backing_scale_factor = unsafe { nswindow.backingScaleFactor() as f32 };
+    let mut renderer: Box<MetalRenderer<R>> = Box::new(MetalRenderer::new(backing_scale_factor));
+    init_window_event_handlers::<R>(nswindow, &mut renderer);
+    init_and_attach_view::<R>(nswindow, &mut renderer);
 
-        let manager = Arc::new(Mutex::new(manager));
-        let main_queue = Queue::main();
-        DisplayLink::new(move |_| {
-            let manager = Arc::clone(&manager);
-            main_queue.exec_async(move || manager.lock().unwrap().renderer.render());
-        })
-        .expect("Could not create Display Link")
-    }
+    let main_queue = Queue::main();
+    DisplayLink::new(move |_| {
+        if renderer.needs_render() {
+            main_queue.exec_sync(|| renderer.render());
+        }
+    })
+    .expect("Could not create Display Link")
+}
 
-    fn init_and_attach_view(self: &mut Box<Self>, nswindow: *mut Object) {
-        unsafe {
-            use cocoa::appkit::NSView;
-            let mut decl = unwrap_option_dcheck(
-                ClassDecl::new("CustomNSView", class!(NSView)),
-                "Unable to create custom NSView (CustomNSView)",
-            );
-            decl.add_method(sel!(acceptsFirstResponder), {
-                extern "C" fn accepts_first_responder(_this: &Object, _sel: Sel) -> BOOL {
-                    YES
-                }
-                accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL
-            });
-            for selector in [
-                sel!(mouseDown:),
-                sel!(mouseDragged:),
-                sel!(mouseUp:),
-                sel!(rightMouseDown:),
-                sel!(rightMouseDragged:),
-                sel!(rightMouseUp:),
-            ] {
-                decl.add_method(selector, {
-                    extern "C" fn on_mouse_event<R: RendererDelgate + 'static>(
-                        this: &mut Object,
-                        _: Sel,
-                        event: *mut Object,
-                    ) {
-                        use MouseButton::*;
-                        use NSEventType::*;
-                        use UserEvent::*;
-                        static mut LAST_DRAG_POSITION: f32x2 = f32x2::splat(0.0);
-
-                        // We have to do this to have access to the `NSView` trait...
-                        let view: id = this;
-                        let position = unsafe {
-                            let view_rect = NSView::frame(view);
-                            let NSPoint { x, y } =
-                                view.convertPoint_fromView_(event.locationInWindow(), nil);
-                            if x < 0.0
-                                || y < 0.0
-                                || x > view_rect.size.width
-                                || y > view_rect.size.height
-                            {
-                                return;
-                            }
-
-                            let point = view
-                                .convertRectToBacking(NSRect::new(
-                                    NSPoint {
-                                        x,
-                                        /*
-
-                                        IMPORTANT: Flips y coordinate to match application coordinate system...
-
-                                        BEFORE: OS coordinate system
-                                        ========================================================================
-
-                                            (0,height)
-                                            ^
-                                            |
-                                            (0,0) -> (width, 0)
-
-                                        AFTER: Application coordinate system. Also matches Metal Viewport
-                                               Coordinate system, see "Metal Coordinate System"
-                                               https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
-                                        ========================================================================
-
-                                            (0,0) -> (width, 0)
-                                            |
-                                            v
-                                            (0,height)
-
-                                        */
-                                        y: view_rect.size.height - y,
-                                    },
-                                    NSSize::new(0.0, 0.0),
-                                ))
-                                .origin;
-                            f32x2::from_array([point.x as f32, point.y as f32])
-                        };
-                        let ns_event_type = unsafe { NSEvent::eventType(event) };
-                        let modifier_keys =
-                            parse_modifier_keys(unsafe { NSEvent::modifierFlags(event) });
-
-                        let button = match ns_event_type {
-                            NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => Left,
-                            NSRightMouseDown | NSRightMouseDragged | NSRightMouseUp => Right,
-                            unknown_nseventtype @ _ => {
-                                dbg!(unknown_nseventtype);
-                                return;
-                            }
-                        };
-                        let user_event = match ns_event_type {
-                            NSLeftMouseDown | NSRightMouseDown => {
-                                unsafe { LAST_DRAG_POSITION = position };
-                                MouseDown {
-                                    button,
-                                    position,
-                                    modifier_keys,
-                                }
-                            }
-                            NSLeftMouseDragged | NSRightMouseDragged => {
-                                let drag_amount = unsafe { LAST_DRAG_POSITION - position };
-                                unsafe { LAST_DRAG_POSITION = position };
-                                MouseDrag {
-                                    button,
-                                    modifier_keys,
-                                    position,
-                                    drag_amount,
-                                }
-                            }
-                            NSLeftMouseUp | NSRightMouseUp => MouseUp {
-                                button,
-                                modifier_keys,
-                                position,
-                            },
-                            _ => return, // Should never get here, preceding match should have early exited
-                                         // in the case.
-                        };
-                        let manager = unsafe {
-                            &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
-                                as *mut ApplicationManager<R>)
-                        };
-                        manager.renderer.on_event(user_event);
-                    }
-                    on_mouse_event::<R> as extern "C" fn(&mut Object, Sel, id)
-                });
+fn init_and_attach_view<R: RendererDelgate + 'static>(
+    nswindow: *mut Object,
+    renderer: &mut Box<MetalRenderer<R>>,
+) {
+    unsafe {
+        use cocoa::appkit::NSView;
+        let mut decl = unwrap_option_dcheck(
+            ClassDecl::new("CustomNSView", class!(NSView)),
+            "Unable to create custom NSView (CustomNSView)",
+        );
+        decl.add_method(sel!(acceptsFirstResponder), {
+            extern "C" fn accepts_first_responder(_this: &Object, _sel: Sel) -> BOOL {
+                YES
             }
-            decl.add_method(sel!(keyDown:), {
-                extern "C" fn on_key_down<R: RendererDelgate + 'static>(
-                    this: &Object,
+            accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL
+        });
+        for selector in [
+            sel!(mouseDown:),
+            sel!(mouseDragged:),
+            sel!(mouseUp:),
+            sel!(rightMouseDown:),
+            sel!(rightMouseDragged:),
+            sel!(rightMouseUp:),
+        ] {
+            decl.add_method(selector, {
+                extern "C" fn on_mouse_event<R: RendererDelgate + 'static>(
+                    this: &mut Object,
                     _: Sel,
                     event: *mut Object,
                 ) {
-                    unsafe {
-                        /* Escape Key */
-                        let key_code = NSEvent::keyCode(event);
-                        if key_code == 53 {
-                            let () = msg_send![NSApp(), terminate: nil];
-                        } else {
-                            let manager = &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
-                                as *mut ApplicationManager<R>);
-                            manager.renderer.on_event(UserEvent::KeyDown { key_code });
+                    use MouseButton::*;
+                    use NSEventType::*;
+                    use UserEvent::*;
+                    static mut LAST_DRAG_POSITION: f32x2 = f32x2::splat(0.0);
+
+                    // We have to do this to have access to the `NSView` trait...
+                    let view: id = this;
+                    let position = unsafe {
+                        let view_rect = NSView::frame(view);
+                        let NSPoint { x, y } =
+                            view.convertPoint_fromView_(event.locationInWindow(), nil);
+                        if x < 0.0
+                            || y < 0.0
+                            || x > view_rect.size.width
+                            || y > view_rect.size.height
+                        {
+                            return;
                         }
+
+                        let point = view
+                            .convertRectToBacking(NSRect::new(
+                                NSPoint {
+                                    x,
+                                    /*
+
+                                    IMPORTANT: Flips y coordinate to match application coordinate system...
+
+                                    BEFORE: OS coordinate system
+                                    ========================================================================
+
+                                        (0,height)
+                                        ^
+                                        |
+                                        (0,0) -> (width, 0)
+
+                                    AFTER: Application coordinate system. Also matches Metal Viewport
+                                           Coordinate system, see "Metal Coordinate System"
+                                           https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+                                    ========================================================================
+
+                                        (0,0) -> (width, 0)
+                                        |
+                                        v
+                                        (0,height)
+
+                                    */
+                                    y: view_rect.size.height - y,
+                                },
+                                NSSize::new(0.0, 0.0),
+                            ))
+                            .origin;
+                        f32x2::from_array([point.x as f32, point.y as f32])
+                    };
+                    let ns_event_type = unsafe { NSEvent::eventType(event) };
+                    let modifier_keys =
+                        parse_modifier_keys(unsafe { NSEvent::modifierFlags(event) });
+
+                    let button = match ns_event_type {
+                        NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => Left,
+                        NSRightMouseDown | NSRightMouseDragged | NSRightMouseUp => Right,
+                        unknown_nseventtype @ _ => {
+                            dbg!(unknown_nseventtype);
+                            return;
+                        }
+                    };
+                    let user_event = match ns_event_type {
+                        NSLeftMouseDown | NSRightMouseDown => {
+                            unsafe { LAST_DRAG_POSITION = position };
+                            MouseDown {
+                                button,
+                                position,
+                                modifier_keys,
+                            }
+                        }
+                        NSLeftMouseDragged | NSRightMouseDragged => {
+                            let drag_amount = unsafe { LAST_DRAG_POSITION - position };
+                            unsafe { LAST_DRAG_POSITION = position };
+                            MouseDrag {
+                                button,
+                                modifier_keys,
+                                position,
+                                drag_amount,
+                            }
+                        }
+                        NSLeftMouseUp | NSRightMouseUp => MouseUp {
+                            button,
+                            modifier_keys,
+                            position,
+                        },
+                        _ => return, // Should never get here, preceding match should have early exited
+                                     // in the case.
+                    };
+                    let renderer = unsafe {
+                        &mut *(*this.get_ivar::<*mut c_void>("renderer") as *mut MetalRenderer<R>)
+                    };
+                    renderer.on_event(user_event);
+                }
+                on_mouse_event::<R> as extern "C" fn(&mut Object, Sel, id)
+            });
+        }
+        decl.add_method(sel!(keyDown:), {
+            extern "C" fn on_key_down<R: RendererDelgate + 'static>(
+                this: &Object,
+                _: Sel,
+                event: *mut Object,
+            ) {
+                unsafe {
+                    let key_code = NSEvent::keyCode(event);
+                    const ESCAPE_KEY: u16 = 53;
+                    if key_code == ESCAPE_KEY {
+                        let () = msg_send![NSApp(), terminate: nil];
+                    } else {
+                        let renderer = &mut *(*this.get_ivar::<*mut c_void>("renderer")
+                            as *mut MetalRenderer<R>);
+                        renderer.on_event(UserEvent::KeyDown { key_code });
                     }
                 }
-                on_key_down::<R> as extern "C" fn(&Object, Sel, id)
-            });
-            decl.add_ivar::<*mut c_void>(&"applicationManager");
-            let viewclass = decl.register();
-            let view: id = msg_send![viewclass, alloc];
-            let () = msg_send![view, init];
-            let self_ptr: *mut ApplicationManager<R> = &mut **self;
-            (&mut *view).set_ivar::<*mut c_void>("applicationManager", self_ptr as *mut c_void);
-            view.setWantsLayer(YES);
-            view.setLayer(std::mem::transmute(self.renderer.layer.as_ref()));
-            nswindow.setContentView_(view);
-            nswindow.setInitialFirstResponder_(view);
-        }
+            }
+            on_key_down::<R> as extern "C" fn(&Object, Sel, id)
+        });
+        decl.add_ivar::<*mut c_void>(&"renderer");
+        let viewclass = decl.register();
+        let view: id = msg_send![viewclass, alloc];
+        let () = msg_send![view, init];
+        let renderer_ptr: *mut MetalRenderer<R> = &mut **renderer;
+        (&mut *view).set_ivar::<*mut c_void>("renderer", renderer_ptr as *mut c_void);
+        view.setWantsLayer(YES);
+        view.setLayer(std::mem::transmute(renderer.layer.as_ref()));
+        nswindow.setContentView_(view);
+        nswindow.setInitialFirstResponder_(view);
+    }
+}
+
+fn init_window_event_handlers<R: RendererDelgate + 'static>(
+    nswindow: *mut Object,
+    renderer: &mut Box<MetalRenderer<R>>,
+) {
+    let manager_ptr: *mut MetalRenderer<R> = &mut **renderer;
+
+    extern "C" fn on_nswindow_resize<R: RendererDelgate + 'static>(
+        this: &Object,
+        _: Sel,
+        notification: *mut Object,
+    ) {
+        let NSSize { width, height } = unsafe {
+            // "Discussion: You can retrieve the window object in question by sending object to notification."
+            //   - https://developer.apple.com/documentation/appkit/nswindowdelegate/1419567-windowdidresize?language=objc
+            //   - https://developer.apple.com/documentation/appkit/nswindowdelegate/1419190-windowdidbecomemain?language=objc
+            let nswindow: *mut Object = msg_send![
+                debug_assert_objc_class(notification, &"NSNotification"),
+                object
+            ];
+            nswindow.contentRectForFrameRect_(nswindow.frame()).size
+        };
+        let renderer =
+            unsafe { &mut *(*this.get_ivar::<*mut c_void>("renderer") as *mut MetalRenderer<R>) };
+        renderer.update_size(f32x2::from_array([width as f32, height as f32]));
     }
 
-    fn init_window_event_handlers(self: &mut Box<Self>, nswindow: *mut Object) {
-        let manager_ptr: *mut ApplicationManager<R> = &mut **self;
-
-        extern "C" fn on_nswindow_resize<R: RendererDelgate + 'static>(
-            this: &Object,
-            _: Sel,
-            notification: *mut Object,
-        ) {
-            let NSSize { width, height } = unsafe {
-                // "Discussion: You can retrieve the window object in question by sending object to notification."
-                //   - https://developer.apple.com/documentation/appkit/nswindowdelegate/1419567-windowdidresize?language=objc
-                //   - https://developer.apple.com/documentation/appkit/nswindowdelegate/1419190-windowdidbecomemain?language=objc
-                let nswindow: *mut Object = msg_send![
-                    debug_assert_objc_class(notification, &"NSNotification"),
-                    object
-                ];
-                nswindow.contentRectForFrameRect_(nswindow.frame()).size
-            };
-            let manager = unsafe {
-                &mut *(*this.get_ivar::<*mut c_void>("applicationManager")
-                    as *mut ApplicationManager<R>)
-            };
-            manager
-                .renderer
-                .update_size(f32x2::from_array([width as f32, height as f32]));
-        }
-
-        unsafe {
-            #[allow(non_camel_case_types)]
-            type id = cocoa::base::id; // Used by code generated by `delegate!` macro.
-            debug_assert_objc_class(nswindow, &"NSWindow").setDelegate_(delegate!("WindowDelegate", {
+    unsafe {
+        #[allow(non_camel_case_types)]
+        type id = cocoa::base::id; // Used by code generated by `delegate!` macro.
+        debug_assert_objc_class(nswindow, &"NSWindow").setDelegate_(delegate!("WindowDelegate", {
                 // Instance Variables (Retrieved using `this.get_ivar()`)
-                applicationManager: *mut c_void = manager_ptr as *mut c_void,
+                renderer: *mut c_void = manager_ptr as *mut c_void,
                 // Callback Functions
                 (windowDidResize:) => on_nswindow_resize::<R> as extern fn(&Object, Sel, *mut Object),
                 (windowDidBecomeMain:) => on_nswindow_resize::<R> as extern fn(&Object, Sel, *mut Object)
             }));
-        }
     }
 }
 
@@ -308,7 +296,7 @@ pub fn launch_application<R: RendererDelgate + 'static>(app_name: &'static str) 
             });
             menubar
         });
-        let mut link = ApplicationManager::<R>::from_nswindow({
+        let mut link = from_nswindow::<R>({
             let window = NSWindow::alloc(nil)
                 .initWithContentRect_styleMask_backing_defer_(
                     NSRect::new(NSPoint::new(0., 0.), NSSize::new(512.0, 512.0)),

@@ -16,7 +16,7 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
+    fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({

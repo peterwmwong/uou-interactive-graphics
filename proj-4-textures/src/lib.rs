@@ -204,10 +204,8 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn draw(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
-        if !self.reset_world_changed() {
-            return;
-        }
+    fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
+        self.reset_world_changed();
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
@@ -345,12 +343,17 @@ impl RendererDelgate for Delegate {
             _ => {}
         }
     }
+
+    #[inline(always)]
+    fn needs_render(&self) -> bool {
+        self.world_changed
+    }
 }
 
 impl Delegate {
     #[inline(always)]
-    fn reset_world_changed(&mut self) -> bool {
-        std::mem::replace(&mut self.world_changed, false)
+    fn reset_world_changed(&mut self) {
+        self.world_changed = false;
     }
 
     fn update_mode(&mut self, mode: Mode) {
