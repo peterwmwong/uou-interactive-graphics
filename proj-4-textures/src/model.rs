@@ -43,18 +43,26 @@ fn get_png_reader<T: AsRef<Path> + std::fmt::Debug>(
     let reader = decoder.read_info().unwrap();
     let desc = {
         let desc = TextureDescriptor::new();
-        let info = reader.info();
+        let &png::Info {
+            color_type,
+            width,
+            height,
+            ..
+        } = reader.info();
         assert_eq!(
-            info.color_type,
+            color_type,
             png::ColorType::Rgba,
             "Unexpected PNG color format, expected RGBA"
         );
-        desc.set_width(info.width as _);
-        desc.set_height(info.height as _);
+        desc.set_width(width as _);
+        desc.set_height(height as _);
         desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
         desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
+        desc.set_texture_type(MTLTextureType::D2);
         desc.set_usage(MTLTextureUsage::ShaderRead);
+        desc.set_resource_options(
+            MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
+        );
         desc
     };
     (reader, desc)
@@ -127,9 +135,19 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
         MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
     ));
     heap_size += align_size(device.heap_buffer_size_and_align(
+        positions_buf_length as _,
+        MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
+    ));
+    heap_size += align_size(device.heap_buffer_size_and_align(
         normals_buf_length as _,
         MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
     ));
+
+    /*
+    This may seem like a mistake to use the aligned size (size + padding) for the last buffer (No
+    subsequent buffer needs padding to be aligned), but this padding actually represents the padding
+    needed for the **first** buffer (right after the last texture).
+    */
     heap_size += align_size(device.heap_buffer_size_and_align(
         tx_coords_buf_length as _,
         MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
@@ -145,33 +163,54 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
     }
 }
 
-fn get_total_material_texture_size(
-    materials: &[tobj::Material],
-    material_file_dir: &PathBuf,
-    device: &Device,
-) -> usize {
+fn get_total_material_texture_size_and_readers<'a, 'b, 'c>(
+    materials: &'a [tobj::Material],
+    material_file_dir: &'b PathBuf,
+    device: &'c Device,
+) -> (
+    usize,
+    HashMap<&'a str, (png::Reader<std::fs::File>, TextureDescriptor)>,
+) {
+    let mut texture_to_reader_map =
+        HashMap::<&str, (png::Reader<std::fs::File>, TextureDescriptor)>::with_capacity(
+            materials.len(),
+        );
     let mut size = 0;
+
+    // Add padding between textures to make sure every texture is properly aligned according to
+    // `Device#heap_texture_size_and_align()`. See https://developer.apple.com/documentation/metal/mtldevice/1649927-heaptexturesizeandalignwithdescr?language=objc.
+    // IMPORTANT: Assumes the first texture (allocated from the heap) is aligned and does not need
+    // any padding in the beginning to be aligned.
+    let mut last_alignment_padding = 0;
     for mat in materials {
         for texture_file in [&mat.diffuse_texture, &mat.specular_texture] {
             if !texture_file.is_empty() {
-                // TODO: START HERE 2
-                // TODO: START HERE 2
-                // TODO: START HERE 2
-                // TODO: Try to reuse the reader later to load the texture, instead of calling get_png_reader again in load_texture_from_png.
-                let (_, desc) = get_png_reader(&material_file_dir.join(texture_file));
-                let size_align = device.heap_texture_size_and_align(&desc);
-                let texture_size = align_size(size_align);
-                size += texture_size;
+                texture_to_reader_map
+                    .entry(texture_file)
+                    .or_insert_with(|| {
+                        let (reader, desc) = get_png_reader(&material_file_dir.join(texture_file));
+                        let size_align = device.heap_texture_size_and_align(&desc);
+
+                        // Add alignment-padding to make sure texture is properly aligned.
+                        size += last_alignment_padding + (size_align.size as usize);
+
+                        debug_assert!(align_size(size_align) >= size_align.size as _);
+                        last_alignment_padding =
+                            align_size(size_align) - (size_align.size as usize);
+
+                        (reader, desc)
+                    });
             }
         }
     }
-    size
+    (size, texture_to_reader_map)
 }
 
 // TODO: Move into metal-app
 fn load_texture_from_png(
     label: &str,
-    (mut reader, desc): (png::Reader<std::fs::File>, TextureDescriptor),
+    reader: &mut png::Reader<std::fs::File>,
+    desc: &TextureDescriptor,
     heap: &Heap,
 ) -> Texture {
     // TODO: Allocate this buf once
@@ -185,6 +224,7 @@ fn load_texture_from_png(
         .new_texture(&desc)
         .expect(&format!("Failed to allocate texture for {label}"));
     texture.set_label(label);
+    const BYTES_PER_RGBA_PIXEL: NSUInteger = 4;
     texture.replace_region(
         MTLRegion {
             origin: MTLOrigin { x: 0, y: 0, z: 0 },
@@ -196,8 +236,7 @@ fn load_texture_from_png(
         },
         0,
         buf.as_ptr() as _,
-        // TODO: What is 4? Constantize and give it a name.
-        desc.width() * 4,
+        desc.width() * BYTES_PER_RGBA_PIXEL,
     );
     texture
 }
@@ -299,7 +338,7 @@ fn load_geometry(
 // TODO: Create a return type
 fn load_materials(
     mats: &[tobj::Material],
-    material_file_dir: PathBuf,
+    mut texture_to_reader_map: HashMap<&str, (png::Reader<std::fs::File>, TextureDescriptor)>,
     device: &Device,
     heap: &Heap,
     materials_arg_encoder: &ArgumentEncoder,
@@ -330,9 +369,13 @@ fn load_materials(
             (MaterialID::specular_texture, &mat.specular_texture),
         ] {
             if !texture_file.is_empty() {
-                let tx = texture_map.entry(&texture_file).or_insert_with(|| {
-                    let png_reader_and_desc = get_png_reader(&material_file_dir.join(texture_file));
-                    load_texture_from_png(&texture_file, png_reader_and_desc, heap)
+                let tx = texture_map.entry(texture_file).or_insert_with(|| {
+                    let (reader, desc) = texture_to_reader_map
+                        .get_mut(texture_file as &str)
+                        .expect(
+                            "Failed to get reader and texture descriptor (see get_total_material_texture_size)"
+                        );
+                    load_texture_from_png(&texture_file, reader, desc, heap)
                 });
                 materials_arg_encoder.set_texture(id as _, &tx);
             }
@@ -374,19 +417,28 @@ impl Model {
         );
 
         // Size Heap for Geometry and Materials
-        let mut heap_size = 0;
+        let (texture_heap_size, texture_to_reader_map) =
+            get_total_material_texture_size_and_readers(&materials, &material_file_dir, device);
         let geometry = get_total_geometry_buffers_size(&models, device);
-        heap_size += geometry.heap_size;
-        // TODO: Figure out why this is "* 2"!
-        heap_size += get_total_material_texture_size(&materials, &material_file_dir, device) * 2;
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
         desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
         desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_size(heap_size as _);
+        desc.set_size((texture_heap_size + geometry.heap_size) as _);
         let heap = device.new_heap(&desc);
         heap.set_label("Geometry and Materials Heap");
+
+        // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
+        // (specifically alignment padding) assume this.
+        let (materials_arg_buffer, material_textures, materials_arg_encoded_length) =
+            load_materials(
+                &materials,
+                texture_to_reader_map,
+                device,
+                &heap,
+                &materials_arg_encoder,
+            );
 
         let (geometry_arg_buffer, geometry_arg_encoded_length, max_bounds, geometry_buffers) =
             load_geometry(
@@ -398,15 +450,6 @@ impl Model {
                 geometry.positions_buf_length,
                 geometry.normals_buf_length,
                 geometry.tx_coords_buf_length,
-            );
-
-        let (materials_arg_buffer, material_textures, materials_arg_encoded_length) =
-            load_materials(
-                &materials,
-                material_file_dir,
-                device,
-                &heap,
-                &materials_arg_encoder,
             );
 
         Self {
