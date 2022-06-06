@@ -414,10 +414,9 @@ pub enum WorldID {
     matrix_model_to_projection = 0,
     matrix_world_to_projection = 1,
     matrix_normal_to_world = 2,
-    matrix_projection_to_world = 3,
-    screen_size = 4,
-    light_position = 5,
-    camera_position = 6,
+    matrix_screen_to_world = 3,
+    light_position = 4,
+    camera_position = 5,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

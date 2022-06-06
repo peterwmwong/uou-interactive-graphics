@@ -26,13 +26,23 @@ bitflags! {
     }
 }
 
+const SCALE: f32 = 0.0005;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
-const INITIAL_CAMERA_DISTANCE: f32 = 2000.;
+const INITIAL_CAMERA_DISTANCE: f32 = 2000. * SCALE;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::splat(0.);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE;
+
+const N: f32 = 0.1;
+const F: f32 = 100000.0;
+const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
+    [N, 0., 0., 0.],
+    [0., N, 0., 0.],
+    [0., 0., N + F, -N * F],
+    [0., 0., 1., 0.],
+);
 
 struct Delegate {
     camera_distance: f32,
@@ -47,6 +57,7 @@ struct Delegate {
     model: Model,
     render_light_pipeline_state: RenderPipelineState,
     render_pipeline_state: RenderPipelineState,
+    screen_size: f32x2,
     world_arg_buffer: Buffer,
     world_arg_encoder: ArgumentEncoder,
     world_changed: bool,
@@ -163,10 +174,13 @@ impl RendererDelgate for Delegate {
                 // 1. Translate/Rotate
                 // 2. Scale to normalize coordinate range to -1 to 1
                 //    - This prevents FS from using half precision more
+                // 3. Write normal_to_world into arg buffer separately WITHOUT scale applied.
+                // 4. Remove SCALE and bake in the values multiplied by scale.
                 // let height_of_teapot = 15.75;
                 // f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
                 let center = model.max_bounds.center;
-                f32x4x4::y_rotate(PI)
+                f32x4x4::scale(SCALE, SCALE, SCALE, 1.)
+                    * f32x4x4::y_rotate(PI)
                     * f32x4x4::x_rotate(PI / 2.)
                     * f32x4x4::translate(-center[0], -center[1], -center[2])
             },
@@ -174,6 +188,7 @@ impl RendererDelgate for Delegate {
             model,
             render_pipeline_state: pipelines.model.pipeline_state,
             render_light_pipeline_state: pipelines.light.pipeline_state,
+            screen_size: f32x2::default(),
             world_arg_buffer,
             world_arg_encoder,
             world_changed: false,
@@ -195,7 +210,7 @@ impl RendererDelgate for Delegate {
         );
         delegate.update_light(delegate.light_xy_rotation);
         delegate.update_camera(
-            Some(f32x2::default()),
+            delegate.screen_size,
             delegate.camera_rotation,
             delegate.camera_distance,
         );
@@ -297,7 +312,7 @@ impl RendererDelgate for Delegate {
                         Left => {
                             camera_rotation += {
                                 let adjacent = f32x2::splat(self.camera_distance);
-                                let offsets = drag_amount * f32x2::splat(4.);
+                                let offsets = drag_amount * f32x2::splat(4. * SCALE);
                                 let ratio = offsets / adjacent;
                                 f32x2::from_array([
                                     ratio[1].atan(), // Rotation on x-axis
@@ -305,14 +320,14 @@ impl RendererDelgate for Delegate {
                                 ])
                             }
                         }
-                        Right => camera_distance += -drag_amount[1] * 8.0,
+                        Right => camera_distance += -drag_amount[1] * 8.0 * SCALE,
                     }
-                    self.update_camera(None, camera_rotation, camera_distance);
+                    self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::CONTROL) {
                     match button {
                         Left => {
                             let adjacent = f32x2::splat(self.camera_distance);
-                            let opposite = -drag_amount * f32x2::splat(4.);
+                            let opposite = -drag_amount * f32x2::splat(4. * SCALE);
                             let ratio = opposite / adjacent;
                             self.update_light(
                                 self.light_xy_rotation
@@ -338,7 +353,7 @@ impl RendererDelgate for Delegate {
             }
             WindowResize { size, .. } => {
                 self.update_depth_texture_size(size);
-                self.update_camera(Some(size), self.camera_rotation, self.camera_distance);
+                self.update_camera(size, self.camera_rotation, self.camera_distance);
             }
             _ => {}
         }
@@ -379,29 +394,13 @@ impl Delegate {
 
     #[inline]
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        // TODO: START HERE 4
-        // TODO: START HERE 4
-        // TODO: START HERE 4
-        // TODO: Calculate once, constantify
-        let n = 0.1;
-        let f = 100000.0;
-        let perspective_matrix = f32x4x4::new(
-            [n, 0., 0., 0.],
-            [0., n, 0., 0.],
-            [0., 0., n + f, -n * f],
-            [0., 0., 1., 0.],
-        );
-        // TODO: START HERE 5
-        // TODO: START HERE 5
-        // TODO: START HERE 5
-        // TODO: Calculate once
         let MaxBounds { size, .. } = self.model.max_bounds;
         let (w, h) = if size[0] > size[1] {
-            let w = n * size[0] / INITIAL_CAMERA_DISTANCE;
+            let w = SCALE * N * size[0] / INITIAL_CAMERA_DISTANCE;
             let h = aspect_ratio * w;
             (w, h)
         } else {
-            let h = n * size[1] / INITIAL_CAMERA_DISTANCE;
+            let h = SCALE * N * size[1] / INITIAL_CAMERA_DISTANCE;
             let w = h / aspect_ratio;
             (w, h)
         };
@@ -410,11 +409,11 @@ impl Delegate {
                 [2. / w, 0., 0., 0.],
                 [0., 2. / h, 0., 0.],
                 // IMPORTANT: Metal's NDC coordinate space has a z range of [0.,1], **NOT [-1,1]** (OpenGL).
-                [0., 0., 1. / (f - n), -n / (f - n)],
+                [0., 0., 1. / (F - N), -N / (F - N)],
                 [0., 0., 0., 1.],
             )
         };
-        orthographic_matrix * perspective_matrix
+        orthographic_matrix * PERSPECTIVE_MATRIX
     }
 
     #[inline(always)]
@@ -433,12 +432,8 @@ impl Delegate {
         self.update_world(WorldID::light_position, light_position);
     }
 
-    fn update_camera(
-        &mut self,
-        screen_size: Option<f32x2>,
-        camera_rotation: f32x2,
-        camera_distance: f32,
-    ) {
+    fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
+        self.screen_size = screen_size;
         self.camera_rotation = camera_rotation;
         self.camera_distance = camera_distance;
         let matrix_world_to_camera = f32x4x4::translate(0., 0., self.camera_distance)
@@ -448,19 +443,9 @@ impl Delegate {
             matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]),
         );
 
-        let screen_size_ptr = self
-            .world_arg_encoder
-            .constant_data(WorldID::screen_size as _) as *mut f32x2;
-        let screen_size = unsafe {
-            if let Some(size) = screen_size {
-                *screen_size_ptr = size;
-                size
-            } else {
-                *screen_size_ptr
-            }
-        };
-
-        let aspect_ratio = screen_size[1] / screen_size[0];
+        let sx = screen_size[0];
+        let sy = screen_size[1];
+        let aspect_ratio = sy / sx;
         let matrix_world_to_projection =
             self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
 
@@ -472,9 +457,11 @@ impl Delegate {
             WorldID::matrix_model_to_projection,
             *(matrix_world_to_projection * self.matrix_model_to_world).metal_float4x4(),
         );
+        let matrix_screen_to_projection =
+            f32x4x4::translate(-1., 1., 0.) * f32x4x4::scale(2. / sx, -2. / sy, 1., 1.);
         self.update_world(
-            WorldID::matrix_projection_to_world,
-            *matrix_world_to_projection.inverse().metal_float4x4(),
+            WorldID::matrix_screen_to_world,
+            matrix_world_to_projection.inverse() * matrix_screen_to_projection,
         );
     }
 }

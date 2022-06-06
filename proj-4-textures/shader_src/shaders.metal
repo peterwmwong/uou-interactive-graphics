@@ -12,9 +12,8 @@ struct World {
     float4x4 matrix_model_to_projection [[id(WorldID::matrix_model_to_projection)]];
     float4x4 matrix_world_to_projection [[id(WorldID::matrix_world_to_projection)]];
     float3x3 matrix_normal_to_world     [[id(WorldID::matrix_normal_to_world)]];
-    float4x4 matrix_projection_to_world [[id(WorldID::matrix_projection_to_world)]];
+    float4x4 matrix_screen_to_world     [[id(WorldID::matrix_screen_to_world)]];
 
-    float2   screen_size                [[id(WorldID::screen_size)]];
     float4   light_position             [[id(WorldID::light_position)]];
     float4   camera_position            [[id(WorldID::camera_position)]];
 };
@@ -52,7 +51,7 @@ main_vertex(         uint       vertex_id [[vertex_id]],
     const float2 tx_coord = geometry.tx_coords[idx];
     return {
         .position  = world.matrix_model_to_projection * position,
-        .normal    = half3(world.matrix_normal_to_world * normal),
+        .normal    = half3(normalize(world.matrix_normal_to_world * normal)),
         // TODO: Should flipping-x be determined by some data in the material?
         .tx_coord  = half2(tx_coord.x, 1.0 - tx_coord.y)
     };
@@ -77,18 +76,8 @@ main_fragment(         VertexOut   in       [[stage_in]],
     }
 
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
-    // 1. Viewport Coordinate -> Normalized Device Coordinate (aka Projected w/Perspective)
-    const half2  screen_pos   = half2(in.position.xy);
-    const half2  proj_pos_xy  = fma(half2(2, -2), (screen_pos / half2(world.screen_size)), half2(-1, 1));
-    // 2. Projected Coordinate -> World Space position
-    const float4 proj_pos     = float4(float2(proj_pos_xy), in.position.z, 1);
-    const float4 pos_w_persp  = world.matrix_projection_to_world * proj_pos;
-    // TODO: Use half precision
-    // - Unfortunately for the Yoda model, the model space (changing world space) bounds are yuuuge
-    //   ([-1000, 1000] coordinate range) causing terrible precision errors with half precisions.
-    // - Consider some preprocessing step that normalizes model space coordinates
-    // - Should this be the matrix_model_to_world?
-    const float3 pos          = pos_w_persp.xyz / pos_w_persp.w;
+    const float4 pos_w_persp = world.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const half3  pos         = half3(pos_w_persp.xyz / pos_w_persp.w);
 
     /*
     ================================================================
@@ -109,9 +98,9 @@ main_fragment(         VertexOut   in       [[stage_in]],
     -------   ---------   ---------------
     Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
     */
-    const half3 l  = half3(normalize(world.light_position.xyz - pos));  // Light  - world space direction from fragment to light
-    const half3 c  = half3(normalize(world.camera_position.xyz - pos)); // Camera - world space direction from fragment to camera
-    const half3 h  = normalize(l + c);                                  // Half   - half-way vector between Light and Camera
+    const half3 l = normalize(half3(world.light_position.xyz) - pos);  // Light  - world space direction from fragment to light
+    const half3 c = normalize(half3(world.camera_position.xyz) - pos); // Camera - world space direction from fragment to camera
+    const half3 h = normalize(l + c);                                  // Half   - half-way vector between Light and Camera
 
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
