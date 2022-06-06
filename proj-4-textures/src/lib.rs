@@ -26,17 +26,17 @@ bitflags! {
     }
 }
 
-const SCALE: f32 = 0.0005;
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
-const INITIAL_CAMERA_DISTANCE: f32 = 2000. * SCALE;
+const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
+const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::splat(0.);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
-const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE;
+const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
 const N: f32 = 0.1;
 const F: f32 = 100000.0;
+const NEAR_FIELD_MAJOR_AXIS: f32 = N / INITIAL_CAMERA_DISTANCE;
 const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
     [N, 0., 0., 0.],
     [0., N, 0., 0.],
@@ -60,7 +60,7 @@ struct Delegate {
     screen_size: f32x2,
     world_arg_buffer: Buffer,
     world_arg_encoder: ArgumentEncoder,
-    world_changed: bool,
+    needs_render: bool,
 }
 
 struct PipelineResults {
@@ -154,6 +154,21 @@ impl RendererDelgate for Delegate {
         world_arg_buffer.set_label("World Argument Buffer");
         world_arg_encoder.set_argument_buffer(&world_arg_buffer, 0);
 
+        let MaxBounds { center, size } = &model.max_bounds;
+        let matrix_model_to_world_no_scale = f32x4x4::y_rotate(PI)
+            * f32x4x4::x_rotate(PI / 2.)
+            * f32x4x4::translate(-center[0], -center[1], -center[2]);
+
+        // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
+        // 1. INITIAL_CAMERA_DISTANCE is invariant of the model's coordinate range
+        // 2. Dramatically reduces precision errors (compared to ranges >1000, like in Yoda model)
+        //    - In the Vertex Shader, z-fighting in the depth buffer, even with Depth32Float.
+        //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
+        //      exhibit a weird triangal-ish pattern.
+        let scale = 1. / size.reduce_max();
+        let matrix_model_to_world =
+            f32x4x4::scale(scale, scale, scale, 1.) * matrix_model_to_world_no_scale;
+
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
@@ -166,24 +181,7 @@ impl RendererDelgate for Delegate {
             depth_texture: None,
             library,
             light_xy_rotation: INITIAL_LIGHT_ROTATION,
-            matrix_model_to_world: {
-                // TODO: START HERE 3
-                // TODO: START HERE 3
-                // TODO: START HERE 3
-                // This should be based on model bounds
-                // 1. Translate/Rotate
-                // 2. Scale to normalize coordinate range to -1 to 1
-                //    - This prevents FS from using half precision more
-                // 3. Write normal_to_world into arg buffer separately WITHOUT scale applied.
-                // 4. Remove SCALE and bake in the values multiplied by scale.
-                // let height_of_teapot = 15.75;
-                // f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(0., 0., -height_of_teapot / 2.0)
-                let center = model.max_bounds.center;
-                f32x4x4::scale(SCALE, SCALE, SCALE, 1.)
-                    * f32x4x4::y_rotate(PI)
-                    * f32x4x4::x_rotate(PI / 2.)
-                    * f32x4x4::translate(-center[0], -center[1], -center[2])
-            },
+            matrix_model_to_world,
             mode,
             model,
             render_pipeline_state: pipelines.model.pipeline_state,
@@ -191,7 +189,7 @@ impl RendererDelgate for Delegate {
             screen_size: f32x2::default(),
             world_arg_buffer,
             world_arg_encoder,
-            world_changed: false,
+            needs_render: false,
             device,
         };
 
@@ -206,7 +204,7 @@ impl RendererDelgate for Delegate {
         //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
         delegate.update_world(
             WorldID::matrix_normal_to_world,
-            delegate.matrix_model_to_world,
+            matrix_model_to_world_no_scale,
         );
         delegate.update_light(delegate.light_xy_rotation);
         delegate.update_camera(
@@ -214,13 +212,13 @@ impl RendererDelgate for Delegate {
             delegate.camera_rotation,
             delegate.camera_distance,
         );
-        delegate.reset_world_changed();
+        delegate.reset_needs_render();
         delegate
     }
 
     #[inline]
     fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
-        self.reset_world_changed();
+        self.reset_needs_render();
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
@@ -312,7 +310,7 @@ impl RendererDelgate for Delegate {
                         Left => {
                             camera_rotation += {
                                 let adjacent = f32x2::splat(self.camera_distance);
-                                let offsets = drag_amount * f32x2::splat(4. * SCALE);
+                                let offsets = drag_amount / f32x2::splat(500.);
                                 let ratio = offsets / adjacent;
                                 f32x2::from_array([
                                     ratio[1].atan(), // Rotation on x-axis
@@ -320,14 +318,14 @@ impl RendererDelgate for Delegate {
                                 ])
                             }
                         }
-                        Right => camera_distance += -drag_amount[1] * 8.0 * SCALE,
+                        Right => camera_distance += -drag_amount[1] / 250.,
                     }
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::CONTROL) {
                     match button {
                         Left => {
                             let adjacent = f32x2::splat(self.camera_distance);
-                            let opposite = -drag_amount * f32x2::splat(4. * SCALE);
+                            let opposite = -drag_amount / f32x2::splat(500.);
                             let ratio = opposite / adjacent;
                             self.update_light(
                                 self.light_xy_rotation
@@ -361,14 +359,14 @@ impl RendererDelgate for Delegate {
 
     #[inline(always)]
     fn needs_render(&self) -> bool {
-        self.world_changed
+        self.needs_render
     }
 }
 
 impl Delegate {
     #[inline(always)]
-    fn reset_world_changed(&mut self) {
-        self.world_changed = false;
+    fn reset_needs_render(&mut self) {
+        self.needs_render = false;
     }
 
     fn update_mode(&mut self, mode: Mode) {
@@ -377,6 +375,7 @@ impl Delegate {
             let results = create_pipelines(&self.device, &self.library, mode);
             self.render_pipeline_state = results.model.pipeline_state;
             self.render_light_pipeline_state = results.light.pipeline_state;
+            self.needs_render = true;
         }
     }
 
@@ -394,15 +393,11 @@ impl Delegate {
 
     #[inline]
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        let MaxBounds { size, .. } = self.model.max_bounds;
+        let size = self.model.max_bounds.size;
         let (w, h) = if size[0] > size[1] {
-            let w = SCALE * N * size[0] / INITIAL_CAMERA_DISTANCE;
-            let h = aspect_ratio * w;
-            (w, h)
+            (NEAR_FIELD_MAJOR_AXIS, aspect_ratio * NEAR_FIELD_MAJOR_AXIS)
         } else {
-            let h = SCALE * N * size[1] / INITIAL_CAMERA_DISTANCE;
-            let w = h / aspect_ratio;
-            (w, h)
+            (NEAR_FIELD_MAJOR_AXIS / aspect_ratio, NEAR_FIELD_MAJOR_AXIS)
         };
         let orthographic_matrix = {
             f32x4x4::new(
@@ -421,7 +416,7 @@ impl Delegate {
         unsafe {
             *(self.world_arg_encoder.constant_data(id as _) as *mut T) = value;
         };
-        self.world_changed = true;
+        self.needs_render = true;
     }
 
     fn update_light(&mut self, light_xy_rotation: f32x2) {

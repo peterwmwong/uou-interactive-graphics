@@ -51,7 +51,7 @@ main_vertex(         uint       vertex_id [[vertex_id]],
     const float2 tx_coord = geometry.tx_coords[idx];
     return {
         .position  = world.matrix_model_to_projection * position,
-        .normal    = half3(normalize(world.matrix_normal_to_world * normal)),
+        .normal    = half3(world.matrix_normal_to_world * normal),
         // TODO: Should flipping-x be determined by some data in the material?
         .tx_coord  = half2(tx_coord.x, 1.0 - tx_coord.y)
     };
