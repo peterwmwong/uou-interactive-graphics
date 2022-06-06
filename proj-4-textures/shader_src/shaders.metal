@@ -2,6 +2,7 @@
 #include "./common.h"
 
 using namespace metal;
+using half_tx2d = texture2d<half>;
 
 constant bool  HAS_AMBIENT        [[function_constant(static_cast<uint>(FC::HAS_AMBIENT))]];
 constant bool  HAS_DIFFUSE        [[function_constant(static_cast<uint>(FC::HAS_DIFFUSE))]];
@@ -58,11 +59,13 @@ main_vertex(         uint       vertex_id [[vertex_id]],
 }
 
 struct Material {
-    float4          diffuse_color      [[id(MaterialID::diffuse_color)]];
-    float4          specular_color     [[id(MaterialID::specular_color)]];
-    texture2d<half> diffuse_texture    [[id(MaterialID::diffuse_texture)]];
-    texture2d<half> specular_texture   [[id(MaterialID::specular_texture)]];
-    float           specular_shineness [[id(MaterialID::specular_shineness)]];
+    half_tx2d ambient_texture    [[id(MaterialID::ambient_texture)]];
+    half_tx2d diffuse_texture    [[id(MaterialID::diffuse_texture)]];
+    half_tx2d specular_texture   [[id(MaterialID::specular_texture)]];
+    float4    ambient_color      [[id(MaterialID::ambient_color)]];
+    float4    diffuse_color      [[id(MaterialID::diffuse_color)]];
+    float4    specular_color     [[id(MaterialID::specular_color)]];
+    float     specular_shineness [[id(MaterialID::specular_shineness)]];
 };
 
 fragment half4
@@ -70,9 +73,16 @@ main_fragment(         VertexOut   in       [[stage_in]],
               constant Material  & material [[buffer(FragBufferIndex::Material)]],
               constant World     & world    [[buffer(FragBufferIndex::World)]])
 {
-    const half3 n = half3(normalize(in.normal)); // Normal - unit vector, world space direction perpendicular to surface
-    if (HAS_NORMAL) {
-        return half4(n.xy, n.z * -1, 1);
+    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+    half4 color = 0;
+    if (HAS_AMBIENT) {
+        const     half_tx2d tx_amb = material.ambient_texture;
+        const     half4     Ka     = !is_null_texture(tx_amb)
+                                        ? tx_amb.sample(tx_sampler, in.tx_coord)
+                                        : half4(material.ambient_color);
+        constexpr half      Ia     = 0.1;
+
+        color = Ia * Ka;
     }
 
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
@@ -101,40 +111,39 @@ main_fragment(         VertexOut   in       [[stage_in]],
     const half3 l = normalize(half3(world.light_position.xyz) - pos);  // Light  - world space direction from fragment to light
     const half3 c = normalize(half3(world.camera_position.xyz) - pos); // Camera - world space direction from fragment to camera
     const half3 h = normalize(l + c);                                  // Half   - half-way vector between Light and Camera
-
+    const half3 n = half3(normalize(in.normal));                       // Normal - unit vector, world space direction perpendicular to surface
+    if (HAS_NORMAL) {
+        return half4(n.xy, n.z * -1, 1);
+    }
+    const half hn = dot(h, n);
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
     const half ln = max(dot(l, n), 0.h);
-    // Cosine angle between Camera and Normal
-    // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
+
+    // Diffuse/Specular Light Intensity of 1.0 for camera facing surfaces, otherwise 0.0.
+    // - Use Cosine angle between Camera and Normal (positive <90d, negative >90d)
     // - Using the XCode Shader Profiler, this performed the best compared to...
     //      - ceil(saturate(v))
     //      - trunc(fma(v, .5h, 1.h))
-    const half cn = step(0.h, dot(c, n));
-    const half Il = 1 * cn; // Diffuse/Specular Light Intensity
+    const half Il = step(0.h, dot(c, n));
+    if (HAS_DIFFUSE) {
+        const     half_tx2d tx_diff = material.diffuse_texture;
+        const     half4     Kd      = !is_null_texture(tx_diff)
+                                        ? tx_diff.sample(tx_sampler, in.tx_coord)
+                                        : half4(material.diffuse_color);
 
-    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+        color += Il * ln * Kd;
+    }
+    if (HAS_SPECULAR) {
+        const     half_tx2d tx_spec = material.specular_texture;
+        const     half4     Ks     = !is_null_texture(tx_spec)
+                                        ? tx_spec.sample(tx_sampler, in.tx_coord)
+                                        : half4(material.specular_color);
 
-    // Ambient/Diffuse Material Color
-    const texture2d<half> tx_diffuse     = material.diffuse_texture;
-    const bool            has_tx_diffuse = !is_null_texture(tx_diffuse);
-    // TODO: Use material.diffuse_color
-    const half4  Kd       = (HAS_AMBIENT || HAS_DIFFUSE) && has_tx_diffuse ? tx_diffuse.sample(tx_sampler, float2(in.tx_coord)) : 1.0;
+        color += Il * pow(hn * Ks, material.specular_shineness);
+    }
 
-    // Specular Material Color
-    const texture2d<half> tx_spec     = material.specular_texture;
-    const bool            has_tx_spec = !is_null_texture(tx_spec);
-    // TODO: Use material.specular_color
-    const half4           Ks          = HAS_SPECULAR && has_tx_spec ? tx_spec.sample(tx_sampler, float2(in.tx_coord)) : 1.0;
-
-    const half4  diffuse  = HAS_DIFFUSE ? Il * ln * Kd : 0;
-    const half   s        = material.specular_shineness;
-    const half4  specular = HAS_SPECULAR ? (Il * pow(dot(h, n) * Ks, s)) : 0;
-
-    const half   Ia       = 0.1; // Ambient Intensity
-    const half4  ambient  = HAS_AMBIENT ? Ia * Kd : 0;
-
-    return half4(ambient + diffuse + specular);
+    return color;
 };
 
 

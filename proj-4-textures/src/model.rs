@@ -183,7 +183,11 @@ fn get_total_material_texture_size_and_readers<'a, 'b, 'c>(
     // any padding in the beginning to be aligned.
     let mut last_alignment_padding = 0;
     for mat in materials {
-        for texture_file in [&mat.diffuse_texture, &mat.specular_texture] {
+        for texture_file in [
+            &mat.ambient_texture,
+            &mat.diffuse_texture,
+            &mat.specular_texture,
+        ] {
             if !texture_file.is_empty() {
                 texture_to_reader_map
                     .entry(texture_file)
@@ -355,20 +359,20 @@ fn load_materials(
     let mut texture_map: HashMap<&str, Texture> = HashMap::with_capacity(mats.len() * 2);
     for (i, mat) in mats.iter().enumerate() {
         materials_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Actually load diffuse and specular color.
-        // - Yoda's hair material is WRONG, it has no textures and relies on these colors
+        unsafe {
+            *(materials_arg_encoder.constant_data(MaterialID::ambient_color as _) as *mut float4) =
+                float4::new(mat.ambient[0], mat.ambient[1], mat.ambient[2], 1.)
+        };
         unsafe {
             *(materials_arg_encoder.constant_data(MaterialID::diffuse_color as _) as *mut float4) =
-                float4::new(0., 0., 0., 0.)
+                float4::new(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 1.)
         };
         unsafe {
             *(materials_arg_encoder.constant_data(MaterialID::specular_color as _) as *mut float4) =
-                float4::new(0., 0., 0., 0.)
+                float4::new(mat.specular[0], mat.specular[1], mat.specular[2], 1.)
         };
         for (id, texture_file) in [
+            (MaterialID::ambient_texture, &mat.ambient_texture),
             (MaterialID::diffuse_texture, &mat.diffuse_texture),
             (MaterialID::specular_texture, &mat.specular_texture),
         ] {

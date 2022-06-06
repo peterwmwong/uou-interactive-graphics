@@ -421,11 +421,13 @@ pub enum WorldID {
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum MaterialID {
-    diffuse_color = 0,
-    specular_color = 1,
-    diffuse_texture = 2,
-    specular_texture = 3,
-    specular_shineness = 4,
+    ambient_texture = 0,
+    diffuse_texture = 1,
+    specular_texture = 2,
+    ambient_color = 3,
+    diffuse_color = 4,
+    specular_color = 5,
+    specular_shineness = 6,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

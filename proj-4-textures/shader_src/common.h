@@ -32,10 +32,12 @@ enum struct WorldID
 
 enum struct MaterialID
 {
-    diffuse_color = 0,
-    specular_color,
+    ambient_texture = 0,
     diffuse_texture,
     specular_texture,
+    ambient_color,
+    diffuse_color,
+    specular_color,
     specular_shineness,
 };
 
