@@ -28,7 +28,7 @@ bitflags! {
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::splat(0.);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -121,6 +121,10 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 
 impl RendererDelgate for Delegate {
     fn new(device: Device, _command_queue: &CommandQueue) -> Self {
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // Read command line argument for path to model.
         let model_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("yoda")

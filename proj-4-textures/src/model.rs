@@ -355,7 +355,11 @@ fn load_materials(
     let mut texture_map: HashMap<&str, Texture> = HashMap::with_capacity(mats.len() * 2);
     for (i, mat) in mats.iter().enumerate() {
         materials_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
-        // TODO: Actually load diffuse and specular color
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Actually load diffuse and specular color.
+        // - Yoda's hair material is WRONG, it has no textures and relies on these colors
         unsafe {
             *(materials_arg_encoder.constant_data(MaterialID::diffuse_color as _) as *mut float4) =
                 float4::new(0., 0., 0., 0.)
