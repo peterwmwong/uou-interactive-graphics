@@ -4,12 +4,6 @@
 #ifndef common_h
 #define common_h
 
-#ifdef __METAL_VERSION__
-#define DEF_CONSTANT constant
-#else
-#define DEF_CONSTANT
-#endif
-
 enum struct FC
 {
     HAS_AMBIENT = 0,
