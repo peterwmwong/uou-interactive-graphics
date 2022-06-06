@@ -36,8 +36,8 @@ struct Geometry {
 struct VertexOut
 {
     float4 position [[position]];
-    half3  normal;
-    half2  tx_coord;
+    float3 normal;
+    float2 tx_coord;
 };
 
 vertex VertexOut
@@ -51,9 +51,9 @@ main_vertex(         uint       vertex_id [[vertex_id]],
     const float2 tx_coord = geometry.tx_coords[idx];
     return {
         .position  = world.matrix_model_to_projection * position,
-        .normal    = half3(world.matrix_normal_to_world * normal),
+        .normal    = world.matrix_normal_to_world * normal,
         // TODO: Should flipping-x be determined by some data in the material?
-        .tx_coord  = half2(tx_coord.x, 1.0 - tx_coord.y)
+        .tx_coord  = float2(tx_coord.x, 1.0 - tx_coord.y)
     };
 }
 
@@ -70,7 +70,7 @@ main_fragment(         VertexOut   in       [[stage_in]],
               constant Material  & material [[buffer(FragBufferIndex::Material)]],
               constant World     & world    [[buffer(FragBufferIndex::World)]])
 {
-    const half3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
+    const half3 n = half3(normalize(in.normal)); // Normal - unit vector, world space direction perpendicular to surface
     if (HAS_NORMAL) {
         return half4(n.xy, n.z * -1, 1);
     }
