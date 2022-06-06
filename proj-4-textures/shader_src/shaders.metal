@@ -10,8 +10,8 @@ constant bool  HAS_SPECULAR       [[function_constant(static_cast<uint>(FC::HAS_
 
 struct World {
     float4x4 matrix_model_to_projection [[id(WorldID::matrix_model_to_projection)]];
-    float4x4 matrix_world_to_projection [[id(WorldID::matrix_world_to_projection)]];
     float3x3 matrix_normal_to_world     [[id(WorldID::matrix_normal_to_world)]];
+    float4x4 matrix_world_to_projection [[id(WorldID::matrix_world_to_projection)]];
     float4x4 matrix_screen_to_world     [[id(WorldID::matrix_screen_to_world)]];
 
     float4   light_position             [[id(WorldID::light_position)]];

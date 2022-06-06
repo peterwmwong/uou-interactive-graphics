@@ -23,8 +23,8 @@ enum struct ObjectGeometryID
 enum struct WorldID
 {
     matrix_model_to_projection = 0,
-    matrix_world_to_projection,
     matrix_normal_to_world,
+    matrix_world_to_projection,
     matrix_screen_to_world,
     light_position,
     camera_position,

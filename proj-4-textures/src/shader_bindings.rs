@@ -412,8 +412,8 @@ pub enum ObjectGeometryID {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum WorldID {
     matrix_model_to_projection = 0,
-    matrix_world_to_projection = 1,
-    matrix_normal_to_world = 2,
+    matrix_normal_to_world = 1,
+    matrix_world_to_projection = 2,
     matrix_screen_to_world = 3,
     light_position = 4,
     camera_position = 5,
