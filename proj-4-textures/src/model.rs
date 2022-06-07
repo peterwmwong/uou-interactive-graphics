@@ -34,7 +34,7 @@ trait HeapResident<T: Sized> {
         &mut self,
         heap: &Heap,
         device: &Device,
-        materials_arg_encoder: &ArgumentEncoder,
+        arg_encoder: &ArgumentEncoder,
     ) -> (Buffer, u32, T);
 }
 
