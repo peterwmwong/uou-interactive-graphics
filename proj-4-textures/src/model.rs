@@ -8,6 +8,21 @@ use std::{
 };
 use tobj::LoadOptions;
 
+const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
+    MTLResourceOptions::StorageModeShared.bits()
+        | MTLResourceOptions::CPUCacheModeWriteCombined.bits(),
+);
+
+trait HeapResident<T: Sized> {
+    fn heap_size(&self) -> usize;
+    fn allocate_and_encode(
+        self,
+        heap: &Heap,
+        device: &Device,
+        materials_arg_encoder: &ArgumentEncoder,
+    ) -> (Buffer, u32, Vec<T>);
+}
+
 pub struct MaxBounds {
     pub center: f32x4,
     pub size: f32x4,
@@ -29,74 +44,61 @@ type RGB32 = [f32; 3];
 #[derive(Hash, Copy, Clone, Eq, PartialEq)]
 struct RGB8Unorm(u8, u8, u8);
 
-impl From<&RGB32> for RGB8Unorm {
-    fn from(color: &RGB32) -> Self {
-        Self(
-            (color[0] * 255.0).round() as u8,
-            (color[1] * 255.0).round() as u8,
-            (color[2] * 255.0).round() as u8,
-        )
-    }
-}
-
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-enum MaterialTextureKey<'a> {
+enum MaterialSourceKey<'a> {
     PNG(&'a str),
     Color(RGB8Unorm),
 }
 
-impl<'a> MaterialTextureKey<'a> {
+impl<'a> MaterialSourceKey<'a> {
     fn new(png_file: &'a str, color: &RGB32) -> Self {
         if png_file.is_empty() {
-            Self::Color(color.into())
+            Self::Color(RGB8Unorm(
+                (color[0] * 255.0).round() as u8,
+                (color[1] * 255.0).round() as u8,
+                (color[2] * 255.0).round() as u8,
+            ))
         } else {
             Self::PNG(png_file)
         }
     }
 }
 
-struct MaterialTexture<'a> {
-    key: MaterialTextureKey<'a>,
+struct MaterialSource<'a> {
+    key: MaterialSourceKey<'a>,
     texture_descriptor: TextureDescriptor,
     png_reader: Option<png::Reader<std::fs::File>>,
 }
 
-impl<'a> MaterialTexture<'a> {
-    fn new<'b>(png_file_dir: &'b PathBuf, key: MaterialTextureKey<'a>) -> Self {
+impl<'a> MaterialSource<'a> {
+    fn new<'b>(png_file_dir: &'b PathBuf, key: MaterialSourceKey<'a>) -> Self {
         let (width, height, png_reader) = match key {
-            MaterialTextureKey::PNG(png_file) => {
+            MaterialSourceKey::PNG(png_file) => {
                 let decoder =
                     png::Decoder::new(std::fs::File::open(png_file_dir.join(png_file)).unwrap());
                 let reader = decoder.read_info().unwrap();
-                let &png::Info {
-                    color_type,
-                    width,
-                    height,
-                    ..
-                } = reader.info();
+                let info = reader.info();
                 assert_eq!(
-                    color_type,
+                    info.color_type,
                     png::ColorType::Rgba,
                     "Unexpected PNG color format, expected RGBA"
                 );
-                (width as _, height as _, Some(reader))
+                (info.width as _, info.height as _, Some(reader))
             }
-            MaterialTextureKey::Color(_) => (1, 1, None),
+            MaterialSourceKey::Color(_) => (1, 1, None),
         };
 
-        let texture_descriptor = TextureDescriptor::new();
-        texture_descriptor.set_width(width as _);
-        texture_descriptor.set_height(height as _);
-        texture_descriptor.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
-        texture_descriptor.set_storage_mode(MTLStorageMode::Shared);
-        texture_descriptor.set_texture_type(MTLTextureType::D2);
-        texture_descriptor.set_usage(MTLTextureUsage::ShaderRead);
-        texture_descriptor.set_resource_options(
-            MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-        );
+        let desc = TextureDescriptor::new();
+        desc.set_width(width as _);
+        desc.set_height(height as _);
+        desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
+        desc.set_storage_mode(MTLStorageMode::Shared);
+        desc.set_texture_type(MTLTextureType::D2);
+        desc.set_usage(MTLTextureUsage::ShaderRead);
+        desc.set_resource_options(DEFAULT_RESOURCE_OPTIONS);
         Self {
             key,
-            texture_descriptor,
+            texture_descriptor: desc,
             png_reader,
         }
     }
@@ -114,7 +116,7 @@ impl<'a> MaterialTexture<'a> {
         // - Get the maximum output_buffer_size() of all the textures
         let tmp_color_label;
         let (buf, label): (Vec<u8>, &str) = match self.key {
-            MaterialTextureKey::PNG(png_file) => {
+            MaterialSourceKey::PNG(png_file) => {
                 let reader = self
                     .png_reader
                     .as_mut()
@@ -125,15 +127,14 @@ impl<'a> MaterialTexture<'a> {
                 reader.next_frame(&mut buf).expect("Failed to load texture");
                 (buf, png_file)
             }
-            MaterialTextureKey::Color(RGB8Unorm(r, g, b)) => {
+            MaterialSourceKey::Color(RGB8Unorm(r, g, b)) => {
                 tmp_color_label = format!("Color {r},{g},{b}");
                 (vec![r, g, b], &tmp_color_label)
             }
         };
 
-        let desc = &self.texture_descriptor;
         let texture = heap
-            .new_texture(&desc)
+            .new_texture(&self.texture_descriptor)
             .expect(&format!("Failed to allocate texture for {label}"));
         texture.set_label(label);
 
@@ -142,16 +143,114 @@ impl<'a> MaterialTexture<'a> {
             MTLRegion {
                 origin: MTLOrigin { x: 0, y: 0, z: 0 },
                 size: MTLSize {
-                    width: desc.width(),
-                    height: desc.height(),
+                    width: self.texture_descriptor.width(),
+                    height: self.texture_descriptor.height(),
                     depth: 1,
                 },
             },
             0,
             buf.as_ptr() as _,
-            desc.width() * BYTES_PER_RGBA_PIXEL,
+            self.texture_descriptor.width() * BYTES_PER_RGBA_PIXEL,
         );
         texture
+    }
+}
+
+struct Material<'a> {
+    ambient: MaterialSourceKey<'a>,
+    diffuse: MaterialSourceKey<'a>,
+    specular: MaterialSourceKey<'a>,
+    specular_shineness: f32,
+}
+
+struct Materials<'a> {
+    sources: HashMap<MaterialSourceKey<'a>, MaterialSource<'a>>,
+    materials: Vec<Material<'a>>,
+    heap_size: usize,
+}
+
+impl<'a> Materials<'a> {
+    fn new<'b>(
+        device: &Device,
+        material_file_dir: &'b PathBuf,
+        obj_mats: &'a [tobj::Material],
+    ) -> Self {
+        let num_materials = obj_mats.len();
+        let mut sources = HashMap::with_capacity(num_materials * 3);
+        let mut heap_size = 0;
+        let mut last_alignment_padding = 0;
+        let materials = obj_mats
+            .iter()
+            .map(|mat| {
+                let m = Material {
+                    ambient: MaterialSourceKey::new(&mat.ambient_texture, &mat.ambient),
+                    diffuse: MaterialSourceKey::new(&mat.diffuse_texture, &mat.diffuse),
+                    specular: MaterialSourceKey::new(&mat.specular_texture, &mat.specular),
+                    specular_shineness: mat.shininess,
+                };
+                for key in [&m.ambient, &m.diffuse, &m.specular] {
+                    sources.entry(*key).or_insert_with(|| {
+                        let mat_tx = MaterialSource::new(material_file_dir, *key);
+                        let (size, padding) = mat_tx.size_and_padding(device);
+                        heap_size += last_alignment_padding + size;
+                        last_alignment_padding = padding;
+                        mat_tx
+                    });
+                }
+                m
+            })
+            .collect();
+        Self {
+            sources,
+            materials,
+            heap_size,
+        }
+    }
+}
+
+impl<'a> HeapResident<Texture> for Materials<'a> {
+    fn heap_size(&self) -> usize {
+        self.heap_size
+    }
+
+    fn allocate_and_encode(
+        mut self,
+        heap: &Heap,
+        device: &Device,
+        arg_encoder: &ArgumentEncoder,
+    ) -> (Buffer, u32, Vec<Texture>) {
+        let num_materials = self.materials.len();
+        let arg_encoded_length = arg_encoder.encoded_length() as u32;
+        let buffer = device.new_buffer(
+            (arg_encoded_length as u64) * num_materials as u64,
+            DEFAULT_RESOURCE_OPTIONS,
+        );
+        buffer.set_label("Materials Argument Buffer");
+
+        let mut texture_map: HashMap<MaterialSourceKey<'a>, Texture> =
+            HashMap::with_capacity(self.sources.len());
+        for (i, mat) in self.materials.into_iter().enumerate() {
+            arg_encoder.set_argument_buffer_to_element(i as _, &buffer, 0);
+            for (id, source_key) in [
+                (MaterialID::ambient_texture, mat.ambient),
+                (MaterialID::diffuse_texture, mat.diffuse),
+                (MaterialID::specular_texture, mat.specular),
+            ] {
+                let texture = texture_map.entry(source_key).or_insert_with(|| {
+                    self.sources
+                        .get_mut(&source_key)
+                        .expect("Couldn't find source key")
+                        .allocate_texture(heap)
+                });
+                arg_encoder.set_texture(id as _, &texture);
+            }
+            unsafe {
+                *(arg_encoder.constant_data(MaterialID::specular_shineness as _) as *mut f32) =
+                    mat.specular_shineness
+            };
+        }
+        let textures = texture_map.into_iter().map(|(_, tx)| tx).collect();
+        (buffer, arg_encoded_length, textures)
     }
 }
 
@@ -173,9 +272,7 @@ pub struct Model {
 // TODO: START HERE
 // TODO: START HERE
 // TODO: START HERE
-// Mimic MaterialTexture, maybe create trait like HeapObject { heap_size(), allocate(heap) }
-// - Consider a AllMaterials that implements HeapObject and houses all MaterialTextures and
-//   additional mapping between tobj::Material[] index => {ambient, diffuse, specular: &MaterialTexture}
+// Mimic Materials
 struct GeometryResults {
     heap_size: usize,
     indices_buf_length: usize,
@@ -195,72 +292,45 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
     let mut normals_buf_length = 0;
     let mut tx_coords_buf_length = 0;
     let mut objects = Vec::<ModelObject>::with_capacity(objs.len());
-    for tobj::Model {
-        mesh:
-            tobj::Mesh {
-                indices,
-                positions,
-                normals,
-                texcoords,
-                material_id,
-                ..
-            },
-        name,
-        ..
-    } in objs
-    {
+    for tobj::Model { mesh, name, .. } in objs {
         assert!(
-            (indices.len() % 3) == 0 &&
-            (positions.len() % 3) == 0 &&
-            (normals.len() % 3) == 0 &&
-            (texcoords.len() % 2) == 0,
+            (mesh.indices.len() % 3) == 0 &&
+            (mesh.positions.len() % 3) == 0 &&
+            (mesh.normals.len() % 3) == 0 &&
+            (mesh.texcoords.len() % 2) == 0,
             "Unexpected number of positions, normals, or texcoords. Expected each to be triples, triples, and pairs (respectively)"
         );
-        let num_positions = positions.len() / 3;
+        let num_positions = mesh.positions.len() / 3;
         assert!(
-            (normals.len() / 3) == num_positions &&
-            (texcoords.len() / 2) == num_positions,
+            (mesh.normals.len() / 3) == num_positions &&
+            (mesh.texcoords.len() / 2) == num_positions,
             "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
         );
-
-        indices_buf_length += byte_len(&indices);
-        positions_buf_length += byte_len(&positions);
-        normals_buf_length += byte_len(&normals);
-        tx_coords_buf_length += byte_len(&texcoords);
+        indices_buf_length += byte_len(&mesh.indices);
+        positions_buf_length += byte_len(&mesh.positions);
+        normals_buf_length += byte_len(&mesh.normals);
+        tx_coords_buf_length += byte_len(&mesh.texcoords);
         objects.push(ModelObject {
             name: name.to_owned(),
-            num_indices: indices.len() as _,
-            material_id: material_id.expect("No material found for object.") as _,
+            num_indices: mesh.indices.len() as _,
+            material_id: mesh.material_id.expect("No material found for object.") as _,
         });
     }
-
-    heap_size += align_size(device.heap_buffer_size_and_align(
-        indices_buf_length as _,
-        MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-    ));
-    heap_size += align_size(device.heap_buffer_size_and_align(
-        positions_buf_length as _,
-        MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-    ));
-    heap_size += align_size(device.heap_buffer_size_and_align(
-        positions_buf_length as _,
-        MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-    ));
-    heap_size += align_size(device.heap_buffer_size_and_align(
-        normals_buf_length as _,
-        MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-    ));
-
-    /*
-    This may seem like a mistake to use the aligned size (size + padding) for the last buffer (No
-    subsequent buffer needs padding to be aligned), but this padding actually represents the padding
-    needed for the **first** buffer (right after the last texture).
-    */
-    heap_size += align_size(device.heap_buffer_size_and_align(
-        tx_coords_buf_length as _,
-        MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-    ));
-
+    for buf_length in [
+        indices_buf_length,
+        positions_buf_length,
+        normals_buf_length,
+        tx_coords_buf_length,
+    ] {
+        /*
+        This may seem like a mistake to use the aligned size (size + padding) for the last buffer (No
+        subsequent buffer needs padding to be aligned), but this padding actually represents the padding
+        needed for the **first** buffer (right after the last texture).
+        */
+        heap_size += align_size(
+            device.heap_buffer_size_and_align(buf_length as _, DEFAULT_RESOURCE_OPTIONS),
+        );
+    }
     GeometryResults {
         heap_size,
         indices_buf_length,
@@ -269,40 +339,6 @@ fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> Geo
         tx_coords_buf_length,
         objects,
     }
-}
-
-fn get_total_material_texture_size_and_readers<'a, 'b, 'c>(
-    materials: &'a [tobj::Material],
-    material_file_dir: &'b PathBuf,
-    device: &'c Device,
-) -> (usize, HashMap<MaterialTextureKey<'a>, MaterialTexture<'a>>) {
-    let mut texture_to_reader_map =
-        HashMap::<MaterialTextureKey<'a>, MaterialTexture<'a>>::with_capacity(materials.len());
-    let mut size = 0;
-
-    // Add padding between textures to make sure every texture is properly aligned according to
-    // `Device#heap_texture_size_and_align()`. See https://developer.apple.com/documentation/metal/mtldevice/1649927-heaptexturesizeandalignwithdescr?language=objc.
-    // IMPORTANT: Assumes the first texture (allocated from the heap) is aligned and does not need
-    // any padding in the beginning to be aligned.
-    let mut last_alignment_padding = 0;
-    for mat in materials {
-        for (color, texture_file) in [
-            (&mat.ambient, &mat.ambient_texture),
-            (&mat.diffuse, &mat.diffuse_texture),
-            (&mat.specular, &mat.specular_texture),
-        ] {
-            let key = MaterialTextureKey::new(texture_file, &color);
-            texture_to_reader_map.entry(key).or_insert_with(|| {
-                let mat_tx = MaterialTexture::new(material_file_dir, key);
-                let (heap_size, padding) = mat_tx.size_and_padding(device);
-                size += last_alignment_padding + heap_size;
-                last_alignment_padding = padding;
-
-                mat_tx
-            });
-        }
-    }
-    (size, texture_to_reader_map)
 }
 
 #[inline]
@@ -399,65 +435,6 @@ fn load_geometry(
     )
 }
 
-// TODO: Create a return type
-fn load_materials<'a>(
-    mats: &'a [tobj::Material],
-    mut texture_to_reader_map: HashMap<MaterialTextureKey<'a>, MaterialTexture<'a>>,
-    device: &Device,
-    heap: &Heap,
-    materials_arg_encoder: &ArgumentEncoder,
-) -> (Buffer, Vec<Texture>, u32) {
-    let arg_encoded_length = materials_arg_encoder.encoded_length() as u32;
-    let length = (arg_encoded_length as u64) * mats.len() as u64;
-    let arg_buffer = device.new_buffer(
-        length,
-        MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
-    );
-    arg_buffer.set_label("Materials Argument Buffer");
-
-    // Assume all materials have 3 textures: ambient, diffuse and specular
-    let mut texture_map: HashMap<MaterialTextureKey<'a>, Texture> =
-        HashMap::with_capacity(mats.len() * 3);
-    for (i, mat) in mats.iter().enumerate() {
-        materials_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
-        for (id, color, texture_file) in [
-            (
-                MaterialID::ambient_texture,
-                mat.ambient,
-                &mat.ambient_texture,
-            ),
-            (
-                MaterialID::diffuse_texture,
-                mat.diffuse,
-                &mat.diffuse_texture,
-            ),
-            (
-                MaterialID::specular_texture,
-                mat.specular,
-                &mat.specular_texture,
-            ),
-        ] {
-            let key = MaterialTextureKey::new(texture_file, &color);
-            let tx = texture_map.entry(key).or_insert_with(|| {
-                let material_texture = texture_to_reader_map
-                        .get_mut(&key)
-                        .expect(
-                            "Failed to get reader and texture descriptor (see get_total_material_texture_size)"
-                        );
-                material_texture.allocate_texture(heap)
-            });
-            materials_arg_encoder.set_texture(id as _, &tx);
-        }
-        unsafe {
-            *(materials_arg_encoder.constant_data(MaterialID::specular_shineness as _)
-                as *mut f32) = mat.shininess
-        };
-    }
-    let textures = texture_map.into_values().collect();
-
-    (arg_buffer, textures, arg_encoded_length)
-}
-
 impl Model {
     pub fn from_file<T: AsRef<Path>>(
         obj_file: T,
@@ -483,30 +460,23 @@ impl Model {
                 .parent()
                 .expect("Failed to get obj file's parent directory"),
         );
+        let all_materials = Materials::new(device, &material_file_dir, &materials);
 
         // Size Heap for Geometry and Materials
-        let (texture_heap_size, texture_to_reader_map) =
-            get_total_material_texture_size_and_readers(&materials, &material_file_dir, device);
         let geometry = get_total_geometry_buffers_size(&models, device);
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
         desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
         desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_size((texture_heap_size + geometry.heap_size) as _);
+        desc.set_size((all_materials.heap_size() + geometry.heap_size) as _);
         let heap = device.new_heap(&desc);
         heap.set_label("Geometry and Materials Heap");
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
-        let (materials_arg_buffer, material_textures, materials_arg_encoded_length) =
-            load_materials(
-                &materials,
-                texture_to_reader_map,
-                device,
-                &heap,
-                &materials_arg_encoder,
-            );
+        let (materials_arg_buffer, materials_arg_encoded_length, material_textures) =
+            all_materials.allocate_and_encode(&heap, device, materials_arg_encoder);
 
         let (geometry_arg_buffer, geometry_arg_encoded_length, max_bounds, geometry_buffers) =
             load_geometry(
