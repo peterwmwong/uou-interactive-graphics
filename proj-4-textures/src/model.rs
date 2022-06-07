@@ -26,7 +26,6 @@ trait HeapResident<T: Sized> {
 pub struct MaxBounds {
     pub center: f32x4,
     pub size: f32x4,
-    // TODO: Calculate the xyz center of the model
 }
 
 // TODO: START HERE
