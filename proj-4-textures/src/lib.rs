@@ -158,7 +158,7 @@ impl RendererDelgate for Delegate {
         world_arg_buffer.set_label("World Argument Buffer");
         world_arg_encoder.set_argument_buffer(&world_arg_buffer, 0);
 
-        let MaxBounds { center, size } = &model.max_bounds;
+        let MaxBounds { center, size } = &model.geometry_max_bounds;
         let matrix_model_to_world_no_scale = f32x4x4::y_rotate(PI)
             * f32x4x4::x_rotate(PI / 2.)
             * f32x4x4::translate(-center[0], -center[1], -center[2]);
@@ -397,7 +397,7 @@ impl Delegate {
 
     #[inline]
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        let size = self.model.max_bounds.size;
+        let size = self.model.geometry_max_bounds.size;
         let (w, h) = if size[0] > size[1] {
             (NEAR_FIELD_MAJOR_AXIS, aspect_ratio * NEAR_FIELD_MAJOR_AXIS)
         } else {

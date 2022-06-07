@@ -8,6 +8,21 @@ use std::{
 };
 use tobj::LoadOptions;
 
+// TODO: Move these into metal-app helpers
+#[inline(always)]
+fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, offset: usize) -> usize {
+    unsafe {
+        let count = src.len();
+        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(offset), count);
+        offset + std::mem::size_of::<T>() * count
+    }
+}
+
+#[inline(always)]
+const fn byte_len<T: Sized>(slice: &[T]) -> usize {
+    slice.len() * std::mem::size_of::<T>()
+}
+
 const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
     MTLResourceOptions::StorageModeShared.bits()
         | MTLResourceOptions::CPUCacheModeWriteCombined.bits(),
@@ -16,11 +31,11 @@ const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bi
 trait HeapResident<T: Sized> {
     fn heap_size(&self) -> usize;
     fn allocate_and_encode(
-        self,
+        &mut self,
         heap: &Heap,
         device: &Device,
         materials_arg_encoder: &ArgumentEncoder,
-    ) -> (Buffer, u32, Vec<T>);
+    ) -> (Buffer, u32, T);
 }
 
 pub struct MaxBounds {
@@ -28,12 +43,8 @@ pub struct MaxBounds {
     pub size: f32x4,
 }
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Can we remove this object?
-struct ModelObject {
-    name: String,
+struct DrawInfo {
+    debug_group_name: String,
     num_indices: u32,
     material_id: u32,
 }
@@ -50,6 +61,7 @@ enum MaterialSourceKey<'a> {
 }
 
 impl<'a> MaterialSourceKey<'a> {
+    #[inline(always)]
     fn new(png_file: &'a str, color: &RGB32) -> Self {
         if png_file.is_empty() {
             Self::Color(RGB8Unorm(
@@ -102,6 +114,7 @@ impl<'a> MaterialSource<'a> {
         }
     }
 
+    #[inline]
     fn size_and_padding(&self, device: &Device) -> (usize, usize) {
         let size_align = device.heap_texture_size_and_align(&self.texture_descriptor);
         let aligned_size = align_size(size_align);
@@ -110,6 +123,7 @@ impl<'a> MaterialSource<'a> {
         (unaligned_size, aligned_size - unaligned_size)
     }
 
+    #[inline]
     fn allocate_texture(&mut self, heap: &Heap) -> Texture {
         // TODO: Allocate this buf once
         // - Get the maximum output_buffer_size() of all the textures
@@ -207,13 +221,20 @@ impl<'a> Materials<'a> {
     }
 }
 
-impl<'a> HeapResident<Texture> for Materials<'a> {
+impl<'a> HeapResident<Vec<Texture>> for Materials<'a> {
+    #[inline]
     fn heap_size(&self) -> usize {
         self.heap_size
     }
 
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Extract this whole file into metal_app
+    // Figure out way parameterize the MaterialID
+    // - All the IDs could be passed into the new(), which was passed to Model::from_file.
     fn allocate_and_encode(
-        mut self,
+        &mut self,
         heap: &Heap,
         device: &Device,
         arg_encoder: &ArgumentEncoder,
@@ -228,7 +249,7 @@ impl<'a> HeapResident<Texture> for Materials<'a> {
 
         let mut texture_map: HashMap<MaterialSourceKey<'a>, Texture> =
             HashMap::with_capacity(self.sources.len());
-        for (i, mat) in self.materials.into_iter().enumerate() {
+        for (i, mat) in self.materials.iter().enumerate() {
             arg_encoder.set_argument_buffer_to_element(i as _, &buffer, 0);
             for (id, source_key) in [
                 (MaterialID::ambient_texture, mat.ambient),
@@ -253,12 +274,163 @@ impl<'a> HeapResident<Texture> for Materials<'a> {
     }
 }
 
+struct Geometry<'a> {
+    objects: &'a [tobj::Model],
+    indices_buf_length: usize,
+    positions_buf_length: usize,
+    normals_buf_length: usize,
+    tx_coords_buf_length: usize,
+    heap_size: usize,
+    max_bounds: MaxBounds,
+    draws: Vec<DrawInfo>,
+}
+
+impl<'a> Geometry<'a> {
+    fn new(objects: &'a [tobj::Model], device: &Device) -> Self {
+        let mut heap_size = 0;
+
+        // Create a shared buffer (shared between all objects) for each ObjectGeometry member.
+        // Calculate the size of each buffer...
+        let mut indices_buf_length = 0;
+        let mut positions_buf_length = 0;
+        let mut normals_buf_length = 0;
+        let mut tx_coords_buf_length = 0;
+        let mut mins = f32x4::splat(f32::MAX);
+        let mut maxs = f32x4::splat(f32::MIN);
+        let mut draws = Vec::<DrawInfo>::with_capacity(objects.len());
+        for tobj::Model { mesh, name, .. } in objects {
+            assert!(
+                (mesh.indices.len() % 3) == 0 &&
+                (mesh.positions.len() % 3) == 0 &&
+                (mesh.normals.len() % 3) == 0 &&
+                (mesh.texcoords.len() % 2) == 0,
+                "Unexpected number of positions, normals, or texcoords. Expected each to be triples, triples, and pairs (respectively)"
+            );
+            let num_positions = mesh.positions.len() / 3;
+            assert!(
+                (mesh.normals.len() / 3) == num_positions &&
+                (mesh.texcoords.len() / 2) == num_positions,
+                "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
+            );
+            indices_buf_length += byte_len(&mesh.indices);
+            positions_buf_length += byte_len(&mesh.positions);
+            normals_buf_length += byte_len(&mesh.normals);
+            tx_coords_buf_length += byte_len(&mesh.texcoords);
+            draws.push(DrawInfo {
+                debug_group_name: name.to_owned(),
+                num_indices: mesh.indices.len() as _,
+                material_id: mesh.material_id.expect("No material found for object.") as _,
+            });
+            for &[x, y, z] in mesh.positions.as_chunks::<3>().0 {
+                let input = f32x4::from_array([x, y, z, 0.0]);
+                mins = mins.min(input);
+                maxs = maxs.max(input);
+            }
+        }
+        for buf_length in [
+            indices_buf_length,
+            positions_buf_length,
+            normals_buf_length,
+            tx_coords_buf_length,
+        ] {
+            /*
+            This may seem like a mistake to use the aligned size (size + padding) for the last buffer (No
+            subsequent buffer needs padding to be aligned), but this padding actually represents the padding
+            needed for the **first** buffer (right after the last texture).
+            */
+            heap_size += align_size(
+                device.heap_buffer_size_and_align(buf_length as _, DEFAULT_RESOURCE_OPTIONS),
+            );
+        }
+        let size = maxs - mins;
+        let center = mins + (size * f32x4::splat(0.5));
+        Self {
+            heap_size,
+            indices_buf_length,
+            positions_buf_length,
+            normals_buf_length,
+            tx_coords_buf_length,
+            objects,
+            draws,
+            max_bounds: MaxBounds { center, size },
+        }
+    }
+}
+
+impl<'a> HeapResident<[Buffer; 4]> for Geometry<'a> {
+    #[inline]
+    fn heap_size(&self) -> usize {
+        self.heap_size
+    }
+
+    fn allocate_and_encode(
+        &mut self,
+        heap: &Heap,
+        device: &Device,
+        geometry_arg_encoder: &ArgumentEncoder,
+    ) -> (Buffer, u32, [Buffer; 4]) {
+        let arg_encoded_length = geometry_arg_encoder.encoded_length() as u32;
+        let length = arg_encoded_length * self.objects.len() as u32;
+        let arg_buffer = device.new_buffer(
+            length as _,
+            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
+        );
+        arg_buffer.set_label("Geometry Argument Buffer");
+
+        // Allocate buffers...
+        let mut indices_offset = 0;
+        let (indices_ptr, indices_buf) =
+            allocate_new_buffer_with_heap::<u32>(heap, "indices", self.indices_buf_length as _);
+        let mut positions_offset = 0;
+        let (positions_ptr, positions_buf) =
+            allocate_new_buffer_with_heap::<f32>(heap, "positions", self.positions_buf_length as _);
+        let mut normals_offset = 0;
+        let (normals_ptr, normals_buf) =
+            allocate_new_buffer_with_heap::<f32>(heap, "normals", self.normals_buf_length as _);
+        let mut tx_coords_offset = 0;
+        let (tx_coords_ptr, tx_coords_buf) =
+            allocate_new_buffer_with_heap::<f32>(heap, "tx_coords", self.tx_coords_buf_length as _);
+
+        let buffers = [indices_buf, positions_buf, normals_buf, tx_coords_buf];
+        let buffer_refs: [&BufferRef; 4] = [
+            buffers[0].as_ref(),
+            buffers[1].as_ref(),
+            buffers[2].as_ref(),
+            buffers[3].as_ref(),
+        ];
+        for (i, tobj::Model { mesh, .. }) in self.objects.into_iter().enumerate() {
+            geometry_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
+            // TODO: Figure out a way of asserting the index -> buffer mapping.
+            // - Currently the Shader Binding ObjectGeometryID is completely unused/un-enforced!
+            // - Maybe set_buffers() isn't worth it and we should just call set_buffer(ObjectGeometryID::_, buffer, offset)
+            geometry_arg_encoder.set_buffers(
+                0,
+                &buffer_refs,
+                &[
+                    indices_offset as _,
+                    positions_offset as _,
+                    normals_offset as _,
+                    tx_coords_offset as _,
+                ],
+            );
+
+            indices_offset = copy_into_buffer(&mesh.indices, indices_ptr, indices_offset);
+            normals_offset = copy_into_buffer(&mesh.normals, normals_ptr, normals_offset);
+            tx_coords_offset = copy_into_buffer(&mesh.texcoords, tx_coords_ptr, tx_coords_offset);
+
+            let positions = &mesh.positions;
+            positions_offset = copy_into_buffer(&positions, positions_ptr, positions_offset);
+        }
+        (arg_buffer, arg_encoded_length, buffers)
+    }
+}
+
 pub struct Model {
-    pub max_bounds: MaxBounds,
     heap: Heap,
-    objects: Vec<ModelObject>,
+    draws: Vec<DrawInfo>,
     geometry_arg_buffer: Buffer,
     geometry_arg_encoded_length: u32,
+    pub geometry_max_bounds: MaxBounds,
     // TODO: Create a type (GeometryBuffers { indices, positions, normals, tx_coords })
     #[allow(dead_code)]
     geometry_buffers: [Buffer; 4],
@@ -266,172 +438,6 @@ pub struct Model {
     materials_arg_encoded_length: u32,
     #[allow(dead_code)]
     material_textures: Vec<Texture>,
-}
-
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Mimic Materials
-struct GeometryResults {
-    heap_size: usize,
-    indices_buf_length: usize,
-    positions_buf_length: usize,
-    normals_buf_length: usize,
-    tx_coords_buf_length: usize,
-    objects: Vec<ModelObject>,
-}
-
-fn get_total_geometry_buffers_size(objs: &[tobj::Model], device: &Device) -> GeometryResults {
-    let mut heap_size = 0;
-
-    // Create a shared buffer (shared between all objects) for each ObjectGeometry member.
-    // Calculate the size of each buffer...
-    let mut indices_buf_length = 0;
-    let mut positions_buf_length = 0;
-    let mut normals_buf_length = 0;
-    let mut tx_coords_buf_length = 0;
-    let mut objects = Vec::<ModelObject>::with_capacity(objs.len());
-    for tobj::Model { mesh, name, .. } in objs {
-        assert!(
-            (mesh.indices.len() % 3) == 0 &&
-            (mesh.positions.len() % 3) == 0 &&
-            (mesh.normals.len() % 3) == 0 &&
-            (mesh.texcoords.len() % 2) == 0,
-            "Unexpected number of positions, normals, or texcoords. Expected each to be triples, triples, and pairs (respectively)"
-        );
-        let num_positions = mesh.positions.len() / 3;
-        assert!(
-            (mesh.normals.len() / 3) == num_positions &&
-            (mesh.texcoords.len() / 2) == num_positions,
-            "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
-        );
-        indices_buf_length += byte_len(&mesh.indices);
-        positions_buf_length += byte_len(&mesh.positions);
-        normals_buf_length += byte_len(&mesh.normals);
-        tx_coords_buf_length += byte_len(&mesh.texcoords);
-        objects.push(ModelObject {
-            name: name.to_owned(),
-            num_indices: mesh.indices.len() as _,
-            material_id: mesh.material_id.expect("No material found for object.") as _,
-        });
-    }
-    for buf_length in [
-        indices_buf_length,
-        positions_buf_length,
-        normals_buf_length,
-        tx_coords_buf_length,
-    ] {
-        /*
-        This may seem like a mistake to use the aligned size (size + padding) for the last buffer (No
-        subsequent buffer needs padding to be aligned), but this padding actually represents the padding
-        needed for the **first** buffer (right after the last texture).
-        */
-        heap_size += align_size(
-            device.heap_buffer_size_and_align(buf_length as _, DEFAULT_RESOURCE_OPTIONS),
-        );
-    }
-    GeometryResults {
-        heap_size,
-        indices_buf_length,
-        positions_buf_length,
-        normals_buf_length,
-        tx_coords_buf_length,
-        objects,
-    }
-}
-
-#[inline]
-fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, offset: usize) -> usize {
-    unsafe {
-        let count = src.len();
-        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(offset), count);
-        offset + std::mem::size_of::<T>() * count
-    }
-}
-
-#[inline(always)]
-const fn byte_len<T: Sized>(slice: &[T]) -> usize {
-    slice.len() * std::mem::size_of::<T>()
-}
-
-// TODO: Create a return type
-fn load_geometry(
-    objs: &[tobj::Model],
-    device: &Device,
-    heap: &Heap,
-    geometry_arg_encoder: &ArgumentEncoder,
-    indices_buf_length: usize,
-    positions_buf_length: usize,
-    normals_buf_length: usize,
-    tx_coords_buf_length: usize,
-) -> (Buffer, u32, MaxBounds, [Buffer; 4]) {
-    let arg_encoded_length = geometry_arg_encoder.encoded_length() as u32;
-    let length = arg_encoded_length * objs.len() as u32;
-    let arg_buffer = device.new_buffer(
-        length as _,
-        MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
-    );
-    arg_buffer.set_label("Geometry Argument Buffer");
-
-    // Allocate buffers...
-    let mut indices_offset = 0;
-    let (indices_ptr, indices_buf) =
-        allocate_new_buffer_with_heap::<u32>(heap, "indices", indices_buf_length as _);
-    let mut positions_offset = 0;
-    let (positions_ptr, positions_buf) =
-        allocate_new_buffer_with_heap::<f32>(heap, "positions", positions_buf_length as _);
-    let mut normals_offset = 0;
-    let (normals_ptr, normals_buf) =
-        allocate_new_buffer_with_heap::<f32>(heap, "normals", normals_buf_length as _);
-    let mut tx_coords_offset = 0;
-    let (tx_coords_ptr, tx_coords_buf) =
-        allocate_new_buffer_with_heap::<f32>(heap, "tx_coords", tx_coords_buf_length as _);
-
-    let mut mins = f32x4::splat(f32::MAX);
-    let mut maxs = f32x4::splat(f32::MIN);
-    let buffers = [indices_buf, positions_buf, normals_buf, tx_coords_buf];
-    let buffer_refs: [&BufferRef; 4] = [
-        buffers[0].as_ref(),
-        buffers[1].as_ref(),
-        buffers[2].as_ref(),
-        buffers[3].as_ref(),
-    ];
-    for (i, tobj::Model { mesh, .. }) in objs.iter().enumerate() {
-        geometry_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
-        // TODO: Figure out a way of asserting the index -> buffer mapping.
-        // - Currently the Shader Binding ObjectGeometryID is completely unused/un-enforced!
-        // - Maybe set_buffers() isn't worth it and we should just call set_buffer(ObjectGeometryID::_, buffer, offset)
-        geometry_arg_encoder.set_buffers(
-            0,
-            &buffer_refs,
-            &[
-                indices_offset as _,
-                positions_offset as _,
-                normals_offset as _,
-                tx_coords_offset as _,
-            ],
-        );
-
-        indices_offset = copy_into_buffer(&mesh.indices, indices_ptr, indices_offset);
-        normals_offset = copy_into_buffer(&mesh.normals, normals_ptr, normals_offset);
-        tx_coords_offset = copy_into_buffer(&mesh.texcoords, tx_coords_ptr, tx_coords_offset);
-
-        let positions = &mesh.positions;
-        positions_offset = copy_into_buffer(&positions, positions_ptr, positions_offset);
-        for &[x, y, z] in positions.as_chunks::<3>().0 {
-            let input = f32x4::from_array([x, y, z, 0.0]);
-            mins = mins.min(input);
-            maxs = maxs.max(input);
-        }
-    }
-    let size = maxs - mins;
-    let center = mins + (size * f32x4::splat(0.5));
-    (
-        arg_buffer,
-        arg_encoded_length,
-        MaxBounds { center, size },
-        buffers,
-    )
 }
 
 impl Model {
@@ -459,43 +465,34 @@ impl Model {
                 .parent()
                 .expect("Failed to get obj file's parent directory"),
         );
-        let all_materials = Materials::new(device, &material_file_dir, &materials);
 
         // Size Heap for Geometry and Materials
-        let geometry = get_total_geometry_buffers_size(&models, device);
+        let mut materials = Materials::new(device, &material_file_dir, &materials);
+        let mut geometry = Geometry::new(&models, device);
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
         desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
         desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_size((all_materials.heap_size() + geometry.heap_size) as _);
+        desc.set_size((materials.heap_size() + geometry.heap_size()) as _);
         let heap = device.new_heap(&desc);
         heap.set_label("Geometry and Materials Heap");
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
         let (materials_arg_buffer, materials_arg_encoded_length, material_textures) =
-            all_materials.allocate_and_encode(&heap, device, materials_arg_encoder);
+            materials.allocate_and_encode(&heap, device, materials_arg_encoder);
 
-        let (geometry_arg_buffer, geometry_arg_encoded_length, max_bounds, geometry_buffers) =
-            load_geometry(
-                &models,
-                device,
-                &heap,
-                &geometry_arg_encoder,
-                geometry.indices_buf_length,
-                geometry.positions_buf_length,
-                geometry.normals_buf_length,
-                geometry.tx_coords_buf_length,
-            );
+        let (geometry_arg_buffer, geometry_arg_encoded_length, geometry_buffers) =
+            geometry.allocate_and_encode(&heap, device, geometry_arg_encoder);
 
         Self {
             heap,
-            objects: geometry.objects,
+            draws: geometry.draws,
             geometry_arg_buffer,
             geometry_arg_encoded_length,
             geometry_buffers,
-            max_bounds,
+            geometry_max_bounds: geometry.max_bounds,
             materials_arg_buffer,
             materials_arg_encoded_length,
             material_textures,
@@ -518,10 +515,10 @@ impl Model {
         fragment_material_arg_buffer_id: u8,
     ) {
         let mut geometry_arg_buffer_offset = 0;
-        for o in &self.objects {
-            encoder.push_debug_group(&o.name);
+        for d in &self.draws {
+            encoder.push_debug_group(&d.debug_group_name);
 
-            let material_arg_buffer_offset = o.material_id * self.materials_arg_encoded_length;
+            let material_arg_buffer_offset = d.material_id * self.materials_arg_encoded_length;
 
             // For the first object, encode the vertex/fragment buffer.
             if geometry_arg_buffer_offset == 0 {
@@ -550,7 +547,7 @@ impl Model {
             }
             geometry_arg_buffer_offset += self.geometry_arg_encoded_length;
 
-            encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, o.num_indices as _);
+            encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, d.num_indices as _);
 
             encoder.pop_debug_group();
         }
