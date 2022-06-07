@@ -424,10 +424,7 @@ pub enum MaterialID {
     ambient_texture = 0,
     diffuse_texture = 1,
     specular_texture = 2,
-    ambient_color = 3,
-    diffuse_color = 4,
-    specular_color = 5,
-    specular_shineness = 6,
+    specular_shineness = 3,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

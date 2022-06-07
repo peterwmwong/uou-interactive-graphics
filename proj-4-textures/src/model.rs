@@ -1,7 +1,8 @@
-use crate::shader_bindings::{float4, MaterialID};
+use crate::shader_bindings::MaterialID;
 use metal_app::{align_size, allocate_new_buffer_with_heap, metal::*};
 use std::{
     collections::HashMap,
+    hash::Hash,
     path::{Path, PathBuf},
     simd::f32x4,
 };
@@ -13,10 +14,145 @@ pub struct MaxBounds {
     // TODO: Calculate the xyz center of the model
 }
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Can we remove this object?
 struct ModelObject {
     name: String,
     num_indices: u32,
     material_id: u32,
+}
+
+type RGB32 = [f32; 3];
+
+#[derive(Hash, Copy, Clone, Eq, PartialEq)]
+struct RGB8Unorm(u8, u8, u8);
+
+impl From<&RGB32> for RGB8Unorm {
+    fn from(color: &RGB32) -> Self {
+        Self(
+            (color[0] * 255.0).round() as u8,
+            (color[1] * 255.0).round() as u8,
+            (color[2] * 255.0).round() as u8,
+        )
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+enum MaterialTextureKey<'a> {
+    PNG(&'a str),
+    Color(RGB8Unorm),
+}
+
+impl<'a> MaterialTextureKey<'a> {
+    fn new(png_file: &'a str, color: &RGB32) -> Self {
+        if png_file.is_empty() {
+            Self::Color(color.into())
+        } else {
+            Self::PNG(png_file)
+        }
+    }
+}
+
+struct MaterialTexture<'a> {
+    key: MaterialTextureKey<'a>,
+    texture_descriptor: TextureDescriptor,
+    png_reader: Option<png::Reader<std::fs::File>>,
+}
+
+impl<'a> MaterialTexture<'a> {
+    fn new<'b>(png_file_dir: &'b PathBuf, key: MaterialTextureKey<'a>) -> Self {
+        let (width, height, png_reader) = match key {
+            MaterialTextureKey::PNG(png_file) => {
+                let decoder =
+                    png::Decoder::new(std::fs::File::open(png_file_dir.join(png_file)).unwrap());
+                let reader = decoder.read_info().unwrap();
+                let &png::Info {
+                    color_type,
+                    width,
+                    height,
+                    ..
+                } = reader.info();
+                assert_eq!(
+                    color_type,
+                    png::ColorType::Rgba,
+                    "Unexpected PNG color format, expected RGBA"
+                );
+                (width as _, height as _, Some(reader))
+            }
+            MaterialTextureKey::Color(_) => (1, 1, None),
+        };
+
+        let texture_descriptor = TextureDescriptor::new();
+        texture_descriptor.set_width(width as _);
+        texture_descriptor.set_height(height as _);
+        texture_descriptor.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
+        texture_descriptor.set_storage_mode(MTLStorageMode::Shared);
+        texture_descriptor.set_texture_type(MTLTextureType::D2);
+        texture_descriptor.set_usage(MTLTextureUsage::ShaderRead);
+        texture_descriptor.set_resource_options(
+            MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
+        );
+        Self {
+            key,
+            texture_descriptor,
+            png_reader,
+        }
+    }
+
+    fn size_and_padding(&self, device: &Device) -> (usize, usize) {
+        let size_align = device.heap_texture_size_and_align(&self.texture_descriptor);
+        let aligned_size = align_size(size_align);
+        let unaligned_size = size_align.size as usize;
+        debug_assert!(aligned_size >= unaligned_size);
+        (unaligned_size, aligned_size - unaligned_size)
+    }
+
+    fn allocate_texture(&mut self, heap: &Heap) -> Texture {
+        // TODO: Allocate this buf once
+        // - Get the maximum output_buffer_size() of all the textures
+        let tmp_color_label;
+        let (buf, label): (Vec<u8>, &str) = match self.key {
+            MaterialTextureKey::PNG(png_file) => {
+                let reader = self
+                    .png_reader
+                    .as_mut()
+                    .expect("png_reader is unexpectedely None, eventhough material texture is PNG");
+                let buf_size = reader.output_buffer_size();
+                let mut buf = Vec::with_capacity(buf_size);
+                unsafe { buf.set_len(buf_size) };
+                reader.next_frame(&mut buf).expect("Failed to load texture");
+                (buf, png_file)
+            }
+            MaterialTextureKey::Color(RGB8Unorm(r, g, b)) => {
+                tmp_color_label = format!("Color {r},{g},{b}");
+                (vec![r, g, b], &tmp_color_label)
+            }
+        };
+
+        let desc = &self.texture_descriptor;
+        let texture = heap
+            .new_texture(&desc)
+            .expect(&format!("Failed to allocate texture for {label}"));
+        texture.set_label(label);
+
+        const BYTES_PER_RGBA_PIXEL: NSUInteger = 4;
+        texture.replace_region(
+            MTLRegion {
+                origin: MTLOrigin { x: 0, y: 0, z: 0 },
+                size: MTLSize {
+                    width: desc.width(),
+                    height: desc.height(),
+                    depth: 1,
+                },
+            },
+            0,
+            buf.as_ptr() as _,
+            desc.width() * BYTES_PER_RGBA_PIXEL,
+        );
+        texture
+    }
 }
 
 pub struct Model {
@@ -34,40 +170,12 @@ pub struct Model {
     material_textures: Vec<Texture>,
 }
 
-fn get_png_reader<T: AsRef<Path> + std::fmt::Debug>(
-    path_to_png: T,
-) -> (png::Reader<std::fs::File>, TextureDescriptor) {
-    use std::fs::File;
-    let decoder = png::Decoder::new(File::open(path_to_png).unwrap());
-
-    let reader = decoder.read_info().unwrap();
-    let desc = {
-        let desc = TextureDescriptor::new();
-        let &png::Info {
-            color_type,
-            width,
-            height,
-            ..
-        } = reader.info();
-        assert_eq!(
-            color_type,
-            png::ColorType::Rgba,
-            "Unexpected PNG color format, expected RGBA"
-        );
-        desc.set_width(width as _);
-        desc.set_height(height as _);
-        desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
-        desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_texture_type(MTLTextureType::D2);
-        desc.set_usage(MTLTextureUsage::ShaderRead);
-        desc.set_resource_options(
-            MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-        );
-        desc
-    };
-    (reader, desc)
-}
-
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Mimic MaterialTexture, maybe create trait like HeapObject { heap_size(), allocate(heap) }
+// - Consider a AllMaterials that implements HeapObject and houses all MaterialTextures and
+//   additional mapping between tobj::Material[] index => {ambient, diffuse, specular: &MaterialTexture}
 struct GeometryResults {
     heap_size: usize,
     indices_buf_length: usize,
@@ -167,14 +275,9 @@ fn get_total_material_texture_size_and_readers<'a, 'b, 'c>(
     materials: &'a [tobj::Material],
     material_file_dir: &'b PathBuf,
     device: &'c Device,
-) -> (
-    usize,
-    HashMap<&'a str, (png::Reader<std::fs::File>, TextureDescriptor)>,
-) {
+) -> (usize, HashMap<MaterialTextureKey<'a>, MaterialTexture<'a>>) {
     let mut texture_to_reader_map =
-        HashMap::<&str, (png::Reader<std::fs::File>, TextureDescriptor)>::with_capacity(
-            materials.len(),
-        );
+        HashMap::<MaterialTextureKey<'a>, MaterialTexture<'a>>::with_capacity(materials.len());
     let mut size = 0;
 
     // Add padding between textures to make sure every texture is properly aligned according to
@@ -183,66 +286,23 @@ fn get_total_material_texture_size_and_readers<'a, 'b, 'c>(
     // any padding in the beginning to be aligned.
     let mut last_alignment_padding = 0;
     for mat in materials {
-        for texture_file in [
-            &mat.ambient_texture,
-            &mat.diffuse_texture,
-            &mat.specular_texture,
+        for (color, texture_file) in [
+            (&mat.ambient, &mat.ambient_texture),
+            (&mat.diffuse, &mat.diffuse_texture),
+            (&mat.specular, &mat.specular_texture),
         ] {
-            if !texture_file.is_empty() {
-                texture_to_reader_map
-                    .entry(texture_file)
-                    .or_insert_with(|| {
-                        let (reader, desc) = get_png_reader(&material_file_dir.join(texture_file));
-                        let size_align = device.heap_texture_size_and_align(&desc);
+            let key = MaterialTextureKey::new(texture_file, &color);
+            texture_to_reader_map.entry(key).or_insert_with(|| {
+                let mat_tx = MaterialTexture::new(material_file_dir, key);
+                let (heap_size, padding) = mat_tx.size_and_padding(device);
+                size += last_alignment_padding + heap_size;
+                last_alignment_padding = padding;
 
-                        // Add alignment-padding to make sure texture is properly aligned.
-                        size += last_alignment_padding + (size_align.size as usize);
-
-                        debug_assert!(align_size(size_align) >= size_align.size as _);
-                        last_alignment_padding =
-                            align_size(size_align) - (size_align.size as usize);
-
-                        (reader, desc)
-                    });
-            }
+                mat_tx
+            });
         }
     }
     (size, texture_to_reader_map)
-}
-
-// TODO: Move into metal-app
-fn load_texture_from_png(
-    label: &str,
-    reader: &mut png::Reader<std::fs::File>,
-    desc: &TextureDescriptor,
-    heap: &Heap,
-) -> Texture {
-    // TODO: Allocate this buf once
-    // - Get the maximum output_buffer_size() of all the textures
-    let buf_size = reader.output_buffer_size();
-    let mut buf = Vec::with_capacity(buf_size);
-    unsafe { buf.set_len(buf_size) };
-    reader.next_frame(&mut buf).expect("Failed to load texture");
-
-    let texture = heap
-        .new_texture(&desc)
-        .expect(&format!("Failed to allocate texture for {label}"));
-    texture.set_label(label);
-    const BYTES_PER_RGBA_PIXEL: NSUInteger = 4;
-    texture.replace_region(
-        MTLRegion {
-            origin: MTLOrigin { x: 0, y: 0, z: 0 },
-            size: MTLSize {
-                width: desc.width(),
-                height: desc.height(),
-                depth: 1,
-            },
-        },
-        0,
-        buf.as_ptr() as _,
-        desc.width() * BYTES_PER_RGBA_PIXEL,
-    );
-    texture
 }
 
 #[inline]
@@ -340,9 +400,9 @@ fn load_geometry(
 }
 
 // TODO: Create a return type
-fn load_materials(
-    mats: &[tobj::Material],
-    mut texture_to_reader_map: HashMap<&str, (png::Reader<std::fs::File>, TextureDescriptor)>,
+fn load_materials<'a>(
+    mats: &'a [tobj::Material],
+    mut texture_to_reader_map: HashMap<MaterialTextureKey<'a>, MaterialTexture<'a>>,
     device: &Device,
     heap: &Heap,
     materials_arg_encoder: &ArgumentEncoder,
@@ -355,38 +415,38 @@ fn load_materials(
     );
     arg_buffer.set_label("Materials Argument Buffer");
 
-    // Assume all materials have 2 textures: diffuse and specular
-    let mut texture_map: HashMap<&str, Texture> = HashMap::with_capacity(mats.len() * 2);
+    // Assume all materials have 3 textures: ambient, diffuse and specular
+    let mut texture_map: HashMap<MaterialTextureKey<'a>, Texture> =
+        HashMap::with_capacity(mats.len() * 3);
     for (i, mat) in mats.iter().enumerate() {
         materials_arg_encoder.set_argument_buffer_to_element(i as _, &arg_buffer, 0);
-        unsafe {
-            *(materials_arg_encoder.constant_data(MaterialID::ambient_color as _) as *mut float4) =
-                float4::new(mat.ambient[0], mat.ambient[1], mat.ambient[2], 1.)
-        };
-        unsafe {
-            *(materials_arg_encoder.constant_data(MaterialID::diffuse_color as _) as *mut float4) =
-                float4::new(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 1.)
-        };
-        unsafe {
-            *(materials_arg_encoder.constant_data(MaterialID::specular_color as _) as *mut float4) =
-                float4::new(mat.specular[0], mat.specular[1], mat.specular[2], 1.)
-        };
-        for (id, texture_file) in [
-            (MaterialID::ambient_texture, &mat.ambient_texture),
-            (MaterialID::diffuse_texture, &mat.diffuse_texture),
-            (MaterialID::specular_texture, &mat.specular_texture),
+        for (id, color, texture_file) in [
+            (
+                MaterialID::ambient_texture,
+                mat.ambient,
+                &mat.ambient_texture,
+            ),
+            (
+                MaterialID::diffuse_texture,
+                mat.diffuse,
+                &mat.diffuse_texture,
+            ),
+            (
+                MaterialID::specular_texture,
+                mat.specular,
+                &mat.specular_texture,
+            ),
         ] {
-            if !texture_file.is_empty() {
-                let tx = texture_map.entry(texture_file).or_insert_with(|| {
-                    let (reader, desc) = texture_to_reader_map
-                        .get_mut(texture_file as &str)
+            let key = MaterialTextureKey::new(texture_file, &color);
+            let tx = texture_map.entry(key).or_insert_with(|| {
+                let material_texture = texture_to_reader_map
+                        .get_mut(&key)
                         .expect(
                             "Failed to get reader and texture descriptor (see get_total_material_texture_size)"
                         );
-                    load_texture_from_png(&texture_file, reader, desc, heap)
-                });
-                materials_arg_encoder.set_texture(id as _, &tx);
-            }
+                material_texture.allocate_texture(heap)
+            });
+            materials_arg_encoder.set_texture(id as _, &tx);
         }
         unsafe {
             *(materials_arg_encoder.constant_data(MaterialID::specular_shineness as _)

@@ -62,9 +62,6 @@ struct Material {
     half_tx2d ambient_texture    [[id(MaterialID::ambient_texture)]];
     half_tx2d diffuse_texture    [[id(MaterialID::diffuse_texture)]];
     half_tx2d specular_texture   [[id(MaterialID::specular_texture)]];
-    float4    ambient_color      [[id(MaterialID::ambient_color)]];
-    float4    diffuse_color      [[id(MaterialID::diffuse_color)]];
-    float4    specular_color     [[id(MaterialID::specular_color)]];
     float     specular_shineness [[id(MaterialID::specular_shineness)]];
 };
 
@@ -73,21 +70,9 @@ main_fragment(         VertexOut   in       [[stage_in]],
               constant Material  & material [[buffer(FragBufferIndex::Material)]],
               constant World     & world    [[buffer(FragBufferIndex::World)]])
 {
-    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
-    half4 color = 0;
-    if (HAS_AMBIENT) {
-        const     half_tx2d tx_amb = material.ambient_texture;
-        const     half4     Ka     = !is_null_texture(tx_amb)
-                                        ? tx_amb.sample(tx_sampler, in.tx_coord)
-                                        : half4(material.ambient_color);
-        constexpr half      Ia     = 0.1;
-
-        color = Ia * Ka;
-    }
-
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
-    const float4 pos_w_persp = world.matrix_screen_to_world * float4(in.position.xyz, 1);
-    const half3  pos         = half3(pos_w_persp.xyz / pos_w_persp.w);
+    const float4 pos_w = world.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const half3  pos   = half3(pos_w.xyz / pos_w.w);
 
     /*
     ================================================================
@@ -126,23 +111,22 @@ main_fragment(         VertexOut   in       [[stage_in]],
     //      - ceil(saturate(v))
     //      - trunc(fma(v, .5h, 1.h))
     const half Il = step(0.h, dot(c, n));
-    if (HAS_DIFFUSE) {
-        const     half_tx2d tx_diff = material.diffuse_texture;
-        const     half4     Kd      = !is_null_texture(tx_diff)
-                                        ? tx_diff.sample(tx_sampler, in.tx_coord)
-                                        : half4(material.diffuse_color);
 
-        color += Il * ln * Kd;
-    }
+    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+    half4 color = 0;
     if (HAS_SPECULAR) {
-        const     half_tx2d tx_spec = material.specular_texture;
-        const     half4     Ks     = !is_null_texture(tx_spec)
-                                        ? tx_spec.sample(tx_sampler, in.tx_coord)
-                                        : half4(material.specular_color);
-
+        const half4 Ks = material.specular_texture.sample(tx_sampler, in.tx_coord);
         color += Il * pow(hn * Ks, material.specular_shineness);
     }
-
+    if (HAS_AMBIENT) {
+        const half4 Ka = material.ambient_texture.sample(tx_sampler, in.tx_coord);
+        const half  Ia = 0.1;
+        color += Ia * Ka;
+    }
+    if (HAS_DIFFUSE) {
+        const half4 Kd = material.diffuse_texture.sample(tx_sampler, in.tx_coord);
+        color += Il * ln * Kd;
+    }
     return color;
 };
 
