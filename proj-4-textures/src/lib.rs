@@ -6,6 +6,7 @@ use metal_app::{metal::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
+    ops::Neg,
     path::PathBuf,
     simd::{f32x2, f32x4},
 };
@@ -163,9 +164,9 @@ impl RendererDelgate for Delegate {
         world_arg_encoder.set_argument_buffer(&world_arg_buffer, 0);
 
         let MaxBounds { center, size } = &model.geometry_max_bounds;
-        let matrix_model_to_world_no_scale = f32x4x4::y_rotate(PI)
-            * f32x4x4::x_rotate(PI / 2.)
-            * f32x4x4::translate(-center[0], -center[1], -center[2]);
+        let &[cx, cy, cz, _] = center.neg().as_array();
+        let matrix_model_to_world_no_scale =
+            f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(cx, cy, cz);
 
         // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
         // 1. INITIAL_CAMERA_DISTANCE is invariant of the model's coordinate range
@@ -315,11 +316,11 @@ impl RendererDelgate for Delegate {
                         Left => {
                             camera_rotation += {
                                 let adjacent = f32x2::splat(self.camera_distance);
-                                let offsets = drag_amount / f32x2::splat(500.);
-                                let ratio = offsets / adjacent;
+                                let opposite = drag_amount / f32x2::splat(500.);
+                                let &[x, y] = (opposite / adjacent).as_array();
                                 f32x2::from_array([
-                                    ratio[1].atan(), // Rotation on x-axis
-                                    ratio[0].atan(), // Rotation on y-axis
+                                    y.atan(), // Rotation on x-axis
+                                    x.atan(), // Rotation on y-axis
                                 ])
                             }
                         }
@@ -331,12 +332,12 @@ impl RendererDelgate for Delegate {
                         Left => {
                             let adjacent = f32x2::splat(self.camera_distance);
                             let opposite = -drag_amount / f32x2::splat(500.);
-                            let ratio = opposite / adjacent;
+                            let &[x, y] = (opposite / adjacent).as_array();
                             self.update_light(
                                 self.light_xy_rotation
                                     + f32x2::from_array([
-                                        ratio[1].atan(), // Rotation on x-axis
-                                        ratio[0].atan(), // Rotation on y-axis
+                                        y.atan(), // Rotation on x-axis
+                                        x.atan(), // Rotation on y-axis
                                     ]),
                             );
                         }
@@ -386,8 +387,9 @@ impl Delegate {
 
     fn update_depth_texture_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();
-        desc.set_width(size[0] as _);
-        desc.set_height(size[1] as _);
+        let &[x, y] = size.as_array();
+        desc.set_width(x as _);
+        desc.set_height(y as _);
         desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
         desc.set_storage_mode(MTLStorageMode::Memoryless);
         desc.set_usage(MTLTextureUsage::RenderTarget);
@@ -398,8 +400,8 @@ impl Delegate {
 
     #[inline]
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        let size = self.model.geometry_max_bounds.size;
-        let (w, h) = if size[0] > size[1] {
+        let &[x, y, ..] = self.model.geometry_max_bounds.size.as_array();
+        let (w, h) = if x > y {
             (NEAR_FIELD_MAJOR_AXIS, aspect_ratio * NEAR_FIELD_MAJOR_AXIS)
         } else {
             (NEAR_FIELD_MAJOR_AXIS / aspect_ratio, NEAR_FIELD_MAJOR_AXIS)
@@ -426,9 +428,9 @@ impl Delegate {
 
     fn update_light(&mut self, light_xy_rotation: f32x2) {
         self.light_xy_rotation = light_xy_rotation;
+        let &[rotx, roty] = self.light_xy_rotation.as_array();
         let light_position =
-            f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
-                * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]);
+            f32x4x4::rotate(rotx, roty, 0.) * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]);
         self.update_world(WorldID::LightPosition, light_position);
     }
 
@@ -436,15 +438,15 @@ impl Delegate {
         self.screen_size = screen_size;
         self.camera_rotation = camera_rotation;
         self.camera_distance = camera_distance;
-        let matrix_world_to_camera = f32x4x4::translate(0., 0., self.camera_distance)
-            * f32x4x4::rotate(-self.camera_rotation[0], -self.camera_rotation[1], 0.);
+        let &[rotx, roty] = self.camera_rotation.neg().as_array();
+        let matrix_world_to_camera =
+            f32x4x4::translate(0., 0., self.camera_distance) * f32x4x4::rotate(rotx, roty, 0.);
         self.update_world(
             WorldID::CameraPosition,
             matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]),
         );
 
-        let sx = screen_size[0];
-        let sy = screen_size[1];
+        let &[sx, sy, ..] = screen_size.as_array();
         let aspect_ratio = sy / sx;
         let matrix_world_to_projection =
             self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
