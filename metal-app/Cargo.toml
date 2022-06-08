@@ -15,6 +15,8 @@ display-link = "0.2.0"
 foreign-types = "0.3.2"
 half = "1.8.2"
 metal = { git = "https://github.com/gfx-rs/metal-rs.git", rev = "39c63ab25b16a4f0c2f793dc0ae1ee9298172748" }
+png = "0.17.5"
+tobj = "3.2.2"
 
 [dependencies.objc]
 version = "0.2.7"

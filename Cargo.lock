@@ -413,6 +413,8 @@ dependencies = [
  "half",
  "metal",
  "objc",
+ "png",
+ "tobj",
 ]
 
 [[package]]
@@ -561,8 +563,6 @@ dependencies = [
  "bitflags",
  "metal-app",
  "metal-build",
- "png",
- "tobj",
 ]
 
 [[package]]

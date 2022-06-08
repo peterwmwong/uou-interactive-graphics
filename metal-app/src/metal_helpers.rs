@@ -4,9 +4,28 @@ use metal::*;
 use objc::runtime::Object;
 use std::ffi::{c_void, CStr};
 
+pub const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
+    MTLResourceOptions::StorageModeShared.bits()
+        | MTLResourceOptions::CPUCacheModeWriteCombined.bits(),
+);
+
 #[inline(always)]
-pub fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usize {
+pub const fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usize {
     (size + (align - (size & (align - 1)))) as _
+}
+
+#[inline(always)]
+pub fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, offset: usize) -> usize {
+    unsafe {
+        let count = src.len();
+        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(offset), count);
+        offset + std::mem::size_of::<T>() * count
+    }
+}
+
+#[inline(always)]
+pub const fn byte_size_of_slice<T: Sized>(slice: &[T]) -> usize {
+    slice.len() * std::mem::size_of::<T>()
 }
 
 #[inline]
@@ -16,10 +35,7 @@ pub fn allocate_new_buffer_with_heap<T: Sized>(
     bytes: usize,
 ) -> (*mut T, Buffer) {
     let buf = heap
-        .new_buffer(
-            bytes as u64,
-            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
-        )
+        .new_buffer(bytes as u64, DEFAULT_RESOURCE_OPTIONS)
         .expect(&format!("Failed to allocate buffer for {label}"));
     buf.set_label(label);
     (buf.contents() as *mut T, buf)
@@ -31,10 +47,7 @@ pub fn allocate_new_buffer<T: Sized>(
     label: &'static str,
     bytes: usize,
 ) -> (*mut T, Buffer) {
-    let buf = device.new_buffer(
-        bytes as u64,
-        MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
-    );
+    let buf = device.new_buffer(bytes as u64, DEFAULT_RESOURCE_OPTIONS);
     buf.set_label(label);
     (buf.contents() as *mut T, buf)
 }

@@ -4,6 +4,10 @@
 #ifndef common_h
 #define common_h
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// CamelCase enum variants to appease clippy
 enum struct FC
 {
     HAS_AMBIENT = 0,

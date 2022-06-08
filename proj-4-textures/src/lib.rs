@@ -1,14 +1,8 @@
-#![feature(array_methods)]
-#![feature(pointer_byte_offsets)]
 #![feature(portable_simd)]
-#![feature(slice_as_chunks)]
-mod model;
 mod shader_bindings;
 
 use bitflags::bitflags;
-use metal_app::metal::*;
-use metal_app::*;
-use model::{MaxBounds, Model};
+use metal_app::{metal::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -134,7 +128,17 @@ impl RendererDelgate for Delegate {
             .expect("Failed to import shader metal lib.");
         let mode = INITIAL_MODE;
         let pipelines = create_pipelines(&device, &library, mode);
-        let model = Model::from_file(
+        let model = Model::from_file::<
+            PathBuf,
+            { ObjectGeometryID::indices as _ },
+            { ObjectGeometryID::positions as _ },
+            { ObjectGeometryID::normals as _ },
+            { ObjectGeometryID::tx_coords as _ },
+            { MaterialID::ambient_texture as _ },
+            { MaterialID::diffuse_texture as _ },
+            { MaterialID::specular_texture as _ },
+            { MaterialID::specular_shineness as _ },
+        >(
             model_file,
             &device,
             &pipelines
