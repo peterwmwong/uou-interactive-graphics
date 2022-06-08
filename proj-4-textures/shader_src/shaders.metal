@@ -4,19 +4,19 @@
 using namespace metal;
 using half_tx2d = texture2d<half>;
 
-constant bool  HAS_AMBIENT        [[function_constant(static_cast<uint>(FC::HAS_AMBIENT))]];
-constant bool  HAS_DIFFUSE        [[function_constant(static_cast<uint>(FC::HAS_DIFFUSE))]];
-constant bool  HAS_NORMAL         [[function_constant(static_cast<uint>(FC::HAS_NORMAL))]];
-constant bool  HAS_SPECULAR       [[function_constant(static_cast<uint>(FC::HAS_SPECULAR))]];
+constant bool  HasAmbient        [[function_constant(static_cast<uint>(FC::HasAmbient))]];
+constant bool  HasDiffuse        [[function_constant(static_cast<uint>(FC::HasDiffuse))]];
+constant bool  HasNormal         [[function_constant(static_cast<uint>(FC::HasNormal))]];
+constant bool  HasSpecular       [[function_constant(static_cast<uint>(FC::HasSpecular))]];
 
 struct World {
-    float4x4 matrix_model_to_projection [[id(WorldID::matrix_model_to_projection)]];
-    float3x3 matrix_normal_to_world     [[id(WorldID::matrix_normal_to_world)]];
-    float4x4 matrix_world_to_projection [[id(WorldID::matrix_world_to_projection)]];
-    float4x4 matrix_screen_to_world     [[id(WorldID::matrix_screen_to_world)]];
+    float4x4 matrix_model_to_projection [[id(WorldID::MatrixModelToProjection)]];
+    float3x3 matrix_normal_to_world     [[id(WorldID::MatrixNormalToWorld)]];
+    float4x4 matrix_world_to_projection [[id(WorldID::MatrixWorldToProjection)]];
+    float4x4 matrix_screen_to_world     [[id(WorldID::MatrixScreenToWorld)]];
 
-    float4   light_position             [[id(WorldID::light_position)]];
-    float4   camera_position            [[id(WorldID::camera_position)]];
+    float4   light_position             [[id(WorldID::LightPosition)]];
+    float4   camera_position            [[id(WorldID::CameraPosition)]];
 };
 
 // TODO: Re-layout memory to be more cache-friendly
@@ -28,10 +28,10 @@ struct World {
 // - Downside: Data Duplication
 //   - Assess size difference
 struct Geometry {
-    constant uint          * indices   [[id(ObjectGeometryID::indices)]];
-    constant packed_float3 * positions [[id(ObjectGeometryID::positions)]];
-    constant packed_float3 * normals   [[id(ObjectGeometryID::normals)]];
-    constant packed_float2 * tx_coords [[id(ObjectGeometryID::tx_coords)]];
+    constant uint          * indices   [[id(GeometryID::Indices)]];
+    constant packed_float3 * positions [[id(GeometryID::Positions)]];
+    constant packed_float3 * normals   [[id(GeometryID::Normals)]];
+    constant packed_float2 * tx_coords [[id(GeometryID::TXCoords)]];
 };
 
 struct VertexOut
@@ -59,10 +59,10 @@ main_vertex(         uint       vertex_id [[vertex_id]],
 }
 
 struct Material {
-    half_tx2d ambient_texture    [[id(MaterialID::ambient_texture)]];
-    half_tx2d diffuse_texture    [[id(MaterialID::diffuse_texture)]];
-    half_tx2d specular_texture   [[id(MaterialID::specular_texture)]];
-    float     specular_shineness [[id(MaterialID::specular_shineness)]];
+    half_tx2d ambient_texture    [[id(MaterialID::AmbientTexture)]];
+    half_tx2d diffuse_texture    [[id(MaterialID::DiffuseTexture)]];
+    half_tx2d specular_texture   [[id(MaterialID::SpecularTexture)]];
+    float     specular_shineness [[id(MaterialID::SpecularShineness)]];
 };
 
 fragment half4
@@ -97,7 +97,7 @@ main_fragment(         VertexOut   in       [[stage_in]],
     const half3 c = normalize(half3(world.camera_position.xyz) - pos); // Camera - world space direction from fragment to camera
     const half3 h = normalize(l + c);                                  // Half   - half-way vector between Light and Camera
     const half3 n = half3(normalize(in.normal));                       // Normal - unit vector, world space direction perpendicular to surface
-    if (HAS_NORMAL) {
+    if (HasNormal) {
         return half4(n.xy, n.z * -1, 1);
     }
     const half hn = dot(h, n);
@@ -114,16 +114,16 @@ main_fragment(         VertexOut   in       [[stage_in]],
 
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     half4 color = 0;
-    if (HAS_SPECULAR) {
+    if (HasSpecular) {
         const half4 Ks = material.specular_texture.sample(tx_sampler, in.tx_coord);
         color += Il * pow(hn * Ks, material.specular_shineness);
     }
-    if (HAS_AMBIENT) {
+    if (HasAmbient) {
         const half4 Ka = material.ambient_texture.sample(tx_sampler, in.tx_coord);
         const half  Ia = 0.1;
         color += Ia * Ka;
     }
-    if (HAS_DIFFUSE) {
+    if (HasDiffuse) {
         const half4 Kd = material.diffuse_texture.sample(tx_sampler, in.tx_coord);
         color += Il * ln * Kd;
     }

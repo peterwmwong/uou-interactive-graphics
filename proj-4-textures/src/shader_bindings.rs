@@ -10,7 +10,7 @@
 
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct half2 {
     pub x: u16,
     pub y: u16,
@@ -39,7 +39,7 @@ fn bindgen_test_layout_half2() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct packed_half2 {
     pub x: u16,
     pub y: u16,
@@ -79,7 +79,7 @@ fn bindgen_test_layout_packed_half2() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct half4 {
     pub x: u16,
     pub y: u16,
@@ -120,7 +120,7 @@ fn bindgen_test_layout_half4() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct packed_half4 {
     pub x: u16,
     pub y: u16,
@@ -182,7 +182,7 @@ fn bindgen_test_layout_packed_half4() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct float2 {
     pub x: f32,
     pub y: f32,
@@ -212,7 +212,7 @@ fn bindgen_test_layout_float2() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct float4 {
     pub x: f32,
     pub y: f32,
@@ -254,7 +254,7 @@ fn bindgen_test_layout_float4() {
 }
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ushort2 {
     pub x: ::std::os::raw::c_ushort,
     pub y: ::std::os::raw::c_ushort,
@@ -293,7 +293,7 @@ fn bindgen_test_layout_ushort2() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct packed_float2 {
     pub x: f32,
     pub y: f32,
@@ -332,7 +332,7 @@ fn bindgen_test_layout_packed_float2() {
     );
 }
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct packed_float4 {
     pub x: f32,
     pub y: f32,
@@ -395,36 +395,36 @@ fn bindgen_test_layout_packed_float4() {
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FC {
-    HAS_AMBIENT = 0,
-    HAS_DIFFUSE = 1,
-    HAS_NORMAL = 2,
-    HAS_SPECULAR = 3,
+    HasAmbient = 0,
+    HasDiffuse = 1,
+    HasNormal = 2,
+    HasSpecular = 3,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum ObjectGeometryID {
-    indices = 0,
-    positions = 1,
-    normals = 2,
-    tx_coords = 3,
+pub enum GeometryID {
+    Indices = 0,
+    Positions = 1,
+    Normals = 2,
+    TXCoords = 3,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum WorldID {
-    matrix_model_to_projection = 0,
-    matrix_normal_to_world = 1,
-    matrix_world_to_projection = 2,
-    matrix_screen_to_world = 3,
-    light_position = 4,
-    camera_position = 5,
+    MatrixModelToProjection = 0,
+    MatrixNormalToWorld = 1,
+    MatrixWorldToProjection = 2,
+    MatrixScreenToWorld = 3,
+    LightPosition = 4,
+    CameraPosition = 5,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum MaterialID {
-    ambient_texture = 0,
-    diffuse_texture = 1,
-    specular_texture = 2,
-    specular_shineness = 3,
+    AmbientTexture = 0,
+    DiffuseTexture = 1,
+    SpecularTexture = 2,
+    SpecularShineness = 3,
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

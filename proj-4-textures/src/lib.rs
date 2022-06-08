@@ -12,10 +12,10 @@ use std::{
 
 bitflags! {
     struct Mode: u8 {
-        const HAS_AMBIENT = 1 << FC::HAS_AMBIENT as u8;
-        const HAS_DIFFUSE = 1 << FC::HAS_DIFFUSE as u8;
-        const HAS_NORMAL = 1 << FC::HAS_NORMAL as u8;
-        const HAS_SPECULAR = 1 << FC::HAS_SPECULAR as u8;
+        const HAS_AMBIENT = 1 << FC::HasAmbient as u8;
+        const HAS_DIFFUSE = 1 << FC::HasDiffuse as u8;
+        const HAS_NORMAL = 1 << FC::HasNormal as u8;
+        const HAS_SPECULAR = 1 << FC::HasSpecular as u8;
         const DEFAULT = Self::HAS_AMBIENT.bits | Self::HAS_DIFFUSE.bits | Self::HAS_SPECULAR.bits;
     }
 }
@@ -76,10 +76,10 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 
     let function_constants = FunctionConstantValues::new();
     for index in [
-        FC::HAS_AMBIENT as usize,
-        FC::HAS_DIFFUSE as usize,
-        FC::HAS_SPECULAR as usize,
-        FC::HAS_NORMAL as usize,
+        FC::HasAmbient as usize,
+        FC::HasDiffuse as usize,
+        FC::HasSpecular as usize,
+        FC::HasNormal as usize,
     ] {
         function_constants.set_constant_value_at_index(
             (&mode.contains(Mode::from_bits_truncate(1 << index)) as *const _) as _,
@@ -130,14 +130,14 @@ impl RendererDelgate for Delegate {
         let pipelines = create_pipelines(&device, &library, mode);
         let model = Model::from_file::<
             PathBuf,
-            { ObjectGeometryID::indices as _ },
-            { ObjectGeometryID::positions as _ },
-            { ObjectGeometryID::normals as _ },
-            { ObjectGeometryID::tx_coords as _ },
-            { MaterialID::ambient_texture as _ },
-            { MaterialID::diffuse_texture as _ },
-            { MaterialID::specular_texture as _ },
-            { MaterialID::specular_shineness as _ },
+            { GeometryID::Indices as _ },
+            { GeometryID::Positions as _ },
+            { GeometryID::Normals as _ },
+            { GeometryID::TXCoords as _ },
+            { MaterialID::AmbientTexture as _ },
+            { MaterialID::DiffuseTexture as _ },
+            { MaterialID::SpecularTexture as _ },
+            { MaterialID::SpecularShineness as _ },
         >(
             model_file,
             &device,
@@ -210,10 +210,7 @@ impl RendererDelgate for Delegate {
         //
         // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
         //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
-        delegate.update_world(
-            WorldID::matrix_normal_to_world,
-            matrix_model_to_world_no_scale,
-        );
+        delegate.update_world(WorldID::MatrixNormalToWorld, matrix_model_to_world_no_scale);
         delegate.update_light(delegate.light_xy_rotation);
         delegate.update_camera(
             delegate.screen_size,
@@ -432,7 +429,7 @@ impl Delegate {
         let light_position =
             f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
                 * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]);
-        self.update_world(WorldID::light_position, light_position);
+        self.update_world(WorldID::LightPosition, light_position);
     }
 
     fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
@@ -442,7 +439,7 @@ impl Delegate {
         let matrix_world_to_camera = f32x4x4::translate(0., 0., self.camera_distance)
             * f32x4x4::rotate(-self.camera_rotation[0], -self.camera_rotation[1], 0.);
         self.update_world(
-            WorldID::camera_position,
+            WorldID::CameraPosition,
             matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]),
         );
 
@@ -453,17 +450,17 @@ impl Delegate {
             self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
 
         self.update_world(
-            WorldID::matrix_world_to_projection,
+            WorldID::MatrixWorldToProjection,
             *matrix_world_to_projection.metal_float4x4(),
         );
         self.update_world(
-            WorldID::matrix_model_to_projection,
+            WorldID::MatrixModelToProjection,
             *(matrix_world_to_projection * self.matrix_model_to_world).metal_float4x4(),
         );
         let matrix_screen_to_projection =
             f32x4x4::translate(-1., 1., 0.) * f32x4x4::scale(2. / sx, -2. / sy, 1., 1.);
         self.update_world(
-            WorldID::matrix_screen_to_world,
+            WorldID::MatrixScreenToWorld,
             matrix_world_to_projection.inverse() * matrix_screen_to_projection,
         );
     }

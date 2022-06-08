@@ -10,36 +10,36 @@
 // CamelCase enum variants to appease clippy
 enum struct FC
 {
-    HAS_AMBIENT = 0,
-    HAS_DIFFUSE,
-    HAS_NORMAL,
-    HAS_SPECULAR,
+    HasAmbient = 0,
+    HasDiffuse,
+    HasNormal,
+    HasSpecular,
 };
 
-enum struct ObjectGeometryID
+enum struct GeometryID
 {
-    indices = 0,
-    positions,
-    normals,
-    tx_coords,
+    Indices = 0,
+    Positions,
+    Normals,
+    TXCoords,
 };
 
 enum struct WorldID
 {
-    matrix_model_to_projection = 0,
-    matrix_normal_to_world,
-    matrix_world_to_projection,
-    matrix_screen_to_world,
-    light_position,
-    camera_position,
+    MatrixModelToProjection = 0,
+    MatrixNormalToWorld,
+    MatrixWorldToProjection,
+    MatrixScreenToWorld,
+    LightPosition,
+    CameraPosition,
 };
 
 enum struct MaterialID
 {
-    ambient_texture = 0,
-    diffuse_texture,
-    specular_texture,
-    specular_shineness,
+    AmbientTexture = 0,
+    DiffuseTexture,
+    SpecularTexture,
+    SpecularShineness,
 };
 
 enum struct VertexBufferIndex
