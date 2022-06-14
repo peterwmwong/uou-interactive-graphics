@@ -5,13 +5,6 @@
         // See "compile-and-emit-metal-disasm" in tasks.json.
         "gruntfuggly.triggertaskonsave",
         "rust-lang.rust-analyzer",
-        // Surfaces Metal compilation errors in the editor and problems view.
-        // Saving a Metal file triggers the Metal compiler that emits formatted
-        // errors that the problem matcher provided by ms-vscode.cpptools ($gcc)
-        // can parse and surface in the editor and problems view.
-        // See "compile-and-emit-metal-disasm" in tasks.json.
-        // ** Not used for compiling, running, debugging, or highlighting. **
-        "ms-vscode.cpptools",
         // Enables debugging Rust code.
         "vadimcn.vscode-lldb",
     ]

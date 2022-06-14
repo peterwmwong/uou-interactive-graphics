@@ -42,10 +42,8 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "command": "xcrun -sdk macosx metal -std=macos-metal2.4 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
+            "problemMatcher": [],
+            "command": "xcrun -sdk macosx metal -std=metal3.0 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
         },
         {
             "label": "diff-release-asm",
