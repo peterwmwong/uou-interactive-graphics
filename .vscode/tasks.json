@@ -103,9 +103,25 @@
             ],
             "args": [
                 "--bin",
-                "proj-4-textures"
+                "proj-4-textures",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
             ],
-            "label": "Run proj-4-textures"
+            "label": "Run proj-4-textures yoda"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-4-textures",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+            ],
+            "label": "Run proj-4-textures teapot"
         },
         {
             "label": "asm proj-4-textures",

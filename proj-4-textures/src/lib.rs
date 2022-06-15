@@ -116,14 +116,11 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 
 impl RendererDelgate for Delegate {
     fn new(device: Device, _command_queue: &CommandQueue) -> Self {
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // Read command line argument for path to model.
-        let model_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("assets")
-            .join("yoda")
-            .join("yoda.obj");
+        let model_file_path = std::env::args()
+            .skip(1)
+            .nth(0)
+            .expect("Usage: proj-4-textures [Path to Wavefront OBJ file]");
+        let model_file = PathBuf::from(model_file_path);
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
@@ -209,7 +206,7 @@ impl RendererDelgate for Delegate {
         //     translations are meaningless and should not be applied.
         // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
         //
-        // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
+        // TODO: Although this performs great (compare assembly running "asm proj-4-textures"
         //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
         delegate.update_world(WorldID::MatrixNormalToWorld, matrix_model_to_world_no_scale);
         delegate.update_light(delegate.light_xy_rotation);
@@ -225,7 +222,7 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
         self.reset_needs_render();
-        let command_buffer = command_queue.new_command_buffer();
+        let command_buffer = command_queue.new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();
