@@ -113,7 +113,11 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef) {
+    fn render<'a>(
+        &mut self,
+        command_queue: &'a CommandQueue,
+        render_target: &TextureRef,
+    ) -> &'a CommandBufferRef {
         let command_buffer = command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
@@ -123,7 +127,7 @@ impl RendererDelgate for Delegate {
                 desc.color_attachments().object_at(0),
                 "Failed to access color attachment on render pass descriptor",
             );
-            attachment.set_texture(Some(drawable.texture()));
+            attachment.set_texture(Some(render_target));
             attachment.set_load_action(MTLLoadAction::Clear);
             attachment.set_clear_color(clear_color);
             attachment.set_store_action(MTLStoreAction::Store);
@@ -162,8 +166,7 @@ impl RendererDelgate for Delegate {
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.draw_primitives_instanced(MTLPrimitiveType::Point, 0, 1, self.num_vertices as _);
         encoder.end_encoding();
-        command_buffer.present_drawable(drawable);
-        command_buffer.commit();
+        command_buffer
     }
 
     fn on_event(&mut self, event: UserEvent) {

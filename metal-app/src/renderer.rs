@@ -52,7 +52,11 @@ pub enum UserEvent {
 pub trait RendererDelgate {
     fn new(device: Device, command_queue: &CommandQueue) -> Self;
 
-    fn render(&mut self, command_queue: &CommandQueue, drawable: &MetalDrawableRef);
+    fn render<'a>(
+        &mut self,
+        command_queue: &'a CommandQueue,
+        render_target: &TextureRef,
+    ) -> &'a CommandBufferRef;
 
     #[inline]
     fn on_event(&mut self, _event: UserEvent) {}
@@ -112,7 +116,11 @@ impl<R: RendererDelgate> MetalRenderer<R> {
     pub(crate) fn render(&mut self) {
         autoreleasepool(|| {
             if let Some(drawable) = self.layer.next_drawable() {
-                self.delegate.render(&self.command_queue, drawable);
+                let command_buffer = self
+                    .delegate
+                    .render(&self.command_queue, drawable.texture());
+                command_buffer.present_drawable(drawable);
+                command_buffer.commit();
             };
         });
     }
