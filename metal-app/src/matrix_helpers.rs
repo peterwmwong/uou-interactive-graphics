@@ -25,7 +25,6 @@ impl f32x4x4 {
     pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
         f32x4x4 {
             columns: [
-                // TODO: Compare with using f32x4::gather()
                 f32x4::from_array([row1[0], row2[0], row3[0], row4[0]]),
                 f32x4::from_array([row1[1], row2[1], row3[1], row4[1]]),
                 f32x4::from_array([row1[2], row2[2], row3[2], row4[2]]),
@@ -231,8 +230,6 @@ impl Mul<f32x4> for f32x4x4 {
     }
 }
 
-// TODO: Figure out how to make this a `impl const`.
-// - Start by looking at how to make dot() a `const fn`.
 impl Mul<f32x4x4> for f32x4x4 {
     type Output = f32x4x4;
 
