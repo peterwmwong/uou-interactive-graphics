@@ -44,9 +44,12 @@ pub enum UserEvent {
         drag_amount: f32x2,
     },
     #[non_exhaustive]
-    KeyDown { key_code: c_ushort },
-    #[non_exhaustive]
-    WindowResize { size: f32x2 },
+    KeyDown {
+        key_code: c_ushort,
+    },
+    WindowResize {
+        size: f32x2,
+    },
 }
 
 pub trait RendererDelgate {

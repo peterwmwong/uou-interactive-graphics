@@ -571,7 +571,7 @@ version = "0.1.0"
 dependencies = [
  "metal-app",
  "metal-build",
- "tobj",
+ "proj-4-textures",
 ]
 
 [[package]]

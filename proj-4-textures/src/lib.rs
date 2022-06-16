@@ -39,7 +39,7 @@ const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
     [0., 0., 1., 0.],
 );
 
-struct Delegate {
+pub struct Delegate<const RENDER_LIGHT: bool> {
     camera_distance: f32,
     camera_rotation: f32x2,
     depth_state: DepthStencilState,
@@ -114,7 +114,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
     }
 }
 
-impl RendererDelgate for Delegate {
+impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     fn new(device: Device, _command_queue: &CommandQueue) -> Self {
         let model_file_path = std::env::args()
             .skip(1)
@@ -270,7 +270,7 @@ impl RendererDelgate for Delegate {
             encoder.pop_debug_group();
         }
         // Render Light
-        {
+        if RENDER_LIGHT {
             encoder.push_debug_group("Light");
             encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
             // // TODO: Figure out a better way to unset this buffers from the previous draw call
@@ -366,7 +366,7 @@ impl RendererDelgate for Delegate {
     }
 }
 
-impl Delegate {
+impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
     #[inline(always)]
     fn reset_needs_render(&mut self) {
         self.needs_render = false;
@@ -466,5 +466,5 @@ impl Delegate {
 }
 
 pub fn run() {
-    launch_application::<Delegate>("Project 4 - Textures");
+    launch_application::<Delegate<true>>("Project 4 - Textures");
 }

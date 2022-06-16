@@ -8,4 +8,4 @@ metal-build = { path = "../metal-build" }
 
 [dependencies]
 metal-app = { path = "../metal-app" }
-tobj = { version = "3.2.2" }
+proj-4-textures = { path = "../proj-4-textures" }

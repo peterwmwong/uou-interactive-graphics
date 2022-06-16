@@ -124,7 +124,35 @@
             "label": "Run proj-4-textures teapot"
         },
         {
-            "label": "asm proj-4-textures",
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-5-render-buffers",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+            ],
+            "label": "Run proj-5-render-buffers teapot"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-5-render-buffers",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
+            ],
+            "label": "Run proj-5-render-buffers yoda"
+        },
+        {
+            "label": "asm proj-5-render-buffers",
             "type": "shell",
             "presentation": {
                 "echo": true,
@@ -134,7 +162,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/build-release-asm.sh proj-4-textures",
+            "command": "${workspaceFolder}/build-release-asm.sh proj-5-render-buffers",
             "problemMatcher": []
         },
         {
