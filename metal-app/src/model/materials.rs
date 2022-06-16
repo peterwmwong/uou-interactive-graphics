@@ -32,24 +32,31 @@ struct MaterialSource<'a> {
     key: MaterialSourceKey<'a>,
     texture_descriptor: TextureDescriptor,
     png_reader: Option<png::Reader<std::fs::File>>,
+    load_texture_buffer_size: usize,
 }
 
 impl<'a> MaterialSource<'a> {
     fn new<'b>(png_file_dir: &'b PathBuf, key: MaterialSourceKey<'a>) -> Self {
-        let (width, height, png_reader) = match key {
+        let (width, height, load_texture_buffer_size, png_reader) = match key {
             MaterialSourceKey::PNG(png_file) => {
                 let decoder =
                     png::Decoder::new(std::fs::File::open(png_file_dir.join(png_file)).unwrap());
                 let reader = decoder.read_info().unwrap();
                 let info = reader.info();
+                let load_texture_buffer_size = reader.output_buffer_size();
                 assert_eq!(
                     info.color_type,
                     png::ColorType::Rgba,
                     "Unexpected PNG color format, expected RGBA"
                 );
-                (info.width as _, info.height as _, Some(reader))
+                (
+                    info.width as _,
+                    info.height as _,
+                    load_texture_buffer_size,
+                    Some(reader),
+                )
             }
-            MaterialSourceKey::Color(_) => (1, 1, None),
+            MaterialSourceKey::Color(_) => (1, 1, 0, None),
         };
 
         let desc = TextureDescriptor::new();
@@ -64,6 +71,7 @@ impl<'a> MaterialSource<'a> {
             key,
             texture_descriptor: desc,
             png_reader,
+            load_texture_buffer_size,
         }
     }
 
@@ -76,26 +84,27 @@ impl<'a> MaterialSource<'a> {
         (unaligned_size, aligned_size - unaligned_size)
     }
 
+    // `read_png_buffer` allows single allocation/deallocation of the temp buffer for reading
+    // all a model's material PNG textures.
     #[inline]
-    fn allocate_texture(&mut self, heap: &Heap) -> Texture {
-        // TODO: Allocate this buf once
-        // - Get the maximum output_buffer_size() of all the textures
+    fn allocate_texture(&mut self, heap: &Heap, read_png_buffer: &mut [u8]) -> Texture {
         let tmp_color_label;
-        let (buf, label): (Vec<u8>, &str) = match self.key {
+        let tmp_color_buf;
+        let (buf, label): (&[u8], &str) = match self.key {
             MaterialSourceKey::PNG(png_file) => {
                 let reader = self
                     .png_reader
                     .as_mut()
                     .expect("png_reader is unexpectedely None, eventhough material texture is PNG");
-                let buf_size = reader.output_buffer_size();
-                let mut buf = Vec::with_capacity(buf_size);
-                unsafe { buf.set_len(buf_size) };
-                reader.next_frame(&mut buf).expect("Failed to load texture");
-                (buf, png_file)
+                reader
+                    .next_frame(read_png_buffer)
+                    .expect("Failed to load texture");
+                (read_png_buffer, png_file)
             }
             MaterialSourceKey::Color(RGB8Unorm(r, g, b)) => {
                 tmp_color_label = format!("Color {r},{g},{b}");
-                (vec![r, g, b], &tmp_color_label)
+                tmp_color_buf = [r, g, b];
+                (&tmp_color_buf, &tmp_color_label)
             }
         };
 
@@ -136,6 +145,7 @@ pub(crate) struct Materials<
     const MATERIAL_ID_SPECULAR_TEXTURE: u16,
     const MATERIAL_ID_SPECULAR_SHINENESS: u16,
 > {
+    max_load_texture_buffer_size: usize,
     sources: HashMap<MaterialSourceKey<'a>, MaterialSource<'a>>,
     materials: Vec<Material<'a>>,
     heap_size: usize,
@@ -180,6 +190,7 @@ Check the following generic constants passed to Model::from_file()...
         let mut sources = HashMap::with_capacity(num_materials * 3);
         let mut heap_size = 0;
         let mut last_alignment_padding = 0;
+        let mut max_load_texture_buffer_size = 0;
         let materials = obj_mats
             .iter()
             .map(|mat| {
@@ -192,6 +203,8 @@ Check the following generic constants passed to Model::from_file()...
                 for key in [&m.ambient, &m.diffuse, &m.specular] {
                     sources.entry(*key).or_insert_with(|| {
                         let mat_tx = MaterialSource::new(material_file_dir, *key);
+                        max_load_texture_buffer_size =
+                            max_load_texture_buffer_size.max(mat_tx.load_texture_buffer_size);
                         let (size, padding) = mat_tx.size_and_padding(device);
                         heap_size += last_alignment_padding + size;
                         last_alignment_padding = padding;
@@ -202,6 +215,7 @@ Check the following generic constants passed to Model::from_file()...
             })
             .collect();
         Self {
+            max_load_texture_buffer_size,
             sources,
             materials,
             heap_size,
@@ -245,6 +259,9 @@ impl<
 
         let mut texture_cache: HashMap<MaterialSourceKey<'a>, Texture> =
             HashMap::with_capacity(self.sources.len());
+        let mut load_texture_buffer: Vec<u8> =
+            Vec::with_capacity(self.max_load_texture_buffer_size);
+        unsafe { load_texture_buffer.set_len(self.max_load_texture_buffer_size) };
         for (i, mat) in self.materials.iter().enumerate() {
             arg_encoder.set_argument_buffer_to_element(i as _, &buffer, 0);
             for (id, source_key) in [
@@ -258,7 +275,7 @@ impl<
                         self.sources
                             .get_mut(&source_key)
                             .expect("Couldn't find source key")
-                            .allocate_texture(heap)
+                            .allocate_texture(heap, &mut load_texture_buffer)
                     }),
                 );
             }
