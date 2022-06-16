@@ -5,23 +5,21 @@ use std::time::Instant;
 
 struct Delegate {
     now: Instant,
+    command_queue: CommandQueue,
 }
 
 impl RendererDelgate for Delegate {
     #[inline]
-    fn new(_device: Device, _command_queue: &CommandQueue) -> Self {
+    fn new(device: Device) -> Self {
         Self {
             now: Instant::now(),
+            command_queue: device.new_command_queue(),
         }
     }
 
     #[inline]
-    fn render<'a>(
-        &mut self,
-        command_queue: &'a CommandQueue,
-        render_target: &TextureRef,
-    ) -> &'a CommandBufferRef {
-        let command_buffer = command_queue.new_command_buffer();
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        let command_buffer = self.command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();

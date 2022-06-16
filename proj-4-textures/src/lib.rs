@@ -44,7 +44,8 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
     camera_rotation: f32x2,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
-    device: Device,
+    command_queue: CommandQueue,
+    pub device: Device,
     library: Library,
     light_xy_rotation: f32x2,
     matrix_model_to_world: f32x4x4,
@@ -115,7 +116,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 }
 
 impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
-    fn new(device: Device, _command_queue: &CommandQueue) -> Self {
+    fn new(device: Device) -> Self {
         let model_file_path = std::env::args()
             .skip(1)
             .nth(0)
@@ -195,6 +196,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             world_arg_buffer,
             world_arg_encoder,
             needs_render: false,
+            command_queue: device.new_command_queue(),
             device,
         };
 
@@ -217,13 +219,11 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     }
 
     #[inline]
-    fn render<'a>(
-        &mut self,
-        command_queue: &'a CommandQueue,
-        render_target: &TextureRef,
-    ) -> &'a CommandBufferRef {
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.reset_needs_render();
-        let command_buffer = command_queue.new_command_buffer_with_unretained_references();
+        let command_buffer = self
+            .command_queue
+            .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();
@@ -307,23 +307,10 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 ..
             } => {
                 if modifier_keys.is_empty() {
-                    let mut camera_rotation = self.camera_rotation;
-                    let mut camera_distance = self.camera_distance;
                     match button {
-                        Left => {
-                            camera_rotation += {
-                                let adjacent = f32x2::splat(self.camera_distance);
-                                let opposite = drag_amount / f32x2::splat(500.);
-                                let &[x, y] = (opposite / adjacent).as_array();
-                                f32x2::from_array([
-                                    y.atan(), // Rotation on x-axis
-                                    x.atan(), // Rotation on y-axis
-                                ])
-                            }
-                        }
-                        Right => camera_distance += -drag_amount[1] / 250.,
+                        Left => self.drag_camera_rotation(drag_amount),
+                        Right => self.drag_camera_distance(drag_amount),
                     }
-                    self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::CONTROL) {
                     match button {
                         Left => {
@@ -461,6 +448,30 @@ impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
         self.update_world(
             WorldID::MatrixScreenToWorld,
             matrix_world_to_projection.inverse() * matrix_screen_to_projection,
+        );
+    }
+
+    pub fn drag_camera_rotation(&mut self, drag_amount: f32x2) {
+        self.update_camera(
+            self.screen_size,
+            self.camera_rotation + {
+                let adjacent = f32x2::splat(self.camera_distance);
+                let opposite = drag_amount / f32x2::splat(500.);
+                let &[x, y] = (opposite / adjacent).as_array();
+                f32x2::from_array([
+                    y.atan(), // Rotation on x-axis
+                    x.atan(), // Rotation on y-axis
+                ])
+            },
+            self.camera_distance,
+        );
+    }
+
+    pub fn drag_camera_distance(&mut self, drag_amount: f32x2) {
+        self.update_camera(
+            self.screen_size,
+            self.camera_rotation,
+            self.camera_distance - drag_amount[1] / 250.,
         );
     }
 }

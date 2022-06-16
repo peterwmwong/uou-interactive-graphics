@@ -39,6 +39,10 @@ fn parse_modifier_keys(ns_modifiers: NSEventModifierFlags) -> ModifierKeys {
             NSEventModifierFlags::NSFunctionKeyMask,
             ModifierKeys::FUNCTION,
         ),
+        (
+            NSEventModifierFlags::NSAlternateKeyMask,
+            ModifierKeys::ALT_OPTION,
+        ),
     ] {
         if ns_modifiers.contains(ns_modifier) {
             modifiers |= modifier;

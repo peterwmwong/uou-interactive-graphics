@@ -8,6 +8,7 @@ use std::f32::consts::PI;
 use std::ops::Neg;
 use std::simd::f32x2;
 
+const PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -25,16 +26,18 @@ const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
 struct Delegate {
     camera_distance: f32,
     camera_rotation: f32x2,
+    command_queue: CommandQueue,
     matrix_model_to_world: f32x4x4,
     matrix_model_to_projection: f32x4x4,
     render_pipeline_state: RenderPipelineState,
-    plane_texture: Texture,
+    plane_texture: Option<Texture>,
+    plane_renderer: Proj4Delegate<false>,
     screen_size: f32x2,
     needs_render: bool,
 }
 
 impl RendererDelgate for Delegate {
-    fn new(device: Device, command_queue: &CommandQueue) -> Self {
+    fn new(device: Device) -> Self {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
@@ -46,7 +49,7 @@ impl RendererDelgate for Delegate {
                     "Failed to access color attachment on pipeline descriptor",
                 );
                 desc.set_blending_enabled(false);
-                desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+                desc.set_pixel_format(PIXEL_FORMAT);
             }
             create_pipeline(
                 &device,
@@ -63,39 +66,19 @@ impl RendererDelgate for Delegate {
         };
         let matrix_model_to_world =
             f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::scale(0.5, 0.5, 0.5, 1.);
-
-        // Render Project 4 (loads model specified on the command line)
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // We need to rerender whenever ALT/Option Mouse Drag!
-        // - Remove hardcoded 512x512 sizing, use max of screen size whenever it changes.
-        let plane_texture = {
-            let desc = TextureDescriptor::new();
-            desc.set_width(512);
-            desc.set_height(512);
-            desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-            device.new_texture(&desc)
-        };
-        {
-            let mut proj4 = Proj4Delegate::<false>::new(device, command_queue);
-            proj4.on_event(UserEvent::WindowResize {
-                size: f32x2::from_array([512., 512.]),
-            });
-            let command_buffer = proj4.render(command_queue, &plane_texture);
-            command_buffer.commit();
-            command_buffer.wait_until_completed();
-        }
+        let command_queue = device.new_command_queue();
 
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
             matrix_model_to_world,
             matrix_model_to_projection: f32x4x4::identity(),
-            plane_texture,
+            plane_texture: None,
             render_pipeline_state,
             screen_size: f32x2::default(),
             needs_render: false,
+            command_queue,
+            plane_renderer: Proj4Delegate::<false>::new(device),
         };
 
         delegate.update_camera(
@@ -108,13 +91,18 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn render<'a>(
-        &mut self,
-        command_queue: &'a CommandQueue,
-        render_target: &TextureRef,
-    ) -> &'a CommandBufferRef {
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.reset_needs_render();
-        let command_buffer = command_queue.new_command_buffer_with_unretained_references();
+
+        // If the Plane needs to render, use that command buffer so rendering is in sync.
+        // Otherwise, create a new command buffer.
+        let command_buffer = if self.plane_renderer.needs_render() {
+            self.plane_renderer
+                .render(self.plane_texture.as_ref().expect("Plane texture was None"))
+        } else {
+            self.command_queue
+                .new_command_buffer_with_unretained_references()
+        };
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();
@@ -139,7 +127,14 @@ impl RendererDelgate for Delegate {
                 VertexBufferIndex::MatrixModelToProjection as _,
                 self.matrix_model_to_projection.metal_float4x4(),
             );
-            encoder.set_fragment_texture(FragBufferIndex::Texture as _, Some(&self.plane_texture));
+            encoder.set_fragment_texture(
+                FragBufferIndex::Texture as _,
+                Some(
+                    self.plane_texture
+                        .as_ref()
+                        .expect("Failed to load Plane Texture"),
+                ),
+            );
             encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
             encoder.pop_debug_group();
         }
@@ -175,9 +170,15 @@ impl RendererDelgate for Delegate {
                         Right => camera_distance += -drag_amount[1] / 250.,
                     }
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
+                } else if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
+                    match button {
+                        Left => self.plane_renderer.drag_camera_rotation(drag_amount),
+                        Right => self.plane_renderer.drag_camera_distance(drag_amount),
+                    }
                 }
             }
             WindowResize { size, .. } => {
+                self.update_plane_texture_size(size);
                 self.update_camera(size, self.camera_rotation, self.camera_distance);
             }
             _ => {}
@@ -186,11 +187,16 @@ impl RendererDelgate for Delegate {
 
     #[inline(always)]
     fn needs_render(&self) -> bool {
-        self.needs_render
+        self.needs_render || self.plane_renderer.needs_render()
     }
 }
 
 impl Delegate {
+    #[inline(always)]
+    fn device(&self) -> &Device {
+        &self.plane_renderer.device
+    }
+
     #[inline(always)]
     fn reset_needs_render(&mut self) {
         self.needs_render = false;
@@ -209,6 +215,22 @@ impl Delegate {
             )
         };
         orthographic_matrix * PERSPECTIVE_MATRIX
+    }
+
+    fn update_plane_texture_size(&mut self, size: f32x2) {
+        let width = size[0] as u64;
+        let height = size[1] as u64;
+        if let Some(tx) = &self.plane_texture {
+            tx.set_purgeable_state(MTLPurgeableState::Empty);
+        }
+
+        let desc = TextureDescriptor::new();
+        desc.set_width(width);
+        desc.set_height(height);
+        desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        self.plane_texture = Some(self.device().new_texture(&desc));
+        self.plane_renderer
+            .on_event(UserEvent::WindowResize { size });
     }
 
     fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {

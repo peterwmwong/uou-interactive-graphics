@@ -16,6 +16,7 @@ struct Delegate {
     camera_distance: f32,
     camera_rotation_offset: f32x2,
     camera_rotation: f32x2,
+    command_queue: CommandQueue,
     mins_maxs: [packed_float4; 2],
     num_vertices: usize,
     render_pipeline_state: RenderPipelineState,
@@ -25,7 +26,7 @@ struct Delegate {
 }
 
 impl RendererDelgate for Delegate {
-    fn new(device: Device, _command_queue: &CommandQueue) -> Self {
+    fn new(device: Device) -> Self {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("teapot.obj");
@@ -68,6 +69,7 @@ impl RendererDelgate for Delegate {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation_offset: f32x2::splat(0.0),
             camera_rotation: f32x2::from_array([-PI / 6.0, 0.0]),
+            command_queue: device.new_command_queue(),
             mins_maxs,
             num_vertices: positions.len() / 3,
             render_pipeline_state: {
@@ -113,12 +115,8 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn render<'a>(
-        &mut self,
-        command_queue: &'a CommandQueue,
-        render_target: &TextureRef,
-    ) -> &'a CommandBufferRef {
-        let command_buffer = command_queue.new_command_buffer();
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        let command_buffer = self.command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let clear_color: MTLClearColor = MTLClearColor::new(0.0, 0.0, 0.0, 0.0);

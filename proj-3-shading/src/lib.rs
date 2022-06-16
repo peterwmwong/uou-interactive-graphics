@@ -24,6 +24,7 @@ struct Delegate {
     camera_distance: f32,
     camera_rotation: f32x2,
     camera_world_position: f32x4,
+    command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
@@ -46,7 +47,7 @@ struct Delegate {
 }
 
 impl RendererDelgate for Delegate {
-    fn new(device: Device, _command_queue: &CommandQueue) -> Self {
+    fn new(device: Device) -> Self {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("teapot.obj");
@@ -121,6 +122,7 @@ impl RendererDelgate for Delegate {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
             camera_world_position: f32x4::default(),
+            command_queue: device.new_command_queue(),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -190,12 +192,8 @@ impl RendererDelgate for Delegate {
     }
 
     #[inline]
-    fn render<'a>(
-        &mut self,
-        command_queue: &'a CommandQueue,
-        render_target: &TextureRef,
-    ) -> &'a CommandBufferRef {
-        let command_buffer = command_queue.new_command_buffer();
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        let command_buffer = self.command_queue.new_command_buffer();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();

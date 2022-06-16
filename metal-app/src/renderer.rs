@@ -18,6 +18,7 @@ bitflags::bitflags! {
         const CONTROL  = 1 << 1;
         const COMMAND  = 1 << 2;
         const FUNCTION = 1 << 3;
+        const ALT_OPTION = 1 << 4;
     }
 }
 
@@ -53,13 +54,9 @@ pub enum UserEvent {
 }
 
 pub trait RendererDelgate {
-    fn new(device: Device, command_queue: &CommandQueue) -> Self;
+    fn new(device: Device) -> Self;
 
-    fn render<'a>(
-        &mut self,
-        command_queue: &'a CommandQueue,
-        render_target: &TextureRef,
-    ) -> &'a CommandBufferRef;
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef;
 
     #[inline]
     fn on_event(&mut self, _event: UserEvent) {}
@@ -72,7 +69,6 @@ pub trait RendererDelgate {
 
 pub(crate) struct MetalRenderer<R: RendererDelgate> {
     backing_scale_factor: f32,
-    command_queue: CommandQueue,
     pub(crate) layer: MetalLayer,
     screen_size: f32x2,
     delegate: R,
@@ -84,7 +80,6 @@ impl<R: RendererDelgate> MetalRenderer<R> {
     #[inline]
     pub(crate) fn new(backing_scale_factor: f32) -> MetalRenderer<R> {
         let device = unwrap_option_dcheck(Device::system_default(), "No device found");
-        let command_queue = device.new_command_queue();
         let layer = MetalLayer::new();
         layer.set_device(&device);
         layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
@@ -92,10 +87,9 @@ impl<R: RendererDelgate> MetalRenderer<R> {
         layer.set_presents_with_transaction(false);
         Self {
             backing_scale_factor,
-            delegate: R::new(device, &command_queue),
+            delegate: R::new(device),
             layer,
             screen_size: f32x2::splat(0.0),
-            command_queue,
         }
     }
 
@@ -119,9 +113,7 @@ impl<R: RendererDelgate> MetalRenderer<R> {
     pub(crate) fn render(&mut self) {
         autoreleasepool(|| {
             if let Some(drawable) = self.layer.next_drawable() {
-                let command_buffer = self
-                    .delegate
-                    .render(&self.command_queue, drawable.texture());
+                let command_buffer = self.delegate.render(drawable.texture());
                 command_buffer.present_drawable(drawable);
                 command_buffer.commit();
             };
