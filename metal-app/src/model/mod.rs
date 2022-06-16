@@ -2,7 +2,7 @@ mod geometry;
 mod heap_resident;
 mod materials;
 
-use self::heap_resident::HeapResident;
+use self::{geometry::GeometryBuffers, heap_resident::HeapResident};
 use crate::metal::*;
 pub use geometry::MaxBounds;
 use geometry::{DrawInfo, Geometry};
@@ -16,11 +16,12 @@ pub struct Model {
     geometry_arg_buffer: Buffer,
     geometry_arg_encoded_length: u32,
     pub geometry_max_bounds: MaxBounds,
-    // TODO: Create a type (GeometryBuffers { indices, positions, normals, tx_coords })
+    // Needs to be owned and not dropped (causing deallocation from heap).
     #[allow(dead_code)]
-    geometry_buffers: [Buffer; 4],
+    geometry_buffers: GeometryBuffers,
     materials_arg_buffer: Buffer,
     materials_arg_encoded_length: u32,
+    // Needs to be owned and not dropped (causing deallocation from heap).
     #[allow(dead_code)]
     material_textures: Vec<Texture>,
 }

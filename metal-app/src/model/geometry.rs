@@ -16,6 +16,18 @@ pub(crate) struct DrawInfo {
     pub(crate) material_id: u32,
 }
 
+// Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
+pub(crate) struct GeometryBuffers {
+    #[allow(dead_code)]
+    indices: Buffer,
+    #[allow(dead_code)]
+    positions: Buffer,
+    #[allow(dead_code)]
+    normals: Buffer,
+    #[allow(dead_code)]
+    tx_coords: Buffer,
+}
+
 pub(crate) struct Geometry<
     'a,
     const GEOMETRY_ID_INDICES_BUFFER: u16,
@@ -141,7 +153,7 @@ impl<
         const GEOMETRY_ID_POSITIONS_BUFFER: u16,
         const GEOMETRY_ID_NORMALS_BUFFER: u16,
         const GEOMETRY_ID_TX_COORDS_BUFFER: u16,
-    > HeapResident<[Buffer; 4]>
+    > HeapResident<GeometryBuffers>
     for Geometry<
         'a,
         GEOMETRY_ID_INDICES_BUFFER,
@@ -160,7 +172,7 @@ impl<
         heap: &Heap,
         device: &Device,
         geometry_arg_encoder: &ArgumentEncoder,
-    ) -> (Buffer, u32, [Buffer; 4]) {
+    ) -> (Buffer, u32, GeometryBuffers) {
         let arg_encoded_length = geometry_arg_encoder.encoded_length() as u32;
         let length = arg_encoded_length * self.objects.len() as u32;
         let arg_buffer = device.new_buffer(
@@ -232,7 +244,12 @@ impl<
         (
             arg_buffer,
             arg_encoded_length,
-            [indices_buf, positions_buf, normals_buf, tx_coords_buf],
+            GeometryBuffers {
+                indices: indices_buf,
+                positions: positions_buf,
+                normals: normals_buf,
+                tx_coords: tx_coords_buf,
+            },
         )
     }
 }
