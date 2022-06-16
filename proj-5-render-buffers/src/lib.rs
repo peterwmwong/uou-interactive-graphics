@@ -224,6 +224,10 @@ impl Delegate {
             tx.set_purgeable_state(MTLPurgeableState::Empty);
         }
 
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // The rendered texture should use bilinear filtering for magnification and mip-mapping with anisotropic filtering for minification.
         let desc = TextureDescriptor::new();
         desc.set_width(width);
         desc.set_height(height);
