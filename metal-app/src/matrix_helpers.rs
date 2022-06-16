@@ -15,6 +15,11 @@ pub struct f32x4x4 {
 
 pub type MetalFloat4x4 = [f32x4; 4];
 
+// Metal float3x3 memory layout compatible.
+// According to the specification, a float3x3 is 48 bytes (3 columns of *4* floats)
+// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+pub type MetalFloat3x3 = [f32; 12];
+
 impl f32x4x4 {
     #[inline]
     pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
@@ -188,8 +193,7 @@ impl f32x4x4 {
     ///
     /// See https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
     #[inline]
-    pub const fn metal_float3x3_upper_left(&self) -> [f32; 12] {
-        // TODO: Create a metal_float3x3 type
+    pub const fn metal_float3x3_upper_left(&self) -> MetalFloat3x3 {
         [
             self.columns[0].as_array()[0],
             self.columns[0].as_array()[1],

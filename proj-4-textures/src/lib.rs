@@ -162,8 +162,6 @@ impl RendererDelgate for Delegate {
 
         let MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
-        let matrix_model_to_world_no_scale =
-            f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::translate(cx, cy, cz);
 
         // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
         // 1. INITIAL_CAMERA_DISTANCE is invariant of the model's coordinate range
@@ -172,8 +170,9 @@ impl RendererDelgate for Delegate {
         //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
         //      exhibit a weird triangal-ish pattern.
         let scale = 1. / size.reduce_max();
-        let matrix_model_to_world =
-            f32x4x4::scale(scale, scale, scale, 1.) * matrix_model_to_world_no_scale;
+        let matrix_model_to_world = f32x4x4::scale(scale, scale, scale, 1.)
+            * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.))
+            * f32x4x4::translate(cx, cy, cz);
 
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
@@ -199,16 +198,14 @@ impl RendererDelgate for Delegate {
             device,
         };
 
-        // IMPORTANT: Not a mistake, using Model-to-World 4x4 Matrix for Normal-to-World 3x3 Matrix.
-        // This works because...
-        // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
-        //   - Since normals are directions (not positions, relative to a point on a surface),
-        //     translations are meaningless and should not be applied.
-        // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
-        //
-        // TODO: Although this performs great (compare assembly running "asm proj-4-textures"
-        //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
-        delegate.update_world(WorldID::MatrixNormalToWorld, matrix_model_to_world_no_scale);
+        // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
+        // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
+        // (no translation). Since normals are directions (not positions, relative to a
+        // point on a surface), translations are meaningless.
+        delegate.update_world(
+            WorldID::MatrixNormalToWorld,
+            matrix_model_to_world.metal_float3x3_upper_left(),
+        );
         delegate.update_light(delegate.light_xy_rotation);
         delegate.update_camera(
             delegate.screen_size,

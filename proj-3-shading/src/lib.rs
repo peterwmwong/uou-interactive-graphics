@@ -240,14 +240,10 @@ impl RendererDelgate for Delegate {
                 &encoder,
                 VertexBufferIndex::MatrixNormalToWorld as _,
                 // IMPORTANT: In the shader, this maps to a float3x3. This works because...
-                // 1. Conceptually, we want a matrix that ONLY applies rotation (no translation)
-                //   - Since normals are directions (not positions), translations are meaningless and
-                //     should not be applied.
-                // 2. Memory layout-wise, float3x3 and float4x4 have the same size and alignment.
-                //
-                // TODO: Although this performs great (compare assembly running "asm proj-3-shading"
-                //       task), this may be wayyy too tricky/error-prone/assumes-metal-ignores-the-extra-stuff.
-                &self.matrix_model_to_world,
+                // Conceptually, we want a matrix that ONLY applies rotation (no translation).
+                // Since normals are directions (not positions, relative to a point on a surface),
+                // translations are meaningless.
+                &self.matrix_model_to_world.metal_float3x3_upper_left(),
             );
             encode_vertex_bytes(
                 &encoder,
