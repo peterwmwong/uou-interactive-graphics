@@ -36,6 +36,13 @@
 
 # metal-app
 
+- Metal 3
+    - Use new gpuAddress/gpuHandle, and remove calls to argument encoder
+        - https://developer.apple.com/videos/play/wwdc2022/10101/
+- Write tests for Materials
+- Write tests for Geometry
+- Write tests for Model
+
 # metal-build
 
 - Move the generated shader_bindings.rs back into OUT_DIR
