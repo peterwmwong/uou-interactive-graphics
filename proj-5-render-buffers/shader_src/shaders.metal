@@ -3,6 +3,35 @@
 
 using namespace metal;
 
+// TODO: REMOVE ME
+// TODO: REMOVE ME
+// TODO: REMOVE ME
+struct CheckerboardVertexOut
+{
+    float4 position [[position]];
+};
+
+vertex
+CheckerboardVertexOut checkerboard_vertex(uint vertex_id [[vertex_id]])
+{
+    constexpr const float2 plane_triange_strip_vertices[4] = {
+        {-1.h, -1.h}, // Bottom Left
+        {-1.h,  1.h}, // Top    Left
+        { 1.h, -1.h}, // Bottom Right
+        { 1.h,  1.h}, // Top    Right
+    };
+    const float2 position2d = plane_triange_strip_vertices[vertex_id];
+    return { .position = float4(position2d, 0, 1) };
+}
+
+fragment
+half4 checkerboard_fragment(CheckerboardVertexOut in [[stage_in]])
+{
+    const float square_size = 32.0;
+    const uint2 alt = uint2(in.position.xy / square_size) & 1;
+    return half4(alt.x == alt.y);
+};
+
 struct VertexOut
 {
     float4 position [[position]];

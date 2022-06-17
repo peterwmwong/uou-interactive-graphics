@@ -8,8 +8,13 @@ use std::f32::consts::PI;
 use std::ops::Neg;
 use std::simd::f32x2;
 
-const INITIAL_CAMERA_DISTANCE: f32 = 1.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
+// TODO: REMOVE ME
+// TODO: REMOVE ME
+// TODO: REMOVE ME
+const INITIAL_CAMERA_DISTANCE: f32 = 0.6134694;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-0.047856454, 0.]);
+// const INITIAL_CAMERA_DISTANCE: f32 = 1.;
+// const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 const N: f32 = 0.1;
@@ -22,6 +27,52 @@ const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
     [0., 0., 1., 0.],
 );
 
+struct CheckerboardDelegate {
+    pub device: Device,
+    command_queue: CommandQueue,
+    render_pipeline_state: RenderPipelineState,
+}
+
+impl RendererDelgate for CheckerboardDelegate {
+    fn new(device: Device) -> Self {
+        Self {
+            command_queue: device.new_command_queue(),
+            render_pipeline_state: create_pipeline(
+                &device,
+                &device
+                    .new_library_with_data(LIBRARY_BYTES)
+                    .expect("Failed to import shader metal lib."),
+                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false),
+                "Checkerboard",
+                None,
+                &"checkerboard_vertex",
+                0,
+                &"checkerboard_fragment",
+                0,
+            )
+            .pipeline_state,
+            device,
+        }
+    }
+
+    fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        let command_buffer = self
+            .command_queue
+            .new_command_buffer_with_unretained_references();
+        let encoder = command_buffer
+            .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
+        // Render Plane
+        {
+            encoder.push_debug_group("Checkerboard");
+            encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
+            encoder.pop_debug_group();
+        }
+        encoder.end_encoding();
+        command_buffer
+    }
+}
+
 struct Delegate {
     camera_distance: f32,
     camera_rotation: f32x2,
@@ -30,7 +81,8 @@ struct Delegate {
     matrix_model_to_projection: f32x4x4,
     render_pipeline_state: RenderPipelineState,
     plane_texture: Option<Texture>,
-    plane_renderer: Proj4Delegate<false>,
+    // plane_renderer: Proj4Delegate<false>,
+    plane_renderer: CheckerboardDelegate,
     screen_size: f32x2,
     needs_render: bool,
 }
@@ -68,7 +120,8 @@ impl RendererDelgate for Delegate {
             screen_size: f32x2::default(),
             needs_render: false,
             command_queue,
-            plane_renderer: Proj4Delegate::<false>::new(device),
+            // plane_renderer: Proj4Delegate::<false>::new(device),
+            plane_renderer: CheckerboardDelegate::new(device),
         };
 
         delegate.update_camera(
@@ -98,20 +151,8 @@ impl RendererDelgate for Delegate {
                 .new_command_buffer_with_unretained_references()
         };
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder({
-            let desc = RenderPassDescriptor::new();
-            {
-                let a = desc
-                    .color_attachments()
-                    .object_at(0)
-                    .expect("Failed to access color attachment on render pass descriptor");
-                a.set_texture(Some(render_target));
-                a.set_load_action(MTLLoadAction::Clear);
-                a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
-                a.set_store_action(MTLStoreAction::Store);
-            }
-            desc
-        });
+        let encoder = command_buffer
+            .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
         // Render Plane
         {
             encoder.push_debug_group("Plane");
@@ -158,10 +199,13 @@ impl RendererDelgate for Delegate {
                     }
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
-                    match button {
-                        Left => self.plane_renderer.drag_camera_rotation(drag_amount),
-                        Right => self.plane_renderer.drag_camera_distance(drag_amount),
-                    }
+                    // TODO: REMOVE ME
+                    // TODO: REMOVE ME
+                    // TODO: REMOVE ME
+                    // match button {
+                    //     Left => self.plane_renderer.drag_camera_rotation(drag_amount),
+                    //     Right => self.plane_renderer.drag_camera_distance(drag_amount),
+                    // }
                 }
             }
             WindowResize { size, .. } => {
