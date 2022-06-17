@@ -44,10 +44,10 @@ impl RendererDelgate for Delegate {
         let render_pipeline_state = {
             let base_pipeline_desc = RenderPipelineDescriptor::new();
             {
-                let desc = unwrap_option_dcheck(
-                    base_pipeline_desc.color_attachments().object_at(0 as u64),
-                    "Failed to access color attachment on pipeline descriptor",
-                );
+                let desc = base_pipeline_desc
+                    .color_attachments()
+                    .object_at(0 as u64)
+                    .expect("Failed to access color attachment on pipeline descriptor");
                 desc.set_blending_enabled(false);
                 desc.set_pixel_format(PIXEL_FORMAT);
             }
@@ -94,11 +94,15 @@ impl RendererDelgate for Delegate {
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.reset_needs_render();
 
+        let plane_texture = self
+            .plane_texture
+            .as_ref()
+            .expect("Failed to load Plane Texture");
+
         // If the Plane needs to render, use that command buffer so rendering is in sync.
         // Otherwise, create a new command buffer.
         let command_buffer = if self.plane_renderer.needs_render() {
-            self.plane_renderer
-                .render(self.plane_texture.as_ref().expect("Plane texture was None"))
+            self.plane_renderer.render(plane_texture)
         } else {
             self.command_queue
                 .new_command_buffer_with_unretained_references()
@@ -107,10 +111,10 @@ impl RendererDelgate for Delegate {
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();
             {
-                let a = unwrap_option_dcheck(
-                    desc.color_attachments().object_at(0),
-                    "Failed to access color attachment on render pass descriptor",
-                );
+                let a = desc
+                    .color_attachments()
+                    .object_at(0)
+                    .expect("Failed to access color attachment on render pass descriptor");
                 a.set_texture(Some(render_target));
                 a.set_load_action(MTLLoadAction::Clear);
                 a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
@@ -118,23 +122,16 @@ impl RendererDelgate for Delegate {
             }
             desc
         });
-        // Render Model
+        // Render Plane
         {
-            encoder.push_debug_group("Model");
+            encoder.push_debug_group("Plane");
             encoder.set_render_pipeline_state(&self.render_pipeline_state);
             encode_vertex_bytes(
                 encoder,
                 VertexBufferIndex::MatrixModelToProjection as _,
                 self.matrix_model_to_projection.metal_float4x4(),
             );
-            encoder.set_fragment_texture(
-                FragBufferIndex::Texture as _,
-                Some(
-                    self.plane_texture
-                        .as_ref()
-                        .expect("Failed to load Plane Texture"),
-                ),
-            );
+            encoder.set_fragment_texture(FragBufferIndex::Texture as _, Some(plane_texture));
             encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
             encoder.pop_debug_group();
         }
@@ -232,6 +229,7 @@ impl Delegate {
         desc.set_width(width);
         desc.set_height(height);
         desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         self.plane_texture = Some(self.device().new_texture(&desc));
         self.plane_renderer
             .on_event(UserEvent::WindowResize { size });
