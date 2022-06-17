@@ -30,7 +30,7 @@ VertexOut main_vertex(         uint       vertex_id                  [[vertex_id
 
 [[fragment]]
 half4 main_fragment(VertexOut       in      [[stage_in]],
-              texture2d<half> texture [[texture(FragBufferIndex::Texture)]])
+                    texture2d<half> texture [[texture(FragBufferIndex::Texture)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     const half4 color   = texture.sample(tx_sampler, in.tx_coord);

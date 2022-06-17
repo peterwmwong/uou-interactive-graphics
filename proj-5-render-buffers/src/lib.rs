@@ -215,24 +215,20 @@ impl Delegate {
     }
 
     fn update_plane_texture_size(&mut self, size: f32x2) {
-        let width = size[0] as u64;
-        let height = size[1] as u64;
-        if let Some(tx) = &self.plane_texture {
-            tx.set_purgeable_state(MTLPurgeableState::Empty);
-        }
+        let plane_size = f32x2::splat(size.reduce_max());
 
         // TODO: START HERE
         // TODO: START HERE
         // TODO: START HERE
         // The rendered texture should use bilinear filtering for magnification and mip-mapping with anisotropic filtering for minification.
         let desc = TextureDescriptor::new();
-        desc.set_width(width);
-        desc.set_height(height);
+        desc.set_width(plane_size[0] as _);
+        desc.set_height(plane_size[0] as _);
         desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         self.plane_texture = Some(self.device().new_texture(&desc));
         self.plane_renderer
-            .on_event(UserEvent::WindowResize { size });
+            .on_event(UserEvent::WindowResize { size: plane_size });
     }
 
     fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
