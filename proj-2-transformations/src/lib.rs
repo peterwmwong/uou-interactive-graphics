@@ -79,22 +79,10 @@ impl RendererDelgate for Delegate {
                         "/shaders.metallib"
                     )))
                     .expect("Failed to import shader metal lib.");
-                let base_pipeline_desc = RenderPipelineDescriptor::new();
-
-                // Setup Target Color Attachment
-                {
-                    let desc = unwrap_option_dcheck(
-                        base_pipeline_desc.color_attachments().object_at(0 as u64),
-                        "Failed to access color attachment on pipeline descriptor",
-                    );
-                    desc.set_blending_enabled(false);
-                    desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-                }
-
                 create_pipeline(
                     &device,
                     &library,
-                    &base_pipeline_desc,
+                    &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false),
                     "Render Pipeline",
                     None,
                     &"main_vertex",

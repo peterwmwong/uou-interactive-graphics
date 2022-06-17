@@ -8,7 +8,6 @@ use std::f32::consts::PI;
 use std::ops::Neg;
 use std::simd::f32x2;
 
-const PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -42,19 +41,10 @@ impl RendererDelgate for Delegate {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let render_pipeline_state = {
-            let base_pipeline_desc = RenderPipelineDescriptor::new();
-            {
-                let desc = base_pipeline_desc
-                    .color_attachments()
-                    .object_at(0 as u64)
-                    .expect("Failed to access color attachment on pipeline descriptor");
-                desc.set_blending_enabled(false);
-                desc.set_pixel_format(PIXEL_FORMAT);
-            }
             create_pipeline(
                 &device,
                 &library,
-                &base_pipeline_desc,
+                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false),
                 "Plane",
                 None,
                 &"main_vertex",
@@ -224,7 +214,7 @@ impl Delegate {
         let desc = TextureDescriptor::new();
         desc.set_width(plane_size[0] as _);
         desc.set_height(plane_size[0] as _);
-        desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         self.plane_texture = Some(self.device().new_texture(&desc));
         self.plane_renderer

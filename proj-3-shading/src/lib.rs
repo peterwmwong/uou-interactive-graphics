@@ -107,17 +107,7 @@ impl RendererDelgate for Delegate {
             .expect("Failed to import shader metal lib.");
 
         // Setup Render Pipeline Descriptor used for rendering the teapot and light
-        let base_pipeline_desc = RenderPipelineDescriptor::new();
-        base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
-        {
-            let desc = unwrap_option_dcheck(
-                base_pipeline_desc.color_attachments().object_at(0 as u64),
-                "Failed to access color attachment on pipeline descriptor",
-            );
-            desc.set_blending_enabled(false);
-            desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-        }
-
+        let base_pipeline_desc = new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false);
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,

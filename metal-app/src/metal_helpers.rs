@@ -158,6 +158,22 @@ pub fn new_function_from_library(
     }
 }
 
+pub const DEFAULT_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
+
+pub fn new_basic_render_pipeline_descriptor(
+    pixel_format: MTLPixelFormat,
+    blending: bool,
+) -> RenderPipelineDescriptor {
+    let base_pipeline_desc = RenderPipelineDescriptor::new();
+    let desc = base_pipeline_desc
+        .color_attachments()
+        .object_at(0 as u64)
+        .expect("Failed to access color attachment on pipeline descriptor");
+    desc.set_blending_enabled(blending);
+    desc.set_pixel_format(pixel_format);
+    base_pipeline_desc
+}
+
 pub struct CreateRenderPipelineResults {
     pub vertex_function: Function,
     pub fragment_function: Function,

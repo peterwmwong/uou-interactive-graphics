@@ -67,6 +67,12 @@
         }
     }
     ```
+- Rethink RenderDelegate API
+    - proj-5 exposed the awkwardness of calling one Delegate from another
+        - It's not easy to reuse/share...
+            - CommandQueue
+            - CommandBuffer
+            - Device
 - Metal 3
     - Use new gpuAddress/gpuHandle, and remove calls to argument encoder
         - https://developer.apple.com/videos/play/wwdc2022/10101/

@@ -65,17 +65,7 @@ struct PipelineResults {
 }
 
 fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
-    let base_pipeline_desc = RenderPipelineDescriptor::new();
-    base_pipeline_desc.set_depth_attachment_pixel_format(DEPTH_TEXTURE_FORMAT);
-    {
-        let desc = unwrap_option_dcheck(
-            base_pipeline_desc.color_attachments().object_at(0 as u64),
-            "Failed to access color attachment on pipeline descriptor",
-        );
-        desc.set_blending_enabled(false);
-        desc.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
-    }
-
+    let base_pipeline_desc = new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false);
     let function_constants = FunctionConstantValues::new();
     for index in [
         FC::HasAmbient as usize,
