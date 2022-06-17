@@ -183,7 +183,7 @@ pub struct CreateRenderPipelineResults {
 pub fn create_pipeline(
     device: &Device,
     library: &Library,
-    base_pipeline_desc: &RenderPipelineDescriptor,
+    pipeline_desc: &RenderPipelineDescriptor,
     label: &str,
     func_constants: Option<&FunctionConstantValues>,
     vertex_func_name: &str,
@@ -191,51 +191,43 @@ pub fn create_pipeline(
     frag_func_name: &str,
     num_frag_immutable_buffers: u32,
 ) -> CreateRenderPipelineResults {
-    base_pipeline_desc.set_label(label);
+    pipeline_desc.set_label(label);
 
-    let fcs = func_constants;
     let vertex_function = unwrap_result_dcheck(
-        new_function_from_library(library, vertex_func_name, fcs),
+        new_function_from_library(library, vertex_func_name, func_constants),
         "Failed to access vertex shader function from metal library",
     );
-    base_pipeline_desc.set_vertex_function(Some(&vertex_function));
-
-    let buffers = base_pipeline_desc
-        .vertex_buffers()
-        .expect("Failed to access vertex buffers");
-    for buffer_index in 0..num_vertex_immutable_buffers {
-        unwrap_option_dcheck(
-            buffers.object_at(buffer_index as _),
-            "Failed to access vertex buffer",
-        )
-        .set_mutability(MTLMutability::Immutable);
-    }
-
+    pipeline_desc.set_vertex_function(Some(&vertex_function));
     let fragment_function = unwrap_result_dcheck(
-        new_function_from_library(library, frag_func_name, fcs),
+        new_function_from_library(library, frag_func_name, func_constants),
         "Failed to access fragment shader function from metal library",
     );
-    base_pipeline_desc.set_fragment_function(Some(&fragment_function));
+    pipeline_desc.set_fragment_function(Some(&fragment_function));
 
-    let buffers = base_pipeline_desc
-        .fragment_buffers()
-        .expect("Failed to access fragment buffers");
-    for buffer_index in 0..num_frag_immutable_buffers {
-        unwrap_option_dcheck(
-            buffers.object_at(buffer_index as _),
-            "Failed to access fragment buffer",
-        )
-        .set_mutability(MTLMutability::Immutable);
+    for (buffers, num) in [
+        (pipeline_desc.vertex_buffers(), num_vertex_immutable_buffers),
+        (pipeline_desc.fragment_buffers(), num_frag_immutable_buffers),
+    ] {
+        let buffers = unwrap_option_dcheck(
+            buffers,
+            "Failed to access render pipeline descriptor buffers (vertex or fragment)",
+        );
+        for buffer_index in 0..num {
+            unwrap_option_dcheck(
+                buffers.object_at(buffer_index as _),
+                "Failed to access fragment buffer",
+            )
+            .set_mutability(MTLMutability::Immutable);
+        }
     }
 
-    let pipeline_state = unwrap_result_dcheck(
-        device.new_render_pipeline_state(&base_pipeline_desc),
-        "Failed to create render pipeline",
-    );
     CreateRenderPipelineResults {
         vertex_function,
         fragment_function,
-        pipeline_state,
+        pipeline_state: unwrap_result_dcheck(
+            device.new_render_pipeline_state(&pipeline_desc),
+            "Failed to create render pipeline",
+        ),
     }
 }
 
