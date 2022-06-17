@@ -183,29 +183,14 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
-        let command_buffer = self.command_queue.new_command_buffer();
+        let command_buffer = self
+            .command_queue
+            .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder({
-            let desc = RenderPassDescriptor::new();
-            {
-                let a = unwrap_option_dcheck(
-                    desc.color_attachments().object_at(0),
-                    "Failed to access color attachment on render pass descriptor",
-                );
-                a.set_texture(Some(render_target));
-                a.set_load_action(MTLLoadAction::Clear);
-                a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
-                a.set_store_action(MTLStoreAction::Store);
-            }
-            {
-                let a = desc.depth_attachment().unwrap();
-                a.set_clear_depth(1.);
-                a.set_load_action(MTLLoadAction::Clear);
-                a.set_store_action(MTLStoreAction::DontCare);
-                a.set_texture(self.depth_texture.as_deref());
-            }
-            desc
-        });
+        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
+            render_target,
+            self.depth_texture.as_ref(),
+        ));
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.set_depth_stencil_state(&self.depth_state);
 

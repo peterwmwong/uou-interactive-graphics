@@ -19,7 +19,9 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
-        let command_buffer = self.command_queue.new_command_buffer();
+        let command_buffer = self
+            .command_queue
+            .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();

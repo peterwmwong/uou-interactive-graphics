@@ -104,21 +104,12 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
-        let command_buffer = self.command_queue.new_command_buffer();
+        let command_buffer = self
+            .command_queue
+            .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder({
-            let clear_color: MTLClearColor = MTLClearColor::new(0.0, 0.0, 0.0, 0.0);
-            let desc = RenderPassDescriptor::new();
-            let attachment = unwrap_option_dcheck(
-                desc.color_attachments().object_at(0),
-                "Failed to access color attachment on render pass descriptor",
-            );
-            attachment.set_texture(Some(render_target));
-            attachment.set_load_action(MTLLoadAction::Clear);
-            attachment.set_clear_color(clear_color);
-            attachment.set_store_action(MTLStoreAction::Store);
-            desc
-        });
+        let encoder = command_buffer
+            .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex::MaxPositionValue as _,

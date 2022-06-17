@@ -96,6 +96,7 @@ pub fn encode_fragment_bytes<T: Sized + Copy + Clone>(
 
 // TODO: Consider upstreaming change to metal-rs
 // - This avoids needing to FunctionConstantValues.clone() (under the covers, calls Obj-C `retain()`).
+#[inline]
 pub fn new_function_from_library(
     library: &Library,
     name: &str,
@@ -160,6 +161,7 @@ pub fn new_function_from_library(
 
 pub const DEFAULT_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
 
+#[inline]
 pub fn new_basic_render_pipeline_descriptor(
     pixel_format: MTLPixelFormat,
     blending: bool,
@@ -180,6 +182,7 @@ pub struct CreateRenderPipelineResults {
     pub pipeline_state: RenderPipelineState,
 }
 
+#[inline]
 pub fn create_pipeline(
     device: &Device,
     library: &Library,
@@ -231,6 +234,32 @@ pub fn create_pipeline(
     }
 }
 
+#[inline]
+pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
+    render_target: &'a TextureRef,
+    depth_texture: Option<&'b Texture>,
+) -> &'c RenderPassDescriptorRef {
+    let desc = RenderPassDescriptor::new();
+    {
+        let a = desc
+            .color_attachments()
+            .object_at(0)
+            .expect("Failed to access color attachment on render pass descriptor");
+        a.set_texture(Some(render_target));
+        a.set_load_action(MTLLoadAction::Clear);
+        a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
+        a.set_store_action(MTLStoreAction::Store);
+    }
+    if let Some(depth_texture) = depth_texture {
+        let a = desc.depth_attachment().unwrap();
+        a.set_clear_depth(1.);
+        a.set_load_action(MTLLoadAction::Clear);
+        a.set_store_action(MTLStoreAction::DontCare);
+        a.set_texture(Some(depth_texture));
+    }
+    desc
+}
+
 // TODO: Investigate when this improves performance.
 // - In quick performance profiling of proj-4, no performance improvements were observed
 //   - Methodology
@@ -242,7 +271,7 @@ pub fn create_pipeline(
 //        regardless whether optimize_textures_for_gpu_access was used or not.
 // - Guess: Only improves non-Apple Silicon CPU/GPU
 pub fn optimize_textures_for_gpu_access(textures: &[&Texture], command_queue: &CommandQueue) {
-    let command_buf = command_queue.new_command_buffer();
+    let command_buf = command_queue.new_command_buffer_with_unretained_references();
     let enc = command_buf.new_blit_command_encoder();
     for &texture in textures {
         enc.optimize_contents_for_gpu_access(texture);
