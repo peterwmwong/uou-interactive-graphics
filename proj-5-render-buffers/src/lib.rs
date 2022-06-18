@@ -2,7 +2,9 @@
 mod shader_bindings;
 
 use metal_app::{metal::*, *};
-use proj_4_textures::Delegate as Proj4Delegate;
+use proj_4_textures::{
+    new_drag_camera_distance_event, new_drag_camera_rotation_event, Delegate as Proj4Delegate,
+};
 use shader_bindings::*;
 use std::{f32::consts::PI, ops::Neg, simd::f32x2};
 
@@ -79,38 +81,13 @@ impl RendererDelgate for CheckerboardDelegate {
     fn on_event(&mut self, event: UserEvent) {
         self.needs_render = matches!(event, UserEvent::WindowResize { .. });
     }
-}
 
-trait RenderDelegateWithDraggableCamera: RendererDelgate {
-    fn device(&self) -> &Device;
-    fn drag_camera_rotation(&mut self, _drag_amount: f32x2) {}
-    fn drag_camera_distance(&mut self, _drag_amount: f32x2) {}
-}
-
-impl<const RENDER_LIGHT: bool> RenderDelegateWithDraggableCamera for Proj4Delegate<RENDER_LIGHT> {
-    #[inline(always)]
-    fn device(&self) -> &Device {
-        &self.device
-    }
-
-    #[inline(always)]
-    fn drag_camera_rotation(&mut self, drag_amount: f32x2) {
-        Proj4Delegate::drag_camera_rotation(self, drag_amount);
-    }
-
-    #[inline(always)]
-    fn drag_camera_distance(&mut self, drag_amount: f32x2) {
-        Proj4Delegate::drag_camera_distance(self, drag_amount);
-    }
-}
-
-impl RenderDelegateWithDraggableCamera for CheckerboardDelegate {
     fn device(&self) -> &Device {
         &self.device
     }
 }
 
-struct Delegate<R: RenderDelegateWithDraggableCamera> {
+struct Delegate<R: RendererDelgate> {
     camera_distance: f32,
     camera_rotation: f32x2,
     command_queue: CommandQueue,
@@ -124,7 +101,7 @@ struct Delegate<R: RenderDelegateWithDraggableCamera> {
     needs_render: bool,
 }
 
-impl<R: RenderDelegateWithDraggableCamera> RendererDelgate for Delegate<R> {
+impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
     fn new(device: Device) -> Self {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
@@ -250,8 +227,12 @@ impl<R: RenderDelegateWithDraggableCamera> RendererDelgate for Delegate<R> {
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
                     match button {
-                        Left => self.plane_renderer.drag_camera_rotation(drag_amount),
-                        Right => self.plane_renderer.drag_camera_distance(drag_amount),
+                        Left => self
+                            .plane_renderer
+                            .on_event(new_drag_camera_rotation_event(drag_amount)),
+                        Right => self
+                            .plane_renderer
+                            .on_event(new_drag_camera_distance_event(drag_amount)),
                     }
                 }
             }
@@ -277,9 +258,13 @@ impl<R: RenderDelegateWithDraggableCamera> RendererDelgate for Delegate<R> {
     fn needs_render(&self) -> bool {
         self.needs_render || self.plane_renderer.needs_render()
     }
+
+    fn device(&self) -> &Device {
+        self.plane_renderer.device()
+    }
 }
 
-impl<R: RenderDelegateWithDraggableCamera> Delegate<R> {
+impl<R: RendererDelgate> Delegate<R> {
     #[inline(always)]
     fn device(&self) -> &Device {
         &self.plane_renderer.device()

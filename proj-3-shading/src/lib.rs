@@ -354,6 +354,10 @@ impl RendererDelgate for Delegate {
             _ => {}
         }
     }
+
+    fn device(&self) -> &Device {
+        &self.device
+    }
 }
 
 impl Delegate {

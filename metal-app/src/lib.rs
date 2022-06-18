@@ -14,6 +14,7 @@ mod metal_helpers;
 mod model;
 mod objc_helpers;
 mod renderer;
+pub mod ui_ray;
 mod unwrap_helpers;
 
 pub use application::launch_application;

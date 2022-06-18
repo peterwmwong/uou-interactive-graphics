@@ -16,6 +16,7 @@ struct Delegate {
     camera_distance: f32,
     camera_rotation_offset: f32x2,
     camera_rotation: f32x2,
+    device: Device,
     command_queue: CommandQueue,
     mins_maxs: [packed_float4; 2],
     num_vertices: usize,
@@ -99,6 +100,7 @@ impl RendererDelgate for Delegate {
                 &positions,
             ),
             screen_size: f32x2::splat(0.),
+            device,
         }
     }
 
@@ -182,6 +184,10 @@ impl RendererDelgate for Delegate {
             }
             _ => {}
         }
+    }
+
+    fn device(&self) -> &Device {
+        &self.device
     }
 }
 

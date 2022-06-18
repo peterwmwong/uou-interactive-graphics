@@ -2,7 +2,7 @@
 mod shader_bindings;
 
 use bitflags::bitflags;
-use metal_app::{metal::*, *};
+use metal_app::{metal::*, ui_ray, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -40,14 +40,13 @@ const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
 );
 
 pub struct Delegate<const RENDER_LIGHT: bool> {
-    camera_distance: f32,
-    camera_rotation: f32x2,
+    camera_ray: ui_ray::UIRay,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     command_queue: CommandQueue,
     pub device: Device,
     library: Library,
-    light_xy_rotation: f32x2,
+    light_ray: ui_ray::UIRay,
     matrix_model_to_world: f32x4x4,
     mode: Mode,
     model: Model,
@@ -106,6 +105,28 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
             &"light_fragment",
             0,
         ),
+    }
+}
+
+const CAMERA_DRAG_MODIFIER_KEYS: ModifierKeys = ModifierKeys::empty();
+
+#[inline(always)]
+pub fn new_drag_camera_distance_event(drag_amount: f32x2) -> UserEvent {
+    UserEvent::MouseDrag {
+        button: ui_ray::DISTANCE_MOUSE_BUTTON,
+        modifier_keys: CAMERA_DRAG_MODIFIER_KEYS,
+        position: Default::default(),
+        drag_amount,
+    }
+}
+
+#[inline(always)]
+pub fn new_drag_camera_rotation_event(drag_amount: f32x2) -> UserEvent {
+    UserEvent::MouseDrag {
+        button: ui_ray::ROTATE_MOUSE_BUTTON,
+        modifier_keys: CAMERA_DRAG_MODIFIER_KEYS,
+        position: Default::default(),
+        drag_amount,
     }
 }
 
@@ -170,8 +191,12 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             * f32x4x4::translate(cx, cy, cz);
 
         let mut delegate = Self {
-            camera_distance: INITIAL_CAMERA_DISTANCE,
-            camera_rotation: INITIAL_CAMERA_ROTATION,
+            camera_ray: ui_ray::UIRay::new(
+                ModifierKeys::empty(),
+                INITIAL_CAMERA_DISTANCE,
+                INITIAL_CAMERA_ROTATION,
+                false,
+            ),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -180,7 +205,12 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             },
             depth_texture: None,
             library,
-            light_xy_rotation: INITIAL_LIGHT_ROTATION,
+            light_ray: ui_ray::UIRay::new(
+                ModifierKeys::CONTROL,
+                LIGHT_DISTANCE,
+                INITIAL_LIGHT_ROTATION,
+                true,
+            ),
             matrix_model_to_world,
             mode,
             model,
@@ -202,12 +232,8 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             WorldID::MatrixNormalToWorld,
             matrix_model_to_world.metal_float3x3_upper_left(),
         );
-        delegate.update_light(delegate.light_xy_rotation);
-        delegate.update_camera(
-            delegate.screen_size,
-            delegate.camera_rotation,
-            delegate.camera_distance,
-        );
+        delegate.update_light();
+        delegate.update_camera(delegate.screen_size);
         delegate.reset_needs_render();
         delegate
     }
@@ -274,40 +300,14 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        use MouseButton::*;
-        use UserEvent::*;
-        match event {
-            MouseDrag {
-                button,
-                modifier_keys,
-                drag_amount,
-                ..
-            } => {
-                if modifier_keys.is_empty() {
-                    match button {
-                        Left => self.drag_camera_rotation(drag_amount),
-                        Right => self.drag_camera_distance(drag_amount),
-                    }
-                } else if modifier_keys.contains(ModifierKeys::CONTROL) {
-                    match button {
-                        Left => {
-                            let adjacent = f32x2::splat(self.camera_distance);
-                            let opposite = -drag_amount / f32x2::splat(500.);
-                            let &[x, y] = (opposite / adjacent).as_array();
-                            self.update_light(
-                                self.light_xy_rotation
-                                    + f32x2::from_array([
-                                        y.atan(), // Rotation on x-axis
-                                        x.atan(), // Rotation on y-axis
-                                    ]),
-                            );
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            KeyDown { key_code, .. } => {
-                self.update_mode(match key_code {
+        if self.camera_ray.on_event(event) {
+            self.update_camera(self.screen_size);
+        } else if self.light_ray.on_event(event) {
+            self.update_light();
+        } else {
+            match event {
+                UserEvent::KeyDown { key_code, .. } => {
+                    self.update_mode(match key_code {
                     29 /* 0 */ => Mode::DEFAULT,
                     18 /* 1 */ => Mode::HAS_NORMAL,
                     19 /* 2 */ => Mode::HAS_AMBIENT,
@@ -315,18 +315,23 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                     21 /* 4 */ => Mode::HAS_SPECULAR,
                     _ => self.mode
                 });
+                }
+                UserEvent::WindowResize { size, .. } => {
+                    self.update_depth_texture_size(size);
+                    self.update_camera(size);
+                }
+                _ => {}
             }
-            WindowResize { size, .. } => {
-                self.update_depth_texture_size(size);
-                self.update_camera(size, self.camera_rotation, self.camera_distance);
-            }
-            _ => {}
         }
     }
 
     #[inline(always)]
     fn needs_render(&self) -> bool {
         self.needs_render
+    }
+
+    fn device(&self) -> &Device {
+        &self.device
     }
 }
 
@@ -387,21 +392,19 @@ impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
         self.needs_render = true;
     }
 
-    fn update_light(&mut self, light_xy_rotation: f32x2) {
-        self.light_xy_rotation = light_xy_rotation;
-        let &[rotx, roty] = self.light_xy_rotation.as_array();
-        let light_position =
-            f32x4x4::rotate(rotx, roty, 0.) * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]);
+    fn update_light(&mut self) {
+        let &[rotx, roty] = self.light_ray.rotation_xy.as_array();
+        let light_position = f32x4x4::rotate(rotx, roty, 0.)
+            * f32x4::from_array([0., 0., -self.light_ray.distance_from_origin, 1.]);
         self.update_world(WorldID::LightPosition, light_position);
     }
 
-    fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
+    fn update_camera(&mut self, screen_size: f32x2) {
         self.screen_size = screen_size;
-        self.camera_rotation = camera_rotation;
-        self.camera_distance = camera_distance;
-        let &[rotx, roty] = self.camera_rotation.neg().as_array();
+        let &[rotx, roty] = self.camera_ray.rotation_xy.neg().as_array();
         let matrix_world_to_camera =
-            f32x4x4::translate(0., 0., self.camera_distance) * f32x4x4::rotate(rotx, roty, 0.);
+            f32x4x4::translate(0., 0., self.camera_ray.distance_from_origin)
+                * f32x4x4::rotate(rotx, roty, 0.);
         self.update_world(
             WorldID::CameraPosition,
             matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]),
@@ -425,30 +428,6 @@ impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
         self.update_world(
             WorldID::MatrixScreenToWorld,
             matrix_world_to_projection.inverse() * matrix_screen_to_projection,
-        );
-    }
-
-    pub fn drag_camera_rotation(&mut self, drag_amount: f32x2) {
-        self.update_camera(
-            self.screen_size,
-            self.camera_rotation + {
-                let adjacent = f32x2::splat(self.camera_distance);
-                let opposite = drag_amount / f32x2::splat(500.);
-                let &[x, y] = (opposite / adjacent).as_array();
-                f32x2::from_array([
-                    y.atan(), // Rotation on x-axis
-                    x.atan(), // Rotation on y-axis
-                ])
-            },
-            self.camera_distance,
-        );
-    }
-
-    pub fn drag_camera_distance(&mut self, drag_amount: f32x2) {
-        self.update_camera(
-            self.screen_size,
-            self.camera_rotation,
-            self.camera_distance - drag_amount[1] / 250.,
         );
     }
 }

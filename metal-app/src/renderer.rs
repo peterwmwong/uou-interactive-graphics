@@ -5,7 +5,7 @@ use metal::*;
 use objc::{rc::autoreleasepool, runtime::YES};
 use std::{os::raw::c_ushort, simd::f32x2};
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum MouseButton {
     Left,
@@ -25,26 +25,22 @@ bitflags::bitflags! {
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum UserEvent {
-    #[non_exhaustive]
     MouseDown {
         button: MouseButton,
         modifier_keys: ModifierKeys,
         position: f32x2,
     },
-    #[non_exhaustive]
     MouseUp {
         button: MouseButton,
         modifier_keys: ModifierKeys,
         position: f32x2,
     },
-    #[non_exhaustive]
     MouseDrag {
         button: MouseButton,
         modifier_keys: ModifierKeys,
         position: f32x2,
         drag_amount: f32x2,
     },
-    #[non_exhaustive]
     KeyDown {
         key_code: c_ushort,
     },
@@ -55,6 +51,8 @@ pub enum UserEvent {
 
 pub trait RendererDelgate {
     fn new(device: Device) -> Self;
+
+    fn device(&self) -> &Device;
 
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef;
 

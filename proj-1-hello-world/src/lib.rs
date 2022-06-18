@@ -6,6 +6,7 @@ use std::time::Instant;
 struct Delegate {
     now: Instant,
     command_queue: CommandQueue,
+    device: Device,
 }
 
 impl RendererDelgate for Delegate {
@@ -14,6 +15,7 @@ impl RendererDelgate for Delegate {
         Self {
             now: Instant::now(),
             command_queue: device.new_command_queue(),
+            device,
         }
     }
 
@@ -43,6 +45,10 @@ impl RendererDelgate for Delegate {
         });
         encoder.end_encoding();
         command_buffer
+    }
+
+    fn device(&self) -> &Device {
+        &self.device
     }
 }
 
