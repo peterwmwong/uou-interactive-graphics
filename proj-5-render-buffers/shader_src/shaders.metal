@@ -3,9 +3,6 @@
 
 using namespace metal;
 
-// TODO: REMOVE ME
-// TODO: REMOVE ME
-// TODO: REMOVE ME
 struct CheckerboardVertexOut
 {
     float4 position [[position]];
@@ -40,7 +37,7 @@ struct VertexOut
 
 [[vertex]]
 VertexOut main_vertex(         uint       vertex_id                  [[vertex_id]],
-            constant float4x4 & matrix_model_to_projection [[buffer(VertexBufferIndex::MatrixModelToProjection)]])
+                      constant float4x4 & matrix_model_to_projection [[buffer(VertexBufferIndex::MatrixModelToProjection)]])
 {
     constexpr const float2 plane_triange_strip_vertices[4] = {
         {-1.h, -1.h}, // Bottom Left

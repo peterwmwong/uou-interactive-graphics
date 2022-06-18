@@ -18,6 +18,20 @@
             "problemMatcher": []
         },
         {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "png-add-alpha",
+                "--",
+                "/Users/pwong/projects/uou-interactive-graphics/png-add-alpha/test.png"
+            ],
+            "label": "Run png-add-alpha"
+        },
+        {
             "label": "diff-shader-asm",
             "type": "shell",
             "presentation": {
@@ -152,6 +166,18 @@
             "label": "Run proj-5-render-buffers yoda"
         },
         {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-5-render-buffers",
+            ],
+            "label": "Run proj-5-render-buffers checkerboard"
+        },
+        {
             "label": "asm proj-5-render-buffers",
             "type": "shell",
             "presentation": {
@@ -164,20 +190,6 @@
             },
             "command": "${workspaceFolder}/build-release-asm.sh proj-5-render-buffers",
             "problemMatcher": []
-        },
-        {
-            "type": "cargo",
-            "command": "run",
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "args": [
-                "--bin",
-                "png-add-alpha",
-                "--",
-                "/Users/pwong/projects/uou-interactive-graphics/png-add-alpha/test.png"
-            ],
-            "label": "Run png-add-alpha"
         },
     ]
 }

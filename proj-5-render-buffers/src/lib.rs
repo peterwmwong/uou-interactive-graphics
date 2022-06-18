@@ -4,18 +4,11 @@ mod shader_bindings;
 use metal_app::{metal::*, *};
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
-use std::f32::consts::PI;
-use std::ops::Neg;
-use std::simd::f32x2;
+use std::{f32::consts::PI, ops::Neg, simd::f32x2};
 
-// TODO: REMOVE ME
-// TODO: REMOVE ME
-// TODO: REMOVE ME
 const INITIAL_PLANE_TEXTURE_FILTER_MODE: TextureFilterMode = TextureFilterMode::Anistropic;
-const INITIAL_CAMERA_DISTANCE: f32 = 0.56915706;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 64., 0.]);
-// const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-0.047856454, 0.]);
-// const INITIAL_CAMERA_DISTANCE: f32 = 1.;
+const INITIAL_CAMERA_DISTANCE: f32 = 0.5;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 const N: f32 = 0.001;
@@ -81,22 +74,47 @@ impl RendererDelgate for CheckerboardDelegate {
     }
 }
 
-struct Delegate {
+trait RenderDelegateWithDraggableCamera: RendererDelgate {
+    fn device(&self) -> &Device;
+    fn drag_camera_rotation(&mut self, _drag_amount: f32x2) {}
+    fn drag_camera_distance(&mut self, _drag_amount: f32x2) {}
+}
+
+impl<const RENDER_LIGHT: bool> RenderDelegateWithDraggableCamera for Proj4Delegate<RENDER_LIGHT> {
+    fn device(&self) -> &Device {
+        &self.device
+    }
+
+    fn drag_camera_rotation(&mut self, drag_amount: f32x2) {
+        Proj4Delegate::drag_camera_rotation(self, drag_amount);
+    }
+
+    fn drag_camera_distance(&mut self, drag_amount: f32x2) {
+        Proj4Delegate::drag_camera_distance(self, drag_amount);
+    }
+}
+
+impl RenderDelegateWithDraggableCamera for CheckerboardDelegate {
+    fn device(&self) -> &Device {
+        &self.device
+    }
+}
+
+struct Delegate<R: RenderDelegateWithDraggableCamera> {
     camera_distance: f32,
     camera_rotation: f32x2,
     command_queue: CommandQueue,
     matrix_model_to_world: f32x4x4,
     matrix_model_to_projection: f32x4x4,
     render_pipeline_state: RenderPipelineState,
-    // plane_renderer: Proj4Delegate<false>,
-    plane_renderer: CheckerboardDelegate,
+    plane_renderer: R,
     plane_texture: Option<Texture>,
     plane_texture_filter_mode: TextureFilterMode,
     screen_size: f32x2,
     needs_render: bool,
 }
 
-impl RendererDelgate for Delegate {
+impl<R: RenderDelegateWithDraggableCamera> RendererDelgate for Delegate<R> {
     fn new(device: Device) -> Self {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
@@ -126,7 +144,7 @@ impl RendererDelgate for Delegate {
             matrix_model_to_projection: f32x4x4::identity(),
             matrix_model_to_world,
             needs_render: false,
-            plane_renderer: CheckerboardDelegate::new(device),
+            plane_renderer: R::new(device),
             plane_texture_filter_mode: INITIAL_PLANE_TEXTURE_FILTER_MODE,
             plane_texture: None,
             render_pipeline_state,
@@ -220,13 +238,10 @@ impl RendererDelgate for Delegate {
                     }
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 } else if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
-                    // TODO: REMOVE ME
-                    // TODO: REMOVE ME
-                    // TODO: REMOVE ME
-                    // match button {
-                    //     Left => self.plane_renderer.drag_camera_rotation(drag_amount),
-                    //     Right => self.plane_renderer.drag_camera_distance(drag_amount),
-                    // }
+                    match button {
+                        Left => self.plane_renderer.drag_camera_rotation(drag_amount),
+                        Right => self.plane_renderer.drag_camera_distance(drag_amount),
+                    }
                 }
             }
             KeyDown { key_code, .. } => {
@@ -253,10 +268,10 @@ impl RendererDelgate for Delegate {
     }
 }
 
-impl Delegate {
+impl<R: RenderDelegateWithDraggableCamera> Delegate<R> {
     #[inline(always)]
     fn device(&self) -> &Device {
-        &self.plane_renderer.device
+        &self.plane_renderer.device()
     }
 
     #[inline(always)]
@@ -287,13 +302,10 @@ impl Delegate {
     fn update_plane_texture_size(&mut self, size: f32x2) {
         let plane_size = f32x2::splat(size.reduce_max());
 
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // The rendered texture should use bilinear filtering for magnification and mip-mapping with anisotropic filtering for minification.
         let desc = TextureDescriptor::new();
         desc.set_width(plane_size[0] as _);
         desc.set_height(plane_size[0] as _);
+        // TODO: What is the optimal mip-map level count?
         desc.set_mipmap_level_count(6);
         desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
@@ -319,5 +331,12 @@ impl Delegate {
 }
 
 pub fn run() {
-    launch_application::<Delegate>("Project 5 - Render Buffers");
+    const APP_NAME: &'static str = &"Project 5 - Render Buffers";
+    // TODO: BUHAHHAHA... this cannot be good... Probably bloats binary size by generating code for
+    // a whole application times 2.
+    if std::env::args().len() >= 2 {
+        launch_application::<Delegate<Proj4Delegate<false>>>(APP_NAME);
+    } else {
+        launch_application::<Delegate<CheckerboardDelegate>>(APP_NAME);
+    }
 }

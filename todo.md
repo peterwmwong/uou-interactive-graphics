@@ -68,7 +68,9 @@
     }
     ```
 - Rethink RenderDelegate API
-    - proj-5 exposed the awkwardness of calling one Delegate from another
+    - proj-5 exposed how awkward it is for one Delegate to use another
+        - It's not easy to initialize
+            - Pass ownership of Device
         - It's not easy to reuse/share...
             - CommandQueue
             - CommandBuffer
