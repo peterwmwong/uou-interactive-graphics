@@ -164,6 +164,7 @@ pub const DEFAULT_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
 #[inline]
 pub fn new_basic_render_pipeline_descriptor(
     pixel_format: MTLPixelFormat,
+    depth_pixel_format: Option<MTLPixelFormat>,
     blending: bool,
 ) -> RenderPipelineDescriptor {
     let base_pipeline_desc = RenderPipelineDescriptor::new();
@@ -173,6 +174,9 @@ pub fn new_basic_render_pipeline_descriptor(
         .expect("Failed to access color attachment on pipeline descriptor");
     desc.set_blending_enabled(blending);
     desc.set_pixel_format(pixel_format);
+    if let Some(depth_pixel_format) = depth_pixel_format {
+        base_pipeline_desc.set_depth_attachment_pixel_format(depth_pixel_format);
+    }
     base_pipeline_desc
 }
 

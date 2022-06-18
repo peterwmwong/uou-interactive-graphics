@@ -65,7 +65,11 @@ struct PipelineResults {
 }
 
 fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
-    let base_pipeline_desc = new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false);
+    let base_pipeline_desc = new_basic_render_pipeline_descriptor(
+        DEFAULT_PIXEL_FORMAT,
+        Some(DEPTH_TEXTURE_FORMAT),
+        false,
+    );
     let function_constants = FunctionConstantValues::new();
     for index in [
         FC::HasAmbient as usize,

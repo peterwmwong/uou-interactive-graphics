@@ -38,7 +38,7 @@ impl RendererDelgate for CheckerboardDelegate {
                 &device
                     .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib."),
-                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false),
+                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                 "Checkerboard",
                 None,
                 &"checkerboard_vertex",
@@ -51,6 +51,7 @@ impl RendererDelgate for CheckerboardDelegate {
         }
     }
 
+    #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.needs_render = false;
         let command_buffer = self
@@ -69,8 +70,14 @@ impl RendererDelgate for CheckerboardDelegate {
         command_buffer
     }
 
+    #[inline(always)]
     fn needs_render(&self) -> bool {
         self.needs_render
+    }
+
+    #[inline(always)]
+    fn on_event(&mut self, event: UserEvent) {
+        self.needs_render = matches!(event, UserEvent::WindowResize { .. });
     }
 }
 
@@ -81,14 +88,17 @@ trait RenderDelegateWithDraggableCamera: RendererDelgate {
 }
 
 impl<const RENDER_LIGHT: bool> RenderDelegateWithDraggableCamera for Proj4Delegate<RENDER_LIGHT> {
+    #[inline(always)]
     fn device(&self) -> &Device {
         &self.device
     }
 
+    #[inline(always)]
     fn drag_camera_rotation(&mut self, drag_amount: f32x2) {
         Proj4Delegate::drag_camera_rotation(self, drag_amount);
     }
 
+    #[inline(always)]
     fn drag_camera_distance(&mut self, drag_amount: f32x2) {
         Proj4Delegate::drag_camera_distance(self, drag_amount);
     }
@@ -123,7 +133,7 @@ impl<R: RenderDelegateWithDraggableCamera> RendererDelgate for Delegate<R> {
             create_pipeline(
                 &device,
                 &library,
-                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, false),
+                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                 "Plane",
                 None,
                 &"main_vertex",
@@ -209,6 +219,7 @@ impl<R: RenderDelegateWithDraggableCamera> RendererDelgate for Delegate<R> {
         command_buffer
     }
 
+    #[inline]
     fn on_event(&mut self, event: UserEvent) {
         use MouseButton::*;
         use UserEvent::*;
@@ -309,7 +320,9 @@ impl<R: RenderDelegateWithDraggableCamera> Delegate<R> {
         desc.set_mipmap_level_count(6);
         desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-        self.plane_texture = Some(self.device().new_texture(&desc));
+        let plane_texture = self.device().new_texture(&desc);
+        plane_texture.set_label("Plane Texture");
+        self.plane_texture = Some(plane_texture);
         self.plane_renderer
             .on_event(UserEvent::WindowResize { size: plane_size });
     }
