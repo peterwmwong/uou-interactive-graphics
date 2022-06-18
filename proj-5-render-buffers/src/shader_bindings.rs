@@ -392,17 +392,26 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
-#[repr(i32)]
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum TextureFilterMode {
+    Nearest = 0,
+    Linear = 1,
+    Mipmap = 2,
+    Anistropic = 3,
+}
+#[repr(u8)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {
     MatrixModelToProjection = 0,
     LENGTH = 1,
 }
-#[repr(i32)]
+#[repr(u8)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragBufferIndex {
     Texture = 0,
-    LENGTH = 1,
+    TextureFilterMode = 1,
+    LENGTH = 2,
 }
 
 /**************************************************************************************************

@@ -11,13 +11,14 @@ use std::simd::f32x2;
 // TODO: REMOVE ME
 // TODO: REMOVE ME
 // TODO: REMOVE ME
-const INITIAL_CAMERA_DISTANCE: f32 = 0.6134694;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-0.047856454, 0.]);
+const INITIAL_PLANE_TEXTURE_FILTER_MODE: TextureFilterMode = TextureFilterMode::Anistropic;
+const INITIAL_CAMERA_DISTANCE: f32 = 0.56915706;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 64., 0.]);
+// const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-0.047856454, 0.]);
 // const INITIAL_CAMERA_DISTANCE: f32 = 1.;
-// const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
-const N: f32 = 0.1;
+const N: f32 = 0.001;
 const F: f32 = 100000.0;
 const NEAR_FIELD_MAJOR_AXIS: f32 = N / INITIAL_CAMERA_DISTANCE;
 const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
@@ -28,8 +29,9 @@ const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
 );
 
 struct CheckerboardDelegate {
-    pub device: Device,
     command_queue: CommandQueue,
+    pub device: Device,
+    needs_render: bool,
     render_pipeline_state: RenderPipelineState,
 }
 
@@ -37,6 +39,7 @@ impl RendererDelgate for CheckerboardDelegate {
     fn new(device: Device) -> Self {
         Self {
             command_queue: device.new_command_queue(),
+            needs_render: true,
             render_pipeline_state: create_pipeline(
                 &device,
                 &device
@@ -56,6 +59,7 @@ impl RendererDelgate for CheckerboardDelegate {
     }
 
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        self.needs_render = false;
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
@@ -71,6 +75,10 @@ impl RendererDelgate for CheckerboardDelegate {
         encoder.end_encoding();
         command_buffer
     }
+
+    fn needs_render(&self) -> bool {
+        self.needs_render
+    }
 }
 
 struct Delegate {
@@ -80,9 +88,10 @@ struct Delegate {
     matrix_model_to_world: f32x4x4,
     matrix_model_to_projection: f32x4x4,
     render_pipeline_state: RenderPipelineState,
-    plane_texture: Option<Texture>,
     // plane_renderer: Proj4Delegate<false>,
     plane_renderer: CheckerboardDelegate,
+    plane_texture: Option<Texture>,
+    plane_texture_filter_mode: TextureFilterMode,
     screen_size: f32x2,
     needs_render: bool,
 }
@@ -113,17 +122,17 @@ impl RendererDelgate for Delegate {
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
-            matrix_model_to_world,
+            command_queue,
             matrix_model_to_projection: f32x4x4::identity(),
+            matrix_model_to_world,
+            needs_render: false,
+            plane_renderer: CheckerboardDelegate::new(device),
+            plane_texture_filter_mode: INITIAL_PLANE_TEXTURE_FILTER_MODE,
             plane_texture: None,
             render_pipeline_state,
             screen_size: f32x2::default(),
-            needs_render: false,
-            command_queue,
             // plane_renderer: Proj4Delegate::<false>::new(device),
-            plane_renderer: CheckerboardDelegate::new(device),
         };
-
         delegate.update_camera(
             delegate.screen_size,
             delegate.camera_rotation,
@@ -145,7 +154,14 @@ impl RendererDelgate for Delegate {
         // If the Plane needs to render, use that command buffer so rendering is in sync.
         // Otherwise, create a new command buffer.
         let command_buffer = if self.plane_renderer.needs_render() {
-            self.plane_renderer.render(plane_texture)
+            let command_buffer = self.plane_renderer.render(plane_texture);
+            {
+                let encoder = command_buffer.new_blit_command_encoder();
+                encoder.set_label("Plane Texture Generate Mipmaps");
+                encoder.generate_mipmaps(plane_texture);
+                encoder.end_encoding();
+            }
+            command_buffer
         } else {
             self.command_queue
                 .new_command_buffer_with_unretained_references()
@@ -163,6 +179,11 @@ impl RendererDelgate for Delegate {
                 self.matrix_model_to_projection.metal_float4x4(),
             );
             encoder.set_fragment_texture(FragBufferIndex::Texture as _, Some(plane_texture));
+            encode_fragment_bytes(
+                encoder,
+                FragBufferIndex::TextureFilterMode as _,
+                &self.plane_texture_filter_mode,
+            );
             encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
             encoder.pop_debug_group();
         }
@@ -208,6 +229,16 @@ impl RendererDelgate for Delegate {
                     // }
                 }
             }
+            KeyDown { key_code, .. } => {
+                self.update_plane_texture_filter_mode(match key_code {
+                    29 /* 0 */ => TextureFilterMode::Anistropic,
+                    18 /* 1 */ => TextureFilterMode::Nearest,
+                    19 /* 2 */ => TextureFilterMode::Linear,
+                    20 /* 3 */ => TextureFilterMode::Mipmap,
+                    21 /* 4 */ => TextureFilterMode::Anistropic,
+                    _ => self.plane_texture_filter_mode
+                });
+            }
             WindowResize { size, .. } => {
                 self.update_plane_texture_size(size);
                 self.update_camera(size, self.camera_rotation, self.camera_distance);
@@ -248,6 +279,11 @@ impl Delegate {
         orthographic_matrix * PERSPECTIVE_MATRIX
     }
 
+    #[inline]
+    fn update_plane_texture_filter_mode(&mut self, mode: TextureFilterMode) {
+        self.needs_render = mode != std::mem::replace(&mut self.plane_texture_filter_mode, mode);
+    }
+
     fn update_plane_texture_size(&mut self, size: f32x2) {
         let plane_size = f32x2::splat(size.reduce_max());
 
@@ -258,6 +294,7 @@ impl Delegate {
         let desc = TextureDescriptor::new();
         desc.set_width(plane_size[0] as _);
         desc.set_height(plane_size[0] as _);
+        desc.set_mipmap_level_count(6);
         desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         self.plane_texture = Some(self.device().new_texture(&desc));

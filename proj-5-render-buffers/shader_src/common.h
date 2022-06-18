@@ -4,15 +4,24 @@
 #ifndef common_h
 #define common_h
 
-enum struct VertexBufferIndex
+enum struct TextureFilterMode: unsigned char
+{
+    Nearest = 0,
+    Linear,
+    Mipmap,
+    Anistropic
+};
+
+enum struct VertexBufferIndex: unsigned char
 {
     MatrixModelToProjection = 0,
     LENGTH
 };
 
-enum struct FragBufferIndex
+enum struct FragBufferIndex: unsigned char
 {
     Texture = 0,
+    TextureFilterMode,
     LENGTH
 };
 

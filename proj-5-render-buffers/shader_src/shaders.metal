@@ -27,7 +27,7 @@ CheckerboardVertexOut checkerboard_vertex(uint vertex_id [[vertex_id]])
 fragment
 half4 checkerboard_fragment(CheckerboardVertexOut in [[stage_in]])
 {
-    const float square_size = 32.0;
+    const float square_size = 8.0;
     const uint2 alt = uint2(in.position.xy / square_size) & 1;
     return half4(alt.x == alt.y);
 };
@@ -58,10 +58,16 @@ VertexOut main_vertex(         uint       vertex_id                  [[vertex_id
 }
 
 [[fragment]]
-half4 main_fragment(VertexOut       in      [[stage_in]],
-                    texture2d<half> texture [[texture(FragBufferIndex::Texture)]])
+half4 main_fragment(         VertexOut           in      [[stage_in]],
+                             texture2d<half>     texture [[texture(FragBufferIndex::Texture)]],
+                    constant TextureFilterMode & mode    [[buffer(FragBufferIndex::TextureFilterMode)]])
 {
-    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+    const sampler tx_sampler =
+          mode == TextureFilterMode::Nearest    ? sampler(address::clamp_to_edge, mag_filter::nearest, min_filter::nearest, mip_filter::nearest)
+        : mode == TextureFilterMode::Linear     ? sampler(address::clamp_to_edge, mag_filter::linear,  min_filter::linear,  mip_filter::nearest)
+        : mode == TextureFilterMode::Mipmap     ? sampler(address::clamp_to_edge, mag_filter::linear,  min_filter::linear,  mip_filter::linear)
+        : mode == TextureFilterMode::Anistropic ? sampler(address::clamp_to_edge, mag_filter::linear,  min_filter::linear,  mip_filter::linear, max_anisotropy(4))
+        : sampler();
     const half4 color   = texture.sample(tx_sampler, in.tx_coord);
     const half4 ambient = 0.1;
     return color + ambient;
