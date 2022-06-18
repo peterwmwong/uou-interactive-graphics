@@ -95,6 +95,10 @@
 - Look at Apple Developer Sample Code projects on how a scheme's executable is referenced in a non-absolute path way
     - Currently `/Users/pwong` shows for Run and Profile schemes.
 
+# All Projects
+
+- Add gif/picture to readmes
+
 # tasks.json
 
 - Could saving a metal file, auto restart a running application (based on the crate directory)?

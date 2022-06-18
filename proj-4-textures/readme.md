@@ -1,4 +1,4 @@
-https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=5
+https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=4
 
 # Usage
 
@@ -9,14 +9,6 @@ cargo run --bin proj-4-textures [OPTIONAL: Path to Wavefront OBJ file]
 ## Examples
 
 **IMPORTANT: Current working directory is the workspace directory (repository root), not the project directory.**
-
-### Checkerboard
-
-Good for comparing different texture filtering (see [Controls](#controls) for changing Texture Filter modes)
-
-```sh
-cargo run --bin proj-5-render-buffers
-```
 
 ### Teapot model
 
@@ -36,12 +28,12 @@ cargo run --bin proj-4-textures proj-4-textures proj-4-textures/assets/yoda/yoda
 |--------------------------------|----------------------------------------------|
 | Right button drag              | Camera zoom in/out                           |
 | Left button drag               | Camera orbits                                |
-| Alt/Option + Right button drag | Camera zoom in/out model rendered to texture |
-| Alt/Option + Left button drag  | Camera orbits model rendered to texture      |
+| Ctrl + Right button drag       | Light orbits                                 |
 
 | Key | Action                                 |
 |-----|----------------------------------------|
-|  1  | Texture Filter: Nearest                |
-|  2  | Texture Filter: Bilinear               |
-|  3  | Texture Filter: Trilinear              |
-|  4  | Texture Filter: Anisotropic (max 4)    |
+|  0  | Ambient + Diffuse + Specular (default) |
+|  1  | Normals                                |
+|  2  | Ambient                                |
+|  3  | Ambient + Diffuse                      |
+|  4  | Specular                               |
