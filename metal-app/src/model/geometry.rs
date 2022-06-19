@@ -186,7 +186,7 @@ impl<
             length as _,
             MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
         );
-        arg_buffer.set_label("Geometry Argument Buffer2");
+        arg_buffer.set_label("Geometry Argument Buffer");
         let mut args = arg_buffer.contents() as *mut MetalGPUAddress;
 
         // Allocate buffers...

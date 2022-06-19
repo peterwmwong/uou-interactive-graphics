@@ -251,6 +251,7 @@ impl<
     ) -> (Buffer, u32, Vec<Texture>) {
         let num_materials = self.materials.len();
         let arg_encoded_length = arg_encoder.encoded_length() as u32;
+        // TODO: Allocate from Heap
         let buffer = device.new_buffer(
             (arg_encoded_length as u64) * num_materials as u64,
             DEFAULT_RESOURCE_OPTIONS,
