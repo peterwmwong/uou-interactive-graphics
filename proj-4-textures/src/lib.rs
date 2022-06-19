@@ -110,10 +110,12 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 
 impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     fn new(device: Device) -> Self {
-        let model_file_path = std::env::args()
-            .skip(1)
+        let executable_name = std::env::args()
             .nth(0)
-            .expect("Usage: proj-4-textures [Path to Wavefront OBJ file]");
+            .expect("Failed to access command line executable name");
+        let model_file_path = std::env::args().nth(1).expect(&format!(
+            "Usage: {executable_name} [Path to Wavefront OBJ file]"
+        ));
         let model_file = PathBuf::from(model_file_path);
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
