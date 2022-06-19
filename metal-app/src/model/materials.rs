@@ -1,6 +1,8 @@
 use super::heap_resident::HeapResident;
-use crate::{align_size, metal::*, DEFAULT_RESOURCE_OPTIONS};
-use std::{collections::HashMap, path::PathBuf};
+use crate::{
+    align_size, metal::*, objc_sendmsg_with_cached_sel, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
+};
+use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
 type RGB32 = [f32; 3];
 
@@ -250,12 +252,6 @@ impl<
         arg_encoder: &ArgumentEncoder,
     ) -> (Buffer, u32, Vec<Texture>) {
         let num_materials = self.materials.len();
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Can we apply gpuAddress here?
-        // - What's different than Geometry, is we have constant data (specular shineness)
-        // - Start by figuring out what does arg_encoded_length look like with this constant (and without)
         let arg_encoded_length = arg_encoder.encoded_length() as u32;
         // TODO: Allocate from Heap
         let buffer = device.new_buffer(
@@ -263,33 +259,34 @@ impl<
             DEFAULT_RESOURCE_OPTIONS,
         );
         buffer.set_label("Materials Argument Buffer");
+        let mut args = buffer.contents() as *mut MetalGPUAddress;
 
+        let gpu_handle_sel = sel!(gpuHandle);
         let mut texture_cache: HashMap<MaterialSourceKey<'a>, Texture> =
             HashMap::with_capacity(self.sources.len());
-        let mut load_texture_buffer: Vec<u8> =
-            Vec::with_capacity(self.max_load_texture_buffer_size);
-        unsafe { load_texture_buffer.set_len(self.max_load_texture_buffer_size) };
-        for (i, mat) in self.materials.iter().enumerate() {
-            arg_encoder.set_argument_buffer_to_element(i as _, &buffer, 0);
+        let mut read_png_buffer: Vec<u8> = Vec::with_capacity(self.max_load_texture_buffer_size);
+        unsafe { read_png_buffer.set_len(self.max_load_texture_buffer_size) };
+        for mat in &self.materials {
             for (id, source_key) in [
                 (MATERIAL_ID_AMBIENT_TEXTURE, mat.ambient),
                 (MATERIAL_ID_DIFFUSE_TEXTURE, mat.diffuse),
                 (MATERIAL_ID_SPECULAR_TEXTURE, mat.specular),
             ] {
-                arg_encoder.set_texture(
-                    id as _,
-                    texture_cache.entry(source_key).or_insert_with(|| {
-                        self.sources
-                            .get_mut(&source_key)
-                            .expect("Couldn't find source key")
-                            .allocate_texture(heap, &mut load_texture_buffer)
-                    }),
-                );
+                let texture: &TextureRef = texture_cache.entry(source_key).or_insert_with(|| {
+                    self.sources
+                        .get_mut(&source_key)
+                        .expect("Couldn't find source key")
+                        .allocate_texture(heap, &mut read_png_buffer)
+                });
+                unsafe {
+                    *args.add(id as _) = objc_sendmsg_with_cached_sel(texture, gpu_handle_sel);
+                }
             }
             unsafe {
-                *(arg_encoder.constant_data(MATERIAL_ID_SPECULAR_SHINENESS as _) as *mut f32) =
-                    mat.specular_shineness
-            };
+                let arg_shineness_ptr = args.add(MATERIAL_ID_SPECULAR_SHINENESS as _) as *mut f32;
+                *arg_shineness_ptr = mat.specular_shineness;
+                args = args.byte_add(arg_encoded_length as _);
+            }
         }
         let textures = texture_cache.into_iter().map(|(_, tx)| tx).collect();
         (buffer, arg_encoded_length, textures)

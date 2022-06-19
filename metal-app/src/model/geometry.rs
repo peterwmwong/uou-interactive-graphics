@@ -2,6 +2,7 @@ use super::heap_resident::HeapResident;
 use crate::{
     align_size, allocate_new_buffer_with_heap, byte_size_of_slice, copy_into_buffer,
     get_gpu_addresses, metal::*, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
+    METAL_GPU_ADDRESS_BYTE_SIZE,
 };
 use std::simd::f32x4;
 
@@ -17,7 +18,6 @@ pub(crate) struct DrawInfo {
 }
 
 const NUM_GEOMETRY_BUFFERS: usize = 4;
-const METAL_GPU_ADDRESS_BYTE_SIZE: usize = std::mem::size_of::<MetalGPUAddress>();
 const MIN_GEOMETRY_ARGUMENT_BYTE_LENGTH: usize = NUM_GEOMETRY_BUFFERS * METAL_GPU_ADDRESS_BYTE_SIZE;
 
 // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).

@@ -1,11 +1,8 @@
 use crate::{unwrap_option_dcheck, unwrap_result_dcheck};
 use foreign_types::ForeignType;
 use metal::*;
-use objc::runtime::Object;
-use std::{
-    ffi::{c_void, CStr},
-    os::raw::c_ulong,
-};
+use objc::runtime::{Object, Sel};
+use std::ffi::{c_void, CStr};
 
 pub const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
     MTLResourceOptions::StorageModeShared.bits()
@@ -288,9 +285,10 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
 }
 
 pub type MetalGPUAddress = std::os::raw::c_ulong;
+pub const METAL_GPU_ADDRESS_BYTE_SIZE: usize = std::mem::size_of::<MetalGPUAddress>();
 
 #[inline(always)]
-pub fn get_gpu_addresses<const N: usize>(bufs: [&BufferRef; N]) -> [c_ulong; N] {
+pub fn get_gpu_addresses<const N: usize>(bufs: [&BufferRef; N]) -> [MetalGPUAddress; N] {
     let sel = sel!(gpuAddress);
     bufs.map(|b| unsafe {
         let result = objc::__send_message(&*b, sel, ());
@@ -302,6 +300,22 @@ pub fn get_gpu_addresses<const N: usize>(bufs: [&BufferRef; N]) -> [c_ulong; N] 
         #[cfg(not(debug_assertions))]
         result.unwrap_unchecked()
     })
+}
+
+#[inline(always)]
+pub unsafe fn objc_sendmsg_with_cached_sel<T, R>(obj: *const T, sel: Sel) -> R
+where
+    T: objc::Message,
+    R: Copy + Clone + 'static,
+{
+    let result = objc::__send_message(&*obj, sel, ());
+    #[cfg(debug_assertions)]
+    match result {
+        Err(s) => panic!("{}", s),
+        Ok(r) => r,
+    }
+    #[cfg(not(debug_assertions))]
+    result.unwrap_unchecked()
 }
 
 // TODO: Investigate when this improves performance.
