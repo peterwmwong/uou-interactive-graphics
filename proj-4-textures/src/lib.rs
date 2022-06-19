@@ -59,8 +59,8 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
 }
 
 struct PipelineResults {
-    model: CreateRenderPipelineResults,
-    light: CreateRenderPipelineResults,
+    model_pipeline: CreateRenderPipelineResults,
+    light_pipeline: CreateRenderPipelineResults,
 }
 
 fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
@@ -83,7 +83,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
         );
     }
     PipelineResults {
-        model: create_pipeline(
+        model_pipeline: create_pipeline(
             &device,
             &library,
             &base_pipeline_desc,
@@ -94,7 +94,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
             &"main_fragment",
             FragBufferIndex::LENGTH as _,
         ),
-        light: create_pipeline(
+        light_pipeline: create_pipeline(
             &device,
             &library,
             &base_pipeline_desc,
@@ -105,28 +105,6 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
             &"light_fragment",
             0,
         ),
-    }
-}
-
-const CAMERA_DRAG_MODIFIER_KEYS: ModifierKeys = ModifierKeys::empty();
-
-#[inline(always)]
-pub fn new_drag_camera_distance_event(drag_amount: f32x2) -> UserEvent {
-    UserEvent::MouseDrag {
-        button: ui_ray::DISTANCE_MOUSE_BUTTON,
-        modifier_keys: CAMERA_DRAG_MODIFIER_KEYS,
-        position: Default::default(),
-        drag_amount,
-    }
-}
-
-#[inline(always)]
-pub fn new_drag_camera_rotation_event(drag_amount: f32x2) -> UserEvent {
-    UserEvent::MouseDrag {
-        button: ui_ray::ROTATE_MOUSE_BUTTON,
-        modifier_keys: CAMERA_DRAG_MODIFIER_KEYS,
-        position: Default::default(),
-        drag_amount,
     }
 }
 
@@ -141,7 +119,10 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let mode = INITIAL_MODE;
-        let pipelines = create_pipelines(&device, &library, mode);
+        let PipelineResults {
+            model_pipeline,
+            light_pipeline,
+        } = create_pipelines(&device, &library, mode);
         let model = Model::from_file::<
             PathBuf,
             { GeometryID::Indices as _ },
@@ -155,18 +136,15 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         >(
             model_file,
             &device,
-            &pipelines
-                .model
+            &model_pipeline
                 .vertex_function
                 .new_argument_encoder(VertexBufferIndex::Geometry as _),
-            &pipelines
-                .model
+            &model_pipeline
                 .fragment_function
                 .new_argument_encoder(FragBufferIndex::Material as _),
         );
 
-        let world_arg_encoder = pipelines
-            .model
+        let world_arg_encoder = model_pipeline
             .fragment_function
             .new_argument_encoder(FragBufferIndex::World as _);
         let world_arg_buffer = device.new_buffer(
@@ -214,8 +192,8 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             matrix_model_to_world,
             mode,
             model,
-            render_pipeline_state: pipelines.model.pipeline_state,
-            render_light_pipeline_state: pipelines.light.pipeline_state,
+            render_pipeline_state: model_pipeline.pipeline_state,
+            render_light_pipeline_state: light_pipeline.pipeline_state,
             screen_size: f32x2::default(),
             world_arg_buffer,
             world_arg_encoder,
@@ -345,8 +323,8 @@ impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
         if mode != self.mode {
             self.mode = mode;
             let results = create_pipelines(&self.device, &self.library, mode);
-            self.render_pipeline_state = results.model.pipeline_state;
-            self.render_light_pipeline_state = results.light.pipeline_state;
+            self.render_pipeline_state = results.model_pipeline.pipeline_state;
+            self.render_light_pipeline_state = results.light_pipeline.pipeline_state;
             self.needs_render = true;
         }
     }

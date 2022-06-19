@@ -214,7 +214,10 @@ fn init_and_attach_view<R: RendererDelgate + 'static>(
                     if key_code == ESCAPE_KEY {
                         let () = msg_send![NSApp(), terminate: nil];
                     } else {
-                        get_renderer::<R>(this).on_event(UserEvent::KeyDown { key_code });
+                        get_renderer::<R>(this).on_event(UserEvent::KeyDown {
+                            key_code,
+                            modifier_keys: parse_modifier_keys(NSEvent::modifierFlags(event)),
+                        });
                     }
                 }
             }

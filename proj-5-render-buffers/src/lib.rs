@@ -2,9 +2,7 @@
 mod shader_bindings;
 
 use metal_app::{metal::*, *};
-use proj_4_textures::{
-    new_drag_camera_distance_event, new_drag_camera_rotation_event, Delegate as Proj4Delegate,
-};
+use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
 use std::{f32::consts::PI, ops::Neg, simd::f32x2};
 
@@ -207,7 +205,10 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                 drag_amount,
                 ..
             } => {
-                if modifier_keys.is_empty() {
+                if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
+                    self.plane_renderer
+                        .on_event(remove_modifier_keys(event, ModifierKeys::ALT_OPTION))
+                } else if modifier_keys.is_empty() {
                     let mut camera_rotation = self.camera_rotation;
                     let mut camera_distance = self.camera_distance;
                     match button {
@@ -225,28 +226,28 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                         Right => camera_distance += -drag_amount[1] / 250.,
                     }
                     self.update_camera(self.screen_size, camera_rotation, camera_distance);
-                } else if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
-                    match button {
-                        Left => self
-                            .plane_renderer
-                            .on_event(new_drag_camera_rotation_event(drag_amount)),
-                        Right => self
-                            .plane_renderer
-                            .on_event(new_drag_camera_distance_event(drag_amount)),
-                    }
                 }
             }
-            KeyDown { key_code, .. } => {
-                self.update_plane_texture_filter_mode(match key_code {
-                    29 /* 0 */ => TextureFilterMode::Anistropic,
-                    18 /* 1 */ => TextureFilterMode::Nearest,
-                    19 /* 2 */ => TextureFilterMode::Linear,
-                    20 /* 3 */ => TextureFilterMode::Mipmap,
-                    21 /* 4 */ => TextureFilterMode::Anistropic,
-                    _ => self.plane_texture_filter_mode
-                });
+            KeyDown {
+                key_code,
+                modifier_keys,
+            } => {
+                if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
+                    self.plane_renderer
+                        .on_event(remove_modifier_keys(event, ModifierKeys::ALT_OPTION))
+                } else {
+                    self.update_plane_texture_filter_mode(match key_code {
+                        29 /* 0 */ => TextureFilterMode::Anistropic,
+                        18 /* 1 */ => TextureFilterMode::Nearest,
+                        19 /* 2 */ => TextureFilterMode::Linear,
+                        20 /* 3 */ => TextureFilterMode::Mipmap,
+                        21 /* 4 */ => TextureFilterMode::Anistropic,
+                        _ => self.plane_texture_filter_mode
+                    });
+                }
             }
             WindowResize { size, .. } => {
+                self.plane_renderer.on_event(event);
                 self.update_plane_texture_size(size);
                 self.update_camera(size, self.camera_rotation, self.camera_distance);
             }

@@ -43,10 +43,53 @@ pub enum UserEvent {
     },
     KeyDown {
         key_code: c_ushort,
+        modifier_keys: ModifierKeys,
     },
     WindowResize {
         size: f32x2,
     },
+}
+
+pub fn remove_modifier_keys(event: UserEvent, modifier_keys_to_remove: ModifierKeys) -> UserEvent {
+    match event {
+        UserEvent::MouseDown {
+            button,
+            modifier_keys,
+            position,
+        } => UserEvent::MouseDown {
+            button,
+            position,
+            modifier_keys: modifier_keys.difference(modifier_keys_to_remove),
+        },
+        UserEvent::MouseUp {
+            button,
+            modifier_keys,
+            position,
+        } => UserEvent::MouseUp {
+            button,
+            position,
+            modifier_keys: modifier_keys.difference(modifier_keys_to_remove),
+        },
+        UserEvent::MouseDrag {
+            button,
+            modifier_keys,
+            position,
+            drag_amount,
+        } => UserEvent::MouseDrag {
+            button,
+            modifier_keys: modifier_keys.difference(modifier_keys_to_remove),
+            position,
+            drag_amount,
+        },
+        UserEvent::KeyDown {
+            key_code,
+            modifier_keys,
+        } => UserEvent::KeyDown {
+            key_code,
+            modifier_keys: modifier_keys.difference(modifier_keys_to_remove),
+        },
+        e @ _ => e,
+    }
 }
 
 pub trait RendererDelgate {
