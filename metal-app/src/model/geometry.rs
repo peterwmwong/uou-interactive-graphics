@@ -171,6 +171,12 @@ impl<
         self.heap_size
     }
 
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // How do we get arg_encoded_length (size of Geometry struct in common.h) without ArgumentEncoder?
+    // - Because ArgumentEncoder is deprecated, surely there's replacement for just getting the byte length
+    // - Checkout MTLBinding and MTLBufferBinding documentation.
     fn allocate_and_encode(
         &mut self,
         heap: &Heap,

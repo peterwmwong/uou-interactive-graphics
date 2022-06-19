@@ -250,6 +250,12 @@ impl<
         arg_encoder: &ArgumentEncoder,
     ) -> (Buffer, u32, Vec<Texture>) {
         let num_materials = self.materials.len();
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Can we apply gpuAddress here?
+        // - What's different than Geometry, is we have constant data (specular shineness)
+        // - Start by figuring out what does arg_encoded_length look like with this constant (and without)
         let arg_encoded_length = arg_encoder.encoded_length() as u32;
         // TODO: Allocate from Heap
         let buffer = device.new_buffer(
