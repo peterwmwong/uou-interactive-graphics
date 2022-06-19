@@ -2,7 +2,10 @@ use crate::{unwrap_option_dcheck, unwrap_result_dcheck};
 use foreign_types::ForeignType;
 use metal::*;
 use objc::runtime::Object;
-use std::ffi::{c_void, CStr};
+use std::{
+    ffi::{c_void, CStr},
+    os::raw::c_ulong,
+};
 
 pub const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
     MTLResourceOptions::StorageModeShared.bits()
@@ -15,11 +18,31 @@ pub const fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usi
 }
 
 #[inline(always)]
-pub fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, offset: usize) -> usize {
+pub fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, byte_offset: usize) -> usize {
     unsafe {
         let count = src.len();
-        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(offset), count);
-        offset + std::mem::size_of::<T>() * count
+        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(byte_offset), count);
+        byte_offset + std::mem::size_of::<T>() * count
+    }
+}
+
+#[inline]
+pub fn debug_assert_buffers_equal(a: &Buffer, b: &Buffer) {
+    #[cfg(debug_assertions)]
+    {
+        let a_length = a.length();
+        let b_length = b.length();
+        debug_assert_eq!(a_length, b_length, "Buffer lengths are not equal");
+
+        let a_contents = a.contents() as *const u8;
+        let b_contents = b.contents() as *const u8;
+        for i in 0..a_length {
+            unsafe {
+                let a_val = *(a_contents.add(i as _));
+                let b_val = *(b_contents.add(i as _));
+                debug_assert_eq!(a_val, b_val, "Byte {i} is not equal.");
+            }
+        }
     }
 }
 
@@ -262,6 +285,12 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
         a.set_texture(Some(depth_texture));
     }
     desc
+}
+
+pub type MetalGPUAddress = std::os::raw::c_ulong;
+
+pub fn get_gpu_address(buf: &BufferRef) -> c_ulong {
+    unsafe { msg_send![buf, gpuAddress] }
 }
 
 // TODO: Investigate when this improves performance.
