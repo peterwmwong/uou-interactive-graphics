@@ -289,8 +289,19 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
 
 pub type MetalGPUAddress = std::os::raw::c_ulong;
 
-pub fn get_gpu_address(buf: &BufferRef) -> c_ulong {
-    unsafe { msg_send![buf, gpuAddress] }
+#[inline(always)]
+pub fn get_gpu_addresses<const N: usize>(bufs: [&BufferRef; N]) -> [c_ulong; N] {
+    let sel = sel!(gpuAddress);
+    bufs.map(|b| unsafe {
+        let result = objc::__send_message(&*b, sel, ());
+        #[cfg(debug_assertions)]
+        match result {
+            Err(s) => panic!("{}", s),
+            Ok(r) => r,
+        }
+        #[cfg(not(debug_assertions))]
+        result.unwrap_unchecked()
+    })
 }
 
 // TODO: Investigate when this improves performance.

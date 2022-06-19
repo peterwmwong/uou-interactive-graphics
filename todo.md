@@ -36,37 +36,6 @@
 
 # metal-app
 
-- Extract Camera/Light user interaction and position (rotation/distance) maintenance
-    ```rs
-    // API
-    struct UserInteractableRay { // jeeeeeeeeeessus, think of a better name mate
-        distance_from_origin: f32,
-        rotation_xy: f32x2,
-        modifier_keys: ModifierKeys,
-    }
-
-    impl UserInteractableRay {
-        // Returns `true` if event matches and caused a change in distance or rotation
-        pub fn on_event(&mut self, event: UserEvent) -> bool { ... }
-    }
-
-    // Usage
-    Delegate {
-        light: UserInteractableRay::new(INITIAL_LIGHT_DISTANCE, INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL),
-        camera: UserInteractableRay::new(INITIAL_CAMERA_DISTANCE, INITIAL_CAMERA_ROTATION, ModifierKeys::empty())
-    }
-
-    impl RenderDelegate for Delegate {
-        fn on_event(&mut self, event: UserEvent) {
-            for el in &[&self.light, &self.camera] {
-                if el.on_event(event) { // `true` if event matches and caused a change
-                    self.needs_render = true;
-                    return;
-                }
-            }
-        }
-    }
-    ```
 - Rethink RenderDelegate API
     - proj-5 exposed how awkward it is for one Delegate to use another
         - It's not easy to initialize
@@ -76,8 +45,12 @@
             - CommandBuffer
             - Device
 - Metal 3
-    - Use new gpuAddress/gpuHandle, and remove calls to argument encoder
+    - Use new gpuAddress/gpuHandle, and remove calls to argument encoder for Materials
         - https://developer.apple.com/videos/play/wwdc2022/10101/
+- Performance: Reduce/Batch Obj-C implicit `sel!` calls
+    - Part of the overhead with calling into Obj-C is registering an Obj-C Selector (`sel!`) before using it.
+    - Find other places where we make repeated Obj-C calls, and cache the Obj-C Selector and reuse it.
+    - See example `get_gpu_addresses()`
 - Write tests for Materials
 - Write tests for Geometry
 - Write tests for Model

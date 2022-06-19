@@ -178,7 +178,7 @@
             "label": "Run proj-5-render-buffers checkerboard"
         },
         {
-            "label": "asm proj-5-render-buffers",
+            "label": "asm proj-4-textures",
             "type": "shell",
             "presentation": {
                 "echo": true,
@@ -188,7 +188,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/build-release-asm.sh proj-5-render-buffers",
+            "command": "${workspaceFolder}/build-release-asm.sh proj-4-textures",
             "problemMatcher": []
         },
     ]

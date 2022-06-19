@@ -1,7 +1,7 @@
 use super::heap_resident::HeapResident;
 use crate::{
     align_size, allocate_new_buffer_with_heap, byte_size_of_slice, copy_into_buffer,
-    get_gpu_address, metal::*, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
+    get_gpu_addresses, metal::*, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
 use std::simd::f32x4;
 
@@ -193,19 +193,17 @@ impl<
         let mut indices_offset: usize = 0;
         let (indices_ptr, indices_buf) =
             allocate_new_buffer_with_heap::<u32>(heap, "indices", self.indices_buf_length as _);
-        let indices_gpu_address = get_gpu_address(&indices_buf);
         let mut positions_offset: usize = 0;
         let (positions_ptr, positions_buf) =
             allocate_new_buffer_with_heap::<f32>(heap, "positions", self.positions_buf_length as _);
-        let positions_gpu_address = get_gpu_address(&positions_buf);
         let mut normals_offset: usize = 0;
         let (normals_ptr, normals_buf) =
             allocate_new_buffer_with_heap::<f32>(heap, "normals", self.normals_buf_length as _);
-        let normals_gpu_address = get_gpu_address(&normals_buf);
         let mut tx_coords_offset: usize = 0;
         let (tx_coords_ptr, tx_coords_buf) =
             allocate_new_buffer_with_heap::<f32>(heap, "tx_coords", self.tx_coords_buf_length as _);
-        let tx_coords_gpu_address = get_gpu_address(&tx_coords_buf);
+        let [indices_gpu_address, positions_gpu_address, normals_gpu_address, tx_coords_gpu_address] =
+            get_gpu_addresses([&indices_buf, &positions_buf, &normals_buf, &tx_coords_buf]);
 
         for tobj::Model { mesh, .. } in self.objects.into_iter() {
             if GEOMETRY_ID_INDICES_BUFFER + 1 == GEOMETRY_ID_POSITIONS_BUFFER
@@ -213,15 +211,6 @@ impl<
                 && GEOMETRY_ID_NORMALS_BUFFER + 1 == GEOMETRY_ID_TX_COORDS_BUFFER
             {
                 unsafe {
-                    // for (gpu_address, offset) in [
-                    //     (indices_gpu_address, indices_offset),
-                    //     (positions_gpu_address, positions_offset),
-                    //     (normals_gpu_address, normals_offset),
-                    //     (tx_coords_gpu_address, tx_coords_offset),
-                    // ] {
-                    //     *args = gpu_address + (offset as MetalGPUAddress);
-                    //     args = args.add(1);
-                    // }
                     *(args.add(0)) = indices_gpu_address + (indices_offset as MetalGPUAddress);
                     *(args.add(1)) = positions_gpu_address + (positions_offset as MetalGPUAddress);
                     *(args.add(2)) = normals_gpu_address + (normals_offset as MetalGPUAddress);
@@ -230,39 +219,30 @@ impl<
                 };
             } else {
                 unsafe {
-                    // for (id, gpu_address, offset) in [
-                    //     (
-                    //         GEOMETRY_ID_INDICES_BUFFER,
-                    //         indices_gpu_address,
-                    //         indices_offset,
-                    //     ),
-                    //     (
-                    //         GEOMETRY_ID_POSITIONS_BUFFER,
-                    //         positions_gpu_address,
-                    //         positions_offset,
-                    //     ),
-                    //     (
-                    //         GEOMETRY_ID_NORMALS_BUFFER,
-                    //         normals_gpu_address,
-                    //         normals_offset,
-                    //     ),
-                    //     (
-                    //         GEOMETRY_ID_TX_COORDS_BUFFER,
-                    //         tx_coords_gpu_address,
-                    //         tx_coords_offset,
-                    //     ),
-                    // ] {
-                    //     *(args.add(id as _)) = gpu_address + (offset as MetalGPUAddress);
-                    // }
-                    // args = args.byte_add(arg_encoded_length as _);
-                    *(args.add(GEOMETRY_ID_INDICES_BUFFER as _)) =
-                        indices_gpu_address + (indices_offset as MetalGPUAddress);
-                    *(args.add(GEOMETRY_ID_POSITIONS_BUFFER as _)) =
-                        positions_gpu_address + (positions_offset as MetalGPUAddress);
-                    *(args.add(GEOMETRY_ID_NORMALS_BUFFER as _)) =
-                        normals_gpu_address + (normals_offset as MetalGPUAddress);
-                    *(args.add(GEOMETRY_ID_TX_COORDS_BUFFER as _)) =
-                        tx_coords_gpu_address + (tx_coords_offset as MetalGPUAddress);
+                    for (id, gpu_address, offset) in [
+                        (
+                            GEOMETRY_ID_INDICES_BUFFER,
+                            indices_gpu_address,
+                            indices_offset,
+                        ),
+                        (
+                            GEOMETRY_ID_POSITIONS_BUFFER,
+                            positions_gpu_address,
+                            positions_offset,
+                        ),
+                        (
+                            GEOMETRY_ID_NORMALS_BUFFER,
+                            normals_gpu_address,
+                            normals_offset,
+                        ),
+                        (
+                            GEOMETRY_ID_TX_COORDS_BUFFER,
+                            tx_coords_gpu_address,
+                            tx_coords_offset,
+                        ),
+                    ] {
+                        *(args.add(id as _)) = gpu_address + (offset as MetalGPUAddress);
+                    }
                     args = args.byte_add(arg_encoded_length as _);
                 };
             }
