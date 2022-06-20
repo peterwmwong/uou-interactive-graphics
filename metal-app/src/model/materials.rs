@@ -249,13 +249,13 @@ impl<
         &mut self,
         heap: &Heap,
         device: &Device,
-        arg_encoder: &ArgumentEncoder,
+        arg_size: u32,
     ) -> (Buffer, u32, Vec<Texture>) {
         let num_materials = self.materials.len();
-        let arg_encoded_length = arg_encoder.encoded_length() as u32;
+        let arg_size = arg_size as u32;
         // TODO: Allocate from Heap
         let buffer = device.new_buffer(
-            (arg_encoded_length as u64) * num_materials as u64,
+            (arg_size as u64) * num_materials as u64,
             DEFAULT_RESOURCE_OPTIONS,
         );
         buffer.set_label("Materials Argument Buffer");
@@ -285,10 +285,10 @@ impl<
             unsafe {
                 let arg_shineness_ptr = args.add(MATERIAL_ID_SPECULAR_SHINENESS as _) as *mut f32;
                 *arg_shineness_ptr = mat.specular_shineness;
-                args = args.byte_add(arg_encoded_length as _);
+                args = args.byte_add(arg_size as _);
             }
         }
         let textures = texture_cache.into_iter().map(|(_, tx)| tx).collect();
-        (buffer, arg_encoded_length, textures)
+        (buffer, arg_size, textures)
     }
 }

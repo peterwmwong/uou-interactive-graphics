@@ -6,6 +6,6 @@ pub(crate) trait HeapResident<T: Sized> {
         &mut self,
         heap: &Heap,
         device: &Device,
-        arg_encoder: &ArgumentEncoder,
+        arg_size: u32,
     ) -> (Buffer, u32, T);
 }

@@ -125,6 +125,17 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             model_pipeline,
             light_pipeline,
         } = create_pipelines(&device, &library, mode);
+        let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
+        let geometry_arg_size = model_pipeline_reflection
+            .vertex_bindings()
+            .object_at_as::<BufferBindingRef>(VertexBufferIndex::Geometry as _)
+            .expect("Failed to access geometry vertex buffer argument information")
+            .buffer_data_size() as u32;
+        let material_arg_size = model_pipeline_reflection
+            .fragment_bindings()
+            .object_at_as::<BufferBindingRef>(FragBufferIndex::Material as _)
+            .expect("Failed to access material fragment buffer argument information")
+            .buffer_data_size() as u32;
         let model = Model::from_file::<
             PathBuf,
             { GeometryID::Indices as _ },
@@ -135,17 +146,12 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             { MaterialID::DiffuseTexture as _ },
             { MaterialID::SpecularTexture as _ },
             { MaterialID::SpecularShineness as _ },
-        >(
-            model_file,
-            &device,
-            &model_pipeline
-                .vertex_function
-                .new_argument_encoder(VertexBufferIndex::Geometry as _),
-            &model_pipeline
-                .fragment_function
-                .new_argument_encoder(FragBufferIndex::Material as _),
-        );
+        >(model_file, &device, geometry_arg_size, material_arg_size);
 
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: Replace with bindless
         let world_arg_encoder = model_pipeline
             .fragment_function
             .new_argument_encoder(FragBufferIndex::World as _);

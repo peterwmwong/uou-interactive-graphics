@@ -18,7 +18,9 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+            ],
             "cwd": "${workspaceFolder}"
         }
     ]

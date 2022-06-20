@@ -389,7 +389,7 @@ checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 [[package]]
 name = "metal"
 version = "0.23.1"
-source = "git+https://github.com/gfx-rs/metal-rs.git?rev=39c63ab25b16a4f0c2f793dc0ae1ee9298172748#39c63ab25b16a4f0c2f793dc0ae1ee9298172748"
+source = "git+https://github.com/peterwmwong/metal-rs.git?rev=719029f607b7df9a9bc4c5ee4a6a55a155e169dc#719029f607b7df9a9bc4c5ee4a6a55a155e169dc"
 dependencies = [
  "bitflags",
  "block",

@@ -171,22 +171,16 @@ impl<
         self.heap_size
     }
 
-    // TODO: START HERE 2
-    // TODO: START HERE 2
-    // TODO: START HERE 2
-    // How do we get arg_encoded_length (size of Geometry struct in common.h) without ArgumentEncoder?
-    // - Because ArgumentEncoder is deprecated, surely there's replacement for just getting the byte length
-    // - Checkout MTLBinding and MTLBufferBinding documentation.
     fn allocate_and_encode(
         &mut self,
         heap: &Heap,
         device: &Device,
-        geometry_arg_encoder: &ArgumentEncoder,
+        arg_size: u32,
     ) -> (Buffer, u32, GeometryBuffers) {
-        let arg_encoded_length = geometry_arg_encoder.encoded_length() as u32;
-        debug_assert_eq!(MIN_GEOMETRY_ARGUMENT_BYTE_LENGTH, arg_encoded_length as _);
+        let arg_size = arg_size as u32;
+        debug_assert_eq!(MIN_GEOMETRY_ARGUMENT_BYTE_LENGTH, arg_size as _);
 
-        let length = arg_encoded_length * self.objects.len() as u32;
+        let length = arg_size * self.objects.len() as u32;
         // TODO: Allocate from Heap
         let arg_buffer = device.new_buffer(
             length as _,
@@ -249,7 +243,7 @@ impl<
                     ] {
                         *(args.add(id as _)) = gpu_address + (offset as MetalGPUAddress);
                     }
-                    args = args.byte_add(arg_encoded_length as _);
+                    args = args.byte_add(arg_size as _);
                 };
             }
 
@@ -260,7 +254,7 @@ impl<
         }
         (
             arg_buffer,
-            arg_encoded_length,
+            arg_size,
             GeometryBuffers {
                 indices: indices_buf,
                 positions: positions_buf,

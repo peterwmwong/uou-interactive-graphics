@@ -27,6 +27,11 @@ pub struct Model {
 }
 
 impl Model {
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Change api to take in a GeometryArgumentEncoder, MaterialArgumentEncode (new traits), that
+    // allow using common.h generated struct AND metal 3 bindless.
     pub fn from_file<
         T: AsRef<Path>,
         const GEOMETRY_ID_INDICES_BUFFER: u16,
@@ -40,8 +45,8 @@ impl Model {
     >(
         obj_file: T,
         device: &Device,
-        geometry_arg_encoder: &ArgumentEncoder,
-        materials_arg_encoder: &ArgumentEncoder,
+        geometry_arg_size: u32,
+        materials_arg_size: u32,
     ) -> Self {
         let obj_file_ref = obj_file.as_ref();
         let (models, materials) = tobj::load_obj(
@@ -87,10 +92,10 @@ impl Model {
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
         let (materials_arg_buffer, materials_arg_encoded_length, material_textures) =
-            materials.allocate_and_encode(&heap, device, materials_arg_encoder);
+            materials.allocate_and_encode(&heap, device, materials_arg_size);
 
         let (geometry_arg_buffer, geometry_arg_encoded_length, geometry_buffers) =
-            geometry.allocate_and_encode(&heap, device, geometry_arg_encoder);
+            geometry.allocate_and_encode(&heap, device, geometry_arg_size);
 
         Self {
             heap,
