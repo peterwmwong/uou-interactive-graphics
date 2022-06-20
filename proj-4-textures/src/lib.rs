@@ -161,9 +161,9 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             model_pipeline,
             light_pipeline,
         } = create_pipelines(&device, &library, mode);
-        let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
         #[cfg(debug_assertions)]
         {
+            let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
             let geometry_arg_size = model_pipeline_reflection
                 .vertex_bindings()
                 .object_at_as::<BufferBindingRef>(VertexBufferIndex::Geometry as _)

@@ -204,6 +204,7 @@ pub struct CreateRenderPipelineResults {
     pub vertex_function: Function,
     pub fragment_function: Function,
     pub pipeline_state: RenderPipelineState,
+    #[cfg(debug_assertions)]
     pub pipeline_state_reflection: RenderPipelineReflection,
 }
 
@@ -249,7 +250,7 @@ pub fn create_pipeline(
         }
     }
 
-    // TODO: Make the release build NOT request reflection information
+    #[cfg(debug_assertions)]
     let (pipeline_state, pipeline_state_reflection) = unwrap_result_dcheck(
         device.new_render_pipeline_state_with_reflection(
             &pipeline_desc,
@@ -257,10 +258,17 @@ pub fn create_pipeline(
         ),
         "Failed to create render pipeline",
     );
+    #[cfg(not(debug_assertions))]
+    let pipeline_state = unwrap_result_dcheck(
+        device.new_render_pipeline_state(&pipeline_desc),
+        "Failed to create render pipeline",
+    );
+
     CreateRenderPipelineResults {
         vertex_function,
         fragment_function,
         pipeline_state,
+        #[cfg(debug_assertions)]
         pipeline_state_reflection,
     }
 }
