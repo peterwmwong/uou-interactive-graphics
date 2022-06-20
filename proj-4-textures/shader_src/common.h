@@ -4,6 +4,21 @@
 #ifndef common_h
 #define common_h
 
+#ifdef __METAL_VERSION__
+
+#include <metal_stdlib>
+using namespace metal;
+
+#define CONSTANT_PTR(x) constant x*
+#define TEXTURE(x) x
+
+#else
+
+#define CONSTANT_PTR(x) unsigned long
+#define TEXTURE(x) unsigned long
+
+#endif
+
 enum struct FC
 {
     HasAmbient = 0,
@@ -12,12 +27,11 @@ enum struct FC
     HasSpecular,
 };
 
-enum struct GeometryID
-{
-    Indices = 0,
-    Positions,
-    Normals,
-    TXCoords,
+struct Geometry {
+    CONSTANT_PTR(uint)          indices;
+    CONSTANT_PTR(packed_float3) positions;
+    CONSTANT_PTR(packed_float3) normals;
+    CONSTANT_PTR(packed_float2) tx_coords;
 };
 
 enum struct WorldID
@@ -30,12 +44,11 @@ enum struct WorldID
     CameraPosition,
 };
 
-enum struct MaterialID
-{
-    AmbientTexture = 0,
-    DiffuseTexture,
-    SpecularTexture,
-    SpecularShineness,
+struct Material {
+    TEXTURE(texture2d<half>) ambient_texture;
+    TEXTURE(texture2d<half>) diffuse_texture;
+    TEXTURE(texture2d<half>) specular_texture;
+    float                    specular_shineness;
 };
 
 enum struct VertexBufferIndex

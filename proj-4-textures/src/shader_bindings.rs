@@ -400,13 +400,66 @@ pub enum FC {
     HasNormal = 2,
     HasSpecular = 3,
 }
-#[repr(i32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum GeometryID {
-    Indices = 0,
-    Positions = 1,
-    Normals = 2,
-    TXCoords = 3,
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Geometry {
+    pub indices: ::std::os::raw::c_ulong,
+    pub positions: ::std::os::raw::c_ulong,
+    pub normals: ::std::os::raw::c_ulong,
+    pub tx_coords: ::std::os::raw::c_ulong,
+}
+#[test]
+fn bindgen_test_layout_Geometry() {
+    assert_eq!(
+        ::std::mem::size_of::<Geometry>(),
+        32usize,
+        concat!("Size of: ", stringify!(Geometry))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<Geometry>(),
+        8usize,
+        concat!("Alignment of ", stringify!(Geometry))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Geometry>())).indices as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Geometry),
+            "::",
+            stringify!(indices)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Geometry>())).positions as *const _ as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Geometry),
+            "::",
+            stringify!(positions)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Geometry>())).normals as *const _ as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Geometry),
+            "::",
+            stringify!(normals)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Geometry>())).tx_coords as *const _ as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Geometry),
+            "::",
+            stringify!(tx_coords)
+        )
+    );
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -418,13 +471,66 @@ pub enum WorldID {
     LightPosition = 4,
     CameraPosition = 5,
 }
-#[repr(i32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum MaterialID {
-    AmbientTexture = 0,
-    DiffuseTexture = 1,
-    SpecularTexture = 2,
-    SpecularShineness = 3,
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Material {
+    pub ambient_texture: ::std::os::raw::c_ulong,
+    pub diffuse_texture: ::std::os::raw::c_ulong,
+    pub specular_texture: ::std::os::raw::c_ulong,
+    pub specular_shineness: f32,
+}
+#[test]
+fn bindgen_test_layout_Material() {
+    assert_eq!(
+        ::std::mem::size_of::<Material>(),
+        32usize,
+        concat!("Size of: ", stringify!(Material))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<Material>(),
+        8usize,
+        concat!("Alignment of ", stringify!(Material))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Material>())).ambient_texture as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Material),
+            "::",
+            stringify!(ambient_texture)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Material>())).diffuse_texture as *const _ as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Material),
+            "::",
+            stringify!(diffuse_texture)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Material>())).specular_texture as *const _ as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Material),
+            "::",
+            stringify!(specular_texture)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<Material>())).specular_shineness as *const _ as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(Material),
+            "::",
+            stringify!(specular_shineness)
+        )
+    );
 }
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

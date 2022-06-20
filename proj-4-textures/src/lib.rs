@@ -108,6 +108,42 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
     }
 }
 
+// TODO: START HERE 3
+// TODO: START HERE 3
+// TODO: START HERE 3
+// Can we change the API so we're just passing a FnMut() for Material and Geometry Encoding?
+enum MaterialArgEncoder {}
+impl MaterialArgumentEncoder<Material> for MaterialArgEncoder {
+    fn set(
+        arg: &mut Material,
+        ambient_texture: MetalGPUAddress,
+        diffuse_texture: MetalGPUAddress,
+        specular_texture: MetalGPUAddress,
+        specular_shineness: f32,
+    ) {
+        arg.ambient_texture = ambient_texture;
+        arg.diffuse_texture = diffuse_texture;
+        arg.specular_texture = specular_texture;
+        arg.specular_shineness = specular_shineness;
+    }
+}
+
+enum GeometryArgEncoder {}
+impl GeometryArgumentEncoder<Geometry> for GeometryArgEncoder {
+    fn set(
+        arg: &mut Geometry,
+        indices_buffer: MetalGPUAddress,
+        positions_buffer: MetalGPUAddress,
+        normals_buffer: MetalGPUAddress,
+        tx_coords_buffer: MetalGPUAddress,
+    ) {
+        arg.indices = indices_buffer;
+        arg.positions = positions_buffer;
+        arg.normals = normals_buffer;
+        arg.tx_coords = tx_coords_buffer;
+    }
+}
+
 impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     fn new(device: Device) -> Self {
         let executable_name = std::env::args()
@@ -126,31 +162,32 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             light_pipeline,
         } = create_pipelines(&device, &library, mode);
         let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
-        let geometry_arg_size = model_pipeline_reflection
-            .vertex_bindings()
-            .object_at_as::<BufferBindingRef>(VertexBufferIndex::Geometry as _)
-            .expect("Failed to access geometry vertex buffer argument information")
-            .buffer_data_size() as u32;
-        let material_arg_size = model_pipeline_reflection
-            .fragment_bindings()
-            .object_at_as::<BufferBindingRef>(FragBufferIndex::Material as _)
-            .expect("Failed to access material fragment buffer argument information")
-            .buffer_data_size() as u32;
+        #[cfg(debug_assertions)]
+        {
+            let geometry_arg_size = model_pipeline_reflection
+                .vertex_bindings()
+                .object_at_as::<BufferBindingRef>(VertexBufferIndex::Geometry as _)
+                .expect("Failed to access geometry vertex buffer argument information")
+                .buffer_data_size() as u32;
+            let material_arg_size = model_pipeline_reflection
+                .fragment_bindings()
+                .object_at_as::<BufferBindingRef>(FragBufferIndex::Material as _)
+                .expect("Failed to access material fragment buffer argument information")
+                .buffer_data_size() as u32;
+            debug_assert_eq!(std::mem::size_of::<Geometry>(), geometry_arg_size as _, "Shader bindings generated a differently sized Geometry struct than what Metal expects");
+            debug_assert_eq!(std::mem::size_of::<Material>(), material_arg_size as _, "Shader bindings generated a differently sized Material struct than what Metal expects");
+        }
         let model = Model::from_file::<
             PathBuf,
-            { GeometryID::Indices as _ },
-            { GeometryID::Positions as _ },
-            { GeometryID::Normals as _ },
-            { GeometryID::TXCoords as _ },
-            { MaterialID::AmbientTexture as _ },
-            { MaterialID::DiffuseTexture as _ },
-            { MaterialID::SpecularTexture as _ },
-            { MaterialID::SpecularShineness as _ },
-        >(model_file, &device, geometry_arg_size, material_arg_size);
+            Geometry,
+            GeometryArgEncoder,
+            Material,
+            MaterialArgEncoder,
+        >(model_file, &device);
 
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // TODO: START HERE 2
+        // TODO: START HERE 5
+        // TODO: START HERE 5
+        // TODO: START HERE 5
         // TODO: Replace with bindless
         let world_arg_encoder = model_pipeline
             .fragment_function

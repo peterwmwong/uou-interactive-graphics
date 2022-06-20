@@ -22,7 +22,7 @@ pub use half;
 pub use matrix_helpers::*;
 pub use metal;
 pub use metal_helpers::*;
-pub use model::{MaxBounds, Model};
+pub use model::{GeometryArgumentEncoder, MaterialArgumentEncoder, MaxBounds, Model};
 pub use objc_helpers::*;
 pub use renderer::*;
 pub use unwrap_helpers::*;

@@ -2,7 +2,6 @@
 #include "./common.h"
 
 using namespace metal;
-using half_tx2d = texture2d<half>;
 
 constant bool  HasAmbient        [[function_constant(static_cast<uint>(FC::HasAmbient))]];
 constant bool  HasDiffuse        [[function_constant(static_cast<uint>(FC::HasDiffuse))]];
@@ -17,21 +16,6 @@ struct World {
 
     float4   light_position             [[id(WorldID::LightPosition)]];
     float4   camera_position            [[id(WorldID::CameraPosition)]];
-};
-
-// TODO: Re-layout memory to be more cache-friendly
-// - Currently, with 3 separate arrays for position, normals, and tx_coords, a VS instance must
-//   access 3 separate, disjoint memory addresses
-// - What if we pack position, normal, and tx_coord as tuple and then have an array of tuples
-//   struct VertexData { position; normal; coord; }
-//   struct Geometry { const VertexData * vertex_data; }
-// - Downside: Data Duplication
-//   - Assess size difference
-struct Geometry {
-    constant uint          * indices   [[id(GeometryID::Indices)]];
-    constant packed_float3 * positions [[id(GeometryID::Positions)]];
-    constant packed_float3 * normals   [[id(GeometryID::Normals)]];
-    constant packed_float2 * tx_coords [[id(GeometryID::TXCoords)]];
 };
 
 struct VertexOut
@@ -57,13 +41,6 @@ main_vertex(         uint       vertex_id [[vertex_id]],
         .tx_coord  = float2(tx_coord.x, 1.0 - tx_coord.y)
     };
 }
-
-struct Material {
-    half_tx2d ambient_texture    [[id(MaterialID::AmbientTexture)]];
-    half_tx2d diffuse_texture    [[id(MaterialID::DiffuseTexture)]];
-    half_tx2d specular_texture   [[id(MaterialID::SpecularTexture)]];
-    float     specular_shineness [[id(MaterialID::SpecularShineness)]];
-};
 
 fragment half4
 main_fragment(         VertexOut   in       [[stage_in]],

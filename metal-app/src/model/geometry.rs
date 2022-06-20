@@ -1,10 +1,8 @@
-use super::heap_resident::HeapResident;
 use crate::{
     align_size, allocate_new_buffer_with_heap, byte_size_of_slice, copy_into_buffer,
     get_gpu_addresses, metal::*, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
-    METAL_GPU_ADDRESS_BYTE_SIZE,
 };
-use std::simd::f32x4;
+use std::{marker::PhantomData, simd::f32x4};
 
 pub struct MaxBounds {
     pub center: f32x4,
@@ -17,11 +15,20 @@ pub(crate) struct DrawInfo {
     pub(crate) material_id: u32,
 }
 
-const NUM_GEOMETRY_BUFFERS: usize = 4;
-const MIN_GEOMETRY_ARGUMENT_BYTE_LENGTH: usize = NUM_GEOMETRY_BUFFERS * METAL_GPU_ADDRESS_BYTE_SIZE;
+pub trait GeometryArgumentEncoder<T: Sized> {
+    fn set(
+        arg: &mut T,
+        indices_buffer: MetalGPUAddress,
+        positions_buffer: MetalGPUAddress,
+        normals_buffer: MetalGPUAddress,
+        tx_coords_buffer: MetalGPUAddress,
+    );
+}
 
 // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
 pub(crate) struct GeometryBuffers {
+    pub(crate) arguments: Buffer,
+    pub(crate) argument_byte_size: u32,
     #[allow(dead_code)]
     indices: Buffer,
     #[allow(dead_code)]
@@ -32,13 +39,12 @@ pub(crate) struct GeometryBuffers {
     tx_coords: Buffer,
 }
 
-pub(crate) struct Geometry<
-    'a,
-    const GEOMETRY_ID_INDICES_BUFFER: u16,
-    const GEOMETRY_ID_POSITIONS_BUFFER: u16,
-    const GEOMETRY_ID_NORMALS_BUFFER: u16,
-    const GEOMETRY_ID_TX_COORDS_BUFFER: u16,
-> {
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Save space, and use u32 for sizes
+pub(crate) struct Geometry<'a, T: Sized, E: GeometryArgumentEncoder<T>> {
+    arguments_byte_size: usize,
     objects: &'a [tobj::Model],
     indices_buf_length: usize,
     positions_buf_length: usize,
@@ -47,39 +53,11 @@ pub(crate) struct Geometry<
     heap_size: usize,
     pub(crate) max_bounds: MaxBounds,
     pub(crate) draws: Vec<DrawInfo>,
+    _p: PhantomData<(T, E)>,
 }
 
-impl<
-        'a,
-        const GEOMETRY_ID_INDICES_BUFFER: u16,
-        const GEOMETRY_ID_POSITIONS_BUFFER: u16,
-        const GEOMETRY_ID_NORMALS_BUFFER: u16,
-        const GEOMETRY_ID_TX_COORDS_BUFFER: u16,
-    >
-    Geometry<
-        'a,
-        GEOMETRY_ID_INDICES_BUFFER,
-        GEOMETRY_ID_POSITIONS_BUFFER,
-        GEOMETRY_ID_NORMALS_BUFFER,
-        GEOMETRY_ID_TX_COORDS_BUFFER,
-    >
-{
+impl<'a, T: Sized, E: GeometryArgumentEncoder<T>> Geometry<'a, T, E> {
     pub(crate) fn new(objects: &'a [tobj::Model], device: &Device) -> Self {
-        assert!(
-            GEOMETRY_ID_INDICES_BUFFER != GEOMETRY_ID_POSITIONS_BUFFER
-                && GEOMETRY_ID_INDICES_BUFFER != GEOMETRY_ID_NORMALS_BUFFER
-                && GEOMETRY_ID_INDICES_BUFFER != GEOMETRY_ID_TX_COORDS_BUFFER
-                && GEOMETRY_ID_POSITIONS_BUFFER != GEOMETRY_ID_NORMALS_BUFFER
-                && GEOMETRY_ID_POSITIONS_BUFFER != GEOMETRY_ID_TX_COORDS_BUFFER
-                && GEOMETRY_ID_NORMALS_BUFFER != GEOMETRY_ID_TX_COORDS_BUFFER,
-            r#"Geometry ID constants (Metal Shader [[id(...)]] argument bindings) must all be unique.
-Check the following generic constants passed to Model::from_file()...
-- GEOMETRY_ID_INDICES_BUFFER
-- GEOMETRY_ID_POSITIONS_BUFFER
-- GEOMETRY_ID_NORMALS_BUFFER
-- GEOMETRY_ID_TX_COORDS_BUFFER
-"#
-        );
         let mut heap_size = 0;
 
         // Create a shared buffer (shared between all objects) for each ObjectGeometry member.
@@ -136,9 +114,14 @@ Check the following generic constants passed to Model::from_file()...
                 device.heap_buffer_size_and_align(buf_length as _, DEFAULT_RESOURCE_OPTIONS),
             );
         }
+        let arguments_byte_size = std::mem::size_of::<T>() * objects.len();
+        heap_size += align_size(
+            device.heap_buffer_size_and_align(arguments_byte_size as _, DEFAULT_RESOURCE_OPTIONS),
+        );
         let size = maxs - mins;
         let center = mins + (size * f32x4::splat(0.5));
         Self {
+            arguments_byte_size,
             heap_size,
             indices_buf_length,
             positions_buf_length,
@@ -147,47 +130,21 @@ Check the following generic constants passed to Model::from_file()...
             objects,
             draws,
             max_bounds: MaxBounds { center, size },
+            _p: PhantomData,
         }
     }
-}
 
-impl<
-        'a,
-        const GEOMETRY_ID_INDICES_BUFFER: u16,
-        const GEOMETRY_ID_POSITIONS_BUFFER: u16,
-        const GEOMETRY_ID_NORMALS_BUFFER: u16,
-        const GEOMETRY_ID_TX_COORDS_BUFFER: u16,
-    > HeapResident<GeometryBuffers>
-    for Geometry<
-        'a,
-        GEOMETRY_ID_INDICES_BUFFER,
-        GEOMETRY_ID_POSITIONS_BUFFER,
-        GEOMETRY_ID_NORMALS_BUFFER,
-        GEOMETRY_ID_TX_COORDS_BUFFER,
-    >
-{
     #[inline]
-    fn heap_size(&self) -> usize {
+    pub fn heap_size(&self) -> usize {
         self.heap_size
     }
 
-    fn allocate_and_encode(
-        &mut self,
-        heap: &Heap,
-        device: &Device,
-        arg_size: u32,
-    ) -> (Buffer, u32, GeometryBuffers) {
-        let arg_size = arg_size as u32;
-        debug_assert_eq!(MIN_GEOMETRY_ARGUMENT_BYTE_LENGTH, arg_size as _);
-
-        let length = arg_size * self.objects.len() as u32;
-        // TODO: Allocate from Heap
-        let arg_buffer = device.new_buffer(
-            length as _,
-            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
+    pub fn allocate_and_encode(&mut self, heap: &Heap) -> GeometryBuffers {
+        let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
+            heap,
+            "Geometry Arguments",
+            self.arguments_byte_size as _,
         );
-        arg_buffer.set_label("Geometry Argument Buffer");
-        let mut args = arg_buffer.contents() as *mut MetalGPUAddress;
 
         // Allocate buffers...
         let mut indices_offset: usize = 0;
@@ -206,61 +163,26 @@ impl<
             get_gpu_addresses([&indices_buf, &positions_buf, &normals_buf, &tx_coords_buf]);
 
         for tobj::Model { mesh, .. } in self.objects.into_iter() {
-            if GEOMETRY_ID_INDICES_BUFFER + 1 == GEOMETRY_ID_POSITIONS_BUFFER
-                && GEOMETRY_ID_POSITIONS_BUFFER + 1 == GEOMETRY_ID_NORMALS_BUFFER
-                && GEOMETRY_ID_NORMALS_BUFFER + 1 == GEOMETRY_ID_TX_COORDS_BUFFER
-            {
-                unsafe {
-                    *(args.add(0)) = indices_gpu_address + (indices_offset as MetalGPUAddress);
-                    *(args.add(1)) = positions_gpu_address + (positions_offset as MetalGPUAddress);
-                    *(args.add(2)) = normals_gpu_address + (normals_offset as MetalGPUAddress);
-                    *(args.add(3)) = tx_coords_gpu_address + (tx_coords_offset as MetalGPUAddress);
-                    args = args.add(NUM_GEOMETRY_BUFFERS);
-                };
-            } else {
-                unsafe {
-                    for (id, gpu_address, offset) in [
-                        (
-                            GEOMETRY_ID_INDICES_BUFFER,
-                            indices_gpu_address,
-                            indices_offset,
-                        ),
-                        (
-                            GEOMETRY_ID_POSITIONS_BUFFER,
-                            positions_gpu_address,
-                            positions_offset,
-                        ),
-                        (
-                            GEOMETRY_ID_NORMALS_BUFFER,
-                            normals_gpu_address,
-                            normals_offset,
-                        ),
-                        (
-                            GEOMETRY_ID_TX_COORDS_BUFFER,
-                            tx_coords_gpu_address,
-                            tx_coords_offset,
-                        ),
-                    ] {
-                        *(args.add(id as _)) = gpu_address + (offset as MetalGPUAddress);
-                    }
-                    args = args.byte_add(arg_size as _);
-                };
-            }
-
+            E::set(
+                unsafe { &mut *arguments_ptr },
+                indices_gpu_address + (indices_offset as MetalGPUAddress),
+                positions_gpu_address + (positions_offset as MetalGPUAddress),
+                normals_gpu_address + (normals_offset as MetalGPUAddress),
+                tx_coords_gpu_address + (tx_coords_offset as MetalGPUAddress),
+            );
             indices_offset = copy_into_buffer(&mesh.indices, indices_ptr, indices_offset);
             normals_offset = copy_into_buffer(&mesh.normals, normals_ptr, normals_offset);
             tx_coords_offset = copy_into_buffer(&mesh.texcoords, tx_coords_ptr, tx_coords_offset);
             positions_offset = copy_into_buffer(&mesh.positions, positions_ptr, positions_offset);
+            unsafe { arguments_ptr = arguments_ptr.add(1) };
         }
-        (
-            arg_buffer,
-            arg_size,
-            GeometryBuffers {
-                indices: indices_buf,
-                positions: positions_buf,
-                normals: normals_buf,
-                tx_coords: tx_coords_buf,
-            },
-        )
+        GeometryBuffers {
+            arguments,
+            argument_byte_size: std::mem::size_of::<T>() as _,
+            indices: indices_buf,
+            positions: positions_buf,
+            normals: normals_buf,
+            tx_coords: tx_coords_buf,
+        }
     }
 }

@@ -291,6 +291,10 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
     desc
 }
 
+// TODO: START HERE 2
+// TODO: START HERE 2
+// TODO: START HERE 2
+// Make this a New Type so we don't accidentally try to do bad math.
 pub type MetalGPUAddress = std::os::raw::c_ulong;
 pub const METAL_GPU_ADDRESS_BYTE_SIZE: usize = std::mem::size_of::<MetalGPUAddress>();
 

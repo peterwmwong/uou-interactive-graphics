@@ -1,10 +1,28 @@
-use super::heap_resident::HeapResident;
 use crate::{
-    align_size, metal::*, objc_sendmsg_with_cached_sel, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
+    align_size, allocate_new_buffer_with_heap, metal::*, objc_sendmsg_with_cached_sel,
+    MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
-use std::{collections::HashMap, ops::Deref, path::PathBuf};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 type RGB32 = [f32; 3];
+
+pub trait MaterialArgumentEncoder<T: Sized> {
+    fn set(
+        arg: &mut T,
+        ambient_texture: MetalGPUAddress,
+        diffuse_texture: MetalGPUAddress,
+        specular_texture: MetalGPUAddress,
+        specular_shineness: f32,
+    );
+}
+
+pub(crate) struct MaterialResults {
+    pub(crate) arguments: Buffer,
+    pub(crate) argument_byte_size: u32,
+    // Needs to be owned and not dropped (causing deallocation from heap).
+    #[allow(dead_code)]
+    textures: Vec<Texture>,
+}
 
 #[derive(Hash, Copy, Clone, Eq, PartialEq)]
 struct RGB8Unorm(u8, u8, u8);
@@ -140,60 +158,27 @@ struct Material<'a> {
     specular_shineness: f32,
 }
 
-pub(crate) struct Materials<
-    'a,
-    const MATERIAL_ID_AMBIENT_TEXTURE: u16,
-    const MATERIAL_ID_DIFFUSE_TEXTURE: u16,
-    const MATERIAL_ID_SPECULAR_TEXTURE: u16,
-    const MATERIAL_ID_SPECULAR_SHINENESS: u16,
-> {
+pub(crate) struct Materials<'a, T: Sized, E: MaterialArgumentEncoder<T>> {
+    arguments_byte_size: usize,
+    heap_size: usize,
+    materials: Vec<Material<'a>>,
     max_load_texture_buffer_size: usize,
     sources: HashMap<MaterialSourceKey<'a>, MaterialSource<'a>>,
-    materials: Vec<Material<'a>>,
-    heap_size: usize,
+    _p: PhantomData<(T, E)>,
 }
 
-impl<
-        'a,
-        const MATERIAL_ID_AMBIENT_TEXTURE: u16,
-        const MATERIAL_ID_DIFFUSE_TEXTURE: u16,
-        const MATERIAL_ID_SPECULAR_TEXTURE: u16,
-        const MATERIAL_ID_SPECULAR_SHINENESS: u16,
-    >
-    Materials<
-        'a,
-        MATERIAL_ID_AMBIENT_TEXTURE,
-        MATERIAL_ID_DIFFUSE_TEXTURE,
-        MATERIAL_ID_SPECULAR_TEXTURE,
-        MATERIAL_ID_SPECULAR_SHINENESS,
-    >
-{
+impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
     pub(crate) fn new<'b>(
         device: &Device,
         material_file_dir: &'b PathBuf,
         obj_mats: &'a [tobj::Material],
     ) -> Self {
-        assert!(
-            MATERIAL_ID_AMBIENT_TEXTURE != MATERIAL_ID_DIFFUSE_TEXTURE
-                && MATERIAL_ID_AMBIENT_TEXTURE != MATERIAL_ID_SPECULAR_TEXTURE
-                && MATERIAL_ID_AMBIENT_TEXTURE != MATERIAL_ID_SPECULAR_SHINENESS
-                && MATERIAL_ID_DIFFUSE_TEXTURE != MATERIAL_ID_SPECULAR_TEXTURE
-                && MATERIAL_ID_DIFFUSE_TEXTURE != MATERIAL_ID_SPECULAR_SHINENESS
-                && MATERIAL_ID_SPECULAR_TEXTURE != MATERIAL_ID_SPECULAR_SHINENESS,
-            r#"Material ID constants (Metal Shader [[id(...)]] argument bindings) must all be unique.
-Check the following generic constants passed to Model::from_file()...
-- MATERIAL_ID_AMBIENT_TEXTURE
-- MATERIAL_ID_DIFFUSE_TEXTURE
-- MATERIAL_ID_SPECULAR_TEXTURE
-- MATERIAL_ID_SPECULAR_SHINENESS
-"#
-        );
         let num_materials = obj_mats.len();
         let mut sources = HashMap::with_capacity(num_materials * 3);
         let mut heap_size = 0;
         let mut last_alignment_padding = 0;
         let mut max_load_texture_buffer_size = 0;
-        let materials = obj_mats
+        let materials: Vec<Material<'a>> = obj_mats
             .iter()
             .map(|mat| {
                 let m = Material {
@@ -216,50 +201,32 @@ Check the following generic constants passed to Model::from_file()...
                 m
             })
             .collect();
+
+        let arguments_byte_size = std::mem::size_of::<T>() * materials.len();
+        heap_size += align_size(
+            device.heap_buffer_size_and_align(arguments_byte_size as _, DEFAULT_RESOURCE_OPTIONS),
+        );
         Self {
+            arguments_byte_size,
+            heap_size,
+            materials,
             max_load_texture_buffer_size,
             sources,
-            materials,
-            heap_size,
+            _p: PhantomData,
         }
     }
-}
 
-impl<
-        'a,
-        const MATERIAL_ID_AMBIENT_TEXTURE: u16,
-        const MATERIAL_ID_DIFFUSE_TEXTURE: u16,
-        const MATERIAL_ID_SPECULAR_TEXTURE: u16,
-        const MATERIAL_ID_SPECULAR_SHINENESS: u16,
-    > HeapResident<Vec<Texture>>
-    for Materials<
-        'a,
-        MATERIAL_ID_AMBIENT_TEXTURE,
-        MATERIAL_ID_DIFFUSE_TEXTURE,
-        MATERIAL_ID_SPECULAR_TEXTURE,
-        MATERIAL_ID_SPECULAR_SHINENESS,
-    >
-{
     #[inline]
-    fn heap_size(&self) -> usize {
+    pub fn heap_size(&self) -> usize {
         self.heap_size
     }
 
-    fn allocate_and_encode(
-        &mut self,
-        heap: &Heap,
-        device: &Device,
-        arg_size: u32,
-    ) -> (Buffer, u32, Vec<Texture>) {
-        let num_materials = self.materials.len();
-        let arg_size = arg_size as u32;
-        // TODO: Allocate from Heap
-        let buffer = device.new_buffer(
-            (arg_size as u64) * num_materials as u64,
-            DEFAULT_RESOURCE_OPTIONS,
+    pub fn allocate_and_encode(&mut self, heap: &Heap) -> MaterialResults {
+        let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
+            heap,
+            "Materials Arguments",
+            self.arguments_byte_size as _,
         );
-        buffer.set_label("Materials Argument Buffer");
-        let mut args = buffer.contents() as *mut MetalGPUAddress;
 
         let gpu_handle_sel = sel!(gpuHandle);
         let mut texture_cache: HashMap<MaterialSourceKey<'a>, Texture> =
@@ -267,28 +234,31 @@ impl<
         let mut read_png_buffer: Vec<u8> = Vec::with_capacity(self.max_load_texture_buffer_size);
         unsafe { read_png_buffer.set_len(self.max_load_texture_buffer_size) };
         for mat in &self.materials {
-            for (id, source_key) in [
-                (MATERIAL_ID_AMBIENT_TEXTURE, mat.ambient),
-                (MATERIAL_ID_DIFFUSE_TEXTURE, mat.diffuse),
-                (MATERIAL_ID_SPECULAR_TEXTURE, mat.specular),
-            ] {
-                let texture: &TextureRef = texture_cache.entry(source_key).or_insert_with(|| {
-                    self.sources
-                        .get_mut(&source_key)
-                        .expect("Couldn't find source key")
-                        .allocate_texture(heap, &mut read_png_buffer)
+            let [ambient, diffuse, specular] =
+                [mat.ambient, mat.diffuse, mat.specular].map(|source_key| {
+                    let texture: &TextureRef =
+                        texture_cache.entry(source_key).or_insert_with(|| {
+                            self.sources
+                                .get_mut(&source_key)
+                                .expect("Couldn't find source key")
+                                .allocate_texture(heap, &mut read_png_buffer)
+                        });
+                    unsafe { objc_sendmsg_with_cached_sel(texture, gpu_handle_sel) }
                 });
-                unsafe {
-                    *args.add(id as _) = objc_sendmsg_with_cached_sel(texture, gpu_handle_sel);
-                }
-            }
-            unsafe {
-                let arg_shineness_ptr = args.add(MATERIAL_ID_SPECULAR_SHINENESS as _) as *mut f32;
-                *arg_shineness_ptr = mat.specular_shineness;
-                args = args.byte_add(arg_size as _);
-            }
+            E::set(
+                unsafe { &mut *arguments_ptr },
+                ambient,
+                diffuse,
+                specular,
+                mat.specular_shineness,
+            );
+            unsafe { arguments_ptr = arguments_ptr.add(1) };
         }
         let textures = texture_cache.into_iter().map(|(_, tx)| tx).collect();
-        (buffer, arg_size, textures)
+        MaterialResults {
+            arguments,
+            argument_byte_size: std::mem::size_of::<T>() as _,
+            textures,
+        }
     }
 }

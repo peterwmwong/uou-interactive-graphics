@@ -1,29 +1,24 @@
 mod geometry;
-mod heap_resident;
 mod materials;
 
-use self::{geometry::GeometryBuffers, heap_resident::HeapResident};
 use crate::metal::*;
-pub use geometry::MaxBounds;
-use geometry::{DrawInfo, Geometry};
-use materials::Materials;
+use geometry::{DrawInfo, Geometry, GeometryBuffers};
+pub use geometry::{GeometryArgumentEncoder, MaxBounds};
+pub use materials::MaterialArgumentEncoder;
+use materials::{MaterialResults, Materials};
 use std::path::{Path, PathBuf};
 use tobj::LoadOptions;
 
 pub struct Model {
     heap: Heap,
     draws: Vec<DrawInfo>,
-    geometry_arg_buffer: Buffer,
-    geometry_arg_encoded_length: u32,
     pub geometry_max_bounds: MaxBounds,
     // Needs to be owned and not dropped (causing deallocation from heap).
     #[allow(dead_code)]
     geometry_buffers: GeometryBuffers,
-    materials_arg_buffer: Buffer,
-    materials_arg_encoded_length: u32,
     // Needs to be owned and not dropped (causing deallocation from heap).
     #[allow(dead_code)]
-    material_textures: Vec<Texture>,
+    materials: MaterialResults,
 }
 
 impl Model {
@@ -34,19 +29,13 @@ impl Model {
     // allow using common.h generated struct AND metal 3 bindless.
     pub fn from_file<
         T: AsRef<Path>,
-        const GEOMETRY_ID_INDICES_BUFFER: u16,
-        const GEOMETRY_ID_POSITIONS_BUFFER: u16,
-        const GEOMETRY_ID_NORMALS_BUFFER: u16,
-        const GEOMETRY_ID_TX_COORDS_BUFFER: u16,
-        const MATERIAL_ID_AMBIENT_TEXTURE: u16,
-        const MATERIAL_ID_DIFFUSE_TEXTURE: u16,
-        const MATERIAL_ID_SPECULAR_TEXTURE: u16,
-        const MATERIAL_ID_SPECULAR_SHINENESS: u16,
+        TG: Sized,
+        G: GeometryArgumentEncoder<TG>,
+        TM: Sized,
+        M: MaterialArgumentEncoder<TM>,
     >(
         obj_file: T,
         device: &Device,
-        geometry_arg_size: u32,
-        materials_arg_size: u32,
     ) -> Self {
         let obj_file_ref = obj_file.as_ref();
         let (models, materials) = tobj::load_obj(
@@ -68,18 +57,8 @@ impl Model {
         );
 
         // Size Heap for Geometry and Materials
-        let mut materials = Materials::<
-            MATERIAL_ID_AMBIENT_TEXTURE,
-            MATERIAL_ID_DIFFUSE_TEXTURE,
-            MATERIAL_ID_SPECULAR_TEXTURE,
-            MATERIAL_ID_SPECULAR_SHINENESS,
-        >::new(device, &material_file_dir, &materials);
-        let mut geometry = Geometry::<
-            GEOMETRY_ID_INDICES_BUFFER,
-            GEOMETRY_ID_POSITIONS_BUFFER,
-            GEOMETRY_ID_NORMALS_BUFFER,
-            GEOMETRY_ID_TX_COORDS_BUFFER,
-        >::new(&models, device);
+        let mut materials = Materials::<TM, M>::new(device, &material_file_dir, &materials);
+        let mut geometry = Geometry::<TG, G>::new(&models, device);
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
@@ -91,22 +70,15 @@ impl Model {
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
-        let (materials_arg_buffer, materials_arg_encoded_length, material_textures) =
-            materials.allocate_and_encode(&heap, device, materials_arg_size);
-
-        let (geometry_arg_buffer, geometry_arg_encoded_length, geometry_buffers) =
-            geometry.allocate_and_encode(&heap, device, geometry_arg_size);
+        let materials = materials.allocate_and_encode(&heap);
+        let geometry_buffers = geometry.allocate_and_encode(&heap);
 
         Self {
             heap,
             draws: geometry.draws,
-            geometry_arg_buffer,
-            geometry_arg_encoded_length,
             geometry_buffers,
             geometry_max_bounds: geometry.max_bounds,
-            materials_arg_buffer,
-            materials_arg_encoded_length,
-            material_textures,
+            materials,
         }
     }
 
@@ -118,6 +90,10 @@ impl Model {
         )
     }
 
+    // TODO: START HERE 4
+    // TODO: START HERE 4
+    // TODO: START HERE 4
+    // Change vertex_geometry_arg_buffer_id and fragment_material_arg_buffer_id as generic constants
     #[inline]
     pub fn encode_draws(
         &self,
@@ -129,18 +105,18 @@ impl Model {
         for d in &self.draws {
             encoder.push_debug_group(&d.debug_group_name);
 
-            let material_arg_buffer_offset = d.material_id * self.materials_arg_encoded_length;
+            let material_arg_buffer_offset = d.material_id * self.materials.argument_byte_size;
 
             // For the first object, encode the vertex/fragment buffer.
             if geometry_arg_buffer_offset == 0 {
                 encoder.set_vertex_buffer(
                     vertex_geometry_arg_buffer_id as _,
-                    Some(self.geometry_arg_buffer.as_ref()),
+                    Some(self.geometry_buffers.arguments.as_ref()),
                     0,
                 );
                 encoder.set_fragment_buffer(
                     fragment_material_arg_buffer_id as _,
-                    Some(self.materials_arg_buffer.as_ref()),
+                    Some(self.materials.arguments.as_ref()),
                     material_arg_buffer_offset as _,
                 );
             }
@@ -156,7 +132,7 @@ impl Model {
                     material_arg_buffer_offset as _,
                 );
             }
-            geometry_arg_buffer_offset += self.geometry_arg_encoded_length;
+            geometry_arg_buffer_offset += self.geometry_buffers.argument_byte_size;
 
             encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, d.num_indices as _);
 
