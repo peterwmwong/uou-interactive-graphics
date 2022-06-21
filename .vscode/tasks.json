@@ -178,7 +178,7 @@
             "label": "Run proj-5-render-buffers checkerboard"
         },
         {
-            "label": "asm proj-4-textures",
+            "label": "asm after",
             "type": "shell",
             "presentation": {
                 "echo": true,
@@ -188,7 +188,35 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/build-release-asm.sh proj-4-textures",
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures AFTER",
+            "problemMatcher": []
+        },
+        {
+            "label": "asm before",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures BEFORE",
+            "problemMatcher": []
+        },
+        {
+            "label": "asm diff",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-4-textures BEFORE AFTER",
             "problemMatcher": []
         },
     ]
