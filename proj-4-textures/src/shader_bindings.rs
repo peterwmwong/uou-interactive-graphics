@@ -739,14 +739,14 @@ impl f32x4x4 {
         let a0123 = c[0][2] * c[1][3] - c[1][2] * c[0][3];
 
         let x1 = c[1][1] * a2323 - c[2][1] * a1323 + c[3][1] * a1223;
-        let x2 = c[0][1] * a2323 - c[2][1] * a0323 + c[3][1] * a0223;
+        let x2 = c[2][1] * a0323 - c[3][1] * a0223 - c[0][1] * a2323;
         let x3 = c[0][1] * a1323 - c[1][1] * a0323 + c[3][1] * a0123;
-        let x4 = c[0][1] * a1223 - c[1][1] * a0223 + c[2][1] * a0123;
-        let inv_det = f32x4::splat(1.)
-            / f32x4::splat(c[0][0] * x1 - c[1][0] * x2 + c[2][0] * x3 - c[3][0] * x4);
+        let x4 = c[1][1] * a0223 - c[2][1] * a0123 - c[0][1] * a1223;
+        let inv_det =
+            f32x4::splat(1. / (c[0][0] * x1 + c[1][0] * x2 + c[2][0] * x3 + c[3][0] * x4));
         return Self {
             columns: [
-                (f32x4::from_array([x1, -x2, x3, -x4]) * inv_det).to_array(),
+                (f32x4::from_array([x1, x2, x3, x4]) * inv_det).to_array(),
                 {
                     (f32x4::from_array([
                         -(c[1][0] * a2323 - c[2][0] * a1323 + c[3][0] * a1223),
