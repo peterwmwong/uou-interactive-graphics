@@ -10,7 +10,7 @@
 
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct half2 {
     pub x: u16,
     pub y: u16,
@@ -40,7 +40,7 @@ fn bindgen_test_layout_half2() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct half4 {
     pub x: u16,
     pub y: u16,
@@ -82,10 +82,9 @@ fn bindgen_test_layout_half4() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float2 {
-    pub x: f32,
-    pub y: f32,
+    pub xy: [f32; 2usize],
 }
 #[test]
 fn bindgen_test_layout_float2() {
@@ -100,24 +99,21 @@ fn bindgen_test_layout_float2() {
         concat!("Alignment of ", stringify!(float2))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<float2>())).x as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<float2>())).xy as *const _ as usize },
         0usize,
-        concat!("Offset of field: ", stringify!(float2), "::", stringify!(x))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<float2>())).y as *const _ as usize },
-        4usize,
-        concat!("Offset of field: ", stringify!(float2), "::", stringify!(y))
+        concat!(
+            "Offset of field: ",
+            stringify!(float2),
+            "::",
+            stringify!(xy)
+        )
     );
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float4 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub w: f32,
+    pub xyzw: [f32; 4usize],
 }
 #[test]
 fn bindgen_test_layout_float4() {
@@ -132,32 +128,21 @@ fn bindgen_test_layout_float4() {
         concat!("Alignment of ", stringify!(float4))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<float4>())).x as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<float4>())).xyzw as *const _ as usize },
         0usize,
-        concat!("Offset of field: ", stringify!(float4), "::", stringify!(x))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<float4>())).y as *const _ as usize },
-        4usize,
-        concat!("Offset of field: ", stringify!(float4), "::", stringify!(y))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<float4>())).z as *const _ as usize },
-        8usize,
-        concat!("Offset of field: ", stringify!(float4), "::", stringify!(z))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<float4>())).w as *const _ as usize },
-        12usize,
-        concat!("Offset of field: ", stringify!(float4), "::", stringify!(w))
+        concat!(
+            "Offset of field: ",
+            stringify!(float4),
+            "::",
+            stringify!(xyzw)
+        )
     );
 }
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct ushort2 {
-    pub x: ::std::os::raw::c_ushort,
-    pub y: ::std::os::raw::c_ushort,
+    pub xy: [::std::os::raw::c_ushort; 2usize],
 }
 #[test]
 fn bindgen_test_layout_ushort2() {
@@ -172,28 +157,18 @@ fn bindgen_test_layout_ushort2() {
         concat!("Alignment of ", stringify!(ushort2))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<ushort2>())).x as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<ushort2>())).xy as *const _ as usize },
         0usize,
         concat!(
             "Offset of field: ",
             stringify!(ushort2),
             "::",
-            stringify!(x)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<ushort2>())).y as *const _ as usize },
-        2usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(ushort2),
-            "::",
-            stringify!(y)
+            stringify!(xy)
         )
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct packed_half2 {
     pub x: u16,
     pub y: u16,
@@ -232,7 +207,7 @@ fn bindgen_test_layout_packed_half2() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct packed_half4 {
     pub x: u16,
     pub y: u16,
@@ -293,10 +268,9 @@ fn bindgen_test_layout_packed_half4() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct packed_float2 {
-    pub x: f32,
-    pub y: f32,
+    pub xy: [f32; 2usize],
 }
 #[test]
 fn bindgen_test_layout_packed_float2() {
@@ -311,33 +285,20 @@ fn bindgen_test_layout_packed_float2() {
         concat!("Alignment of ", stringify!(packed_float2))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_float2>())).x as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<packed_float2>())).xy as *const _ as usize },
         0usize,
         concat!(
             "Offset of field: ",
             stringify!(packed_float2),
             "::",
-            stringify!(x)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_float2>())).y as *const _ as usize },
-        4usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_float2),
-            "::",
-            stringify!(y)
+            stringify!(xy)
         )
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct packed_float4 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub w: f32,
+    pub xyzw: [f32; 4usize],
 }
 #[test]
 fn bindgen_test_layout_packed_float4() {
@@ -352,51 +313,21 @@ fn bindgen_test_layout_packed_float4() {
         concat!("Alignment of ", stringify!(packed_float4))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_float4>())).x as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<packed_float4>())).xyzw as *const _ as usize },
         0usize,
         concat!(
             "Offset of field: ",
             stringify!(packed_float4),
             "::",
-            stringify!(x)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_float4>())).y as *const _ as usize },
-        4usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_float4),
-            "::",
-            stringify!(y)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_float4>())).z as *const _ as usize },
-        8usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_float4),
-            "::",
-            stringify!(z)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_float4>())).w as *const _ as usize },
-        12usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_float4),
-            "::",
-            stringify!(w)
+            stringify!(xyzw)
         )
     );
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float3x3 {
-    pub columns: [packed_float4; 3usize],
+    pub columns: [[f32; 4usize]; 3usize],
 }
 #[test]
 fn bindgen_test_layout_float3x3() {
@@ -423,9 +354,9 @@ fn bindgen_test_layout_float3x3() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float4x4 {
-    pub columns: [packed_float4; 4usize],
+    pub columns: [[f32; 4usize]; 4usize],
 }
 #[test]
 fn bindgen_test_layout_float4x4() {
@@ -459,7 +390,7 @@ pub enum FC {
     HasSpecular = 3,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Geometry {
     pub indices: ::std::os::raw::c_ulong,
     pub positions: ::std::os::raw::c_ulong,
@@ -521,7 +452,7 @@ fn bindgen_test_layout_Geometry() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct World {
     pub matrix_model_to_projection: float4x4,
     pub matrix_normal_to_world: float3x3,
@@ -608,7 +539,7 @@ fn bindgen_test_layout_World() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Material {
     pub ambient_texture: ::std::os::raw::c_ulong,
     pub diffuse_texture: ::std::os::raw::c_ulong,
@@ -774,30 +705,10 @@ impl f32x4x4 {
     pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
         f32x4x4 {
             columns: [
-                packed_float4 {
-                    x: row1[0],
-                    y: row2[0],
-                    z: row3[0],
-                    w: row4[0],
-                },
-                packed_float4 {
-                    x: row1[1],
-                    y: row2[1],
-                    z: row3[1],
-                    w: row4[1],
-                },
-                packed_float4 {
-                    x: row1[2],
-                    y: row2[2],
-                    z: row3[2],
-                    w: row4[2],
-                },
-                packed_float4 {
-                    x: row1[3],
-                    y: row2[3],
-                    z: row3[3],
-                    w: row4[3],
-                },
+                [row1[0], row2[0], row3[0], row4[0]],
+                [row1[1], row2[1], row3[1], row4[1]],
+                [row1[2], row2[2], row3[2], row4[2]],
+                [row1[3], row2[3], row3[3], row4[3]],
             ],
         }
     }
@@ -807,30 +718,10 @@ impl f32x4x4 {
         let c = self.columns;
         f32x4x4 {
             columns: [
-                packed_float4 {
-                    x: c[0].x,
-                    y: c[1].x,
-                    z: c[2].x,
-                    w: c[3].x,
-                },
-                packed_float4 {
-                    x: c[0].y,
-                    y: c[1].y,
-                    z: c[2].y,
-                    w: c[3].y,
-                },
-                packed_float4 {
-                    x: c[0].z,
-                    y: c[1].z,
-                    z: c[2].z,
-                    w: c[3].z,
-                },
-                packed_float4 {
-                    x: c[0].w,
-                    y: c[1].w,
-                    z: c[2].w,
-                    w: c[3].w,
-                },
+                [c[0][0], c[1][0], c[2][0], c[3][0]],
+                [c[0][1], c[1][1], c[2][1], c[3][1]],
+                [c[0][2], c[1][2], c[2][2], c[3][2]],
+                [c[0][3], c[1][3], c[2][3], c[3][3]],
             ],
         }
     }
@@ -840,60 +731,61 @@ impl f32x4x4 {
     pub fn inverse(&self) -> Self {
         // Based on https://stackoverflow.com/questions/1148309/inverting-a-4x4-matrix/44446912#44446912
         let c = self.columns;
-        let a2323 = c[2].z * c[3].w - c[3].z * c[2].w;
-        let a1323 = c[1].z * c[3].w - c[3].z * c[1].w;
-        let a1223 = c[1].z * c[2].w - c[2].z * c[1].w;
-        let a0323 = c[0].z * c[3].w - c[3].z * c[0].w;
-        let a0223 = c[0].z * c[2].w - c[2].z * c[0].w;
-        let a0123 = c[0].z * c[1].w - c[1].z * c[0].w;
-        let a2313 = c[2].y * c[3].w - c[3].y * c[2].w;
-        let a1313 = c[1].y * c[3].w - c[3].y * c[1].w;
-        let a1213 = c[1].y * c[2].w - c[2].y * c[1].w;
-        let a2312 = c[2].y * c[3].z - c[3].y * c[2].z;
-        let a1312 = c[1].y * c[3].z - c[3].y * c[1].z;
-        let a1212 = c[1].y * c[2].z - c[2].y * c[1].z;
-        let a0313 = c[0].y * c[3].w - c[3].y * c[0].w;
-        let a0213 = c[0].y * c[2].w - c[2].y * c[0].w;
-        let a0312 = c[0].y * c[3].z - c[3].y * c[0].z;
-        let a0212 = c[0].y * c[2].z - c[2].y * c[0].z;
-        let a0113 = c[0].y * c[1].w - c[1].y * c[0].w;
-        let a0112 = c[0].y * c[1].z - c[1].y * c[0].z;
-        let det = f32x4::splat(
-            c[0].x * (c[1].y * a2323 - c[2].y * a1323 + c[3].y * a1223)
-                - c[1].x * (c[0].y * a2323 - c[2].y * a0323 + c[3].y * a0223)
-                + c[2].x * (c[0].y * a1323 - c[1].y * a0323 + c[3].y * a0123)
-                - c[3].x * (c[0].y * a1223 - c[1].y * a0223 + c[2].y * a0123),
-        );
+        let a2323 = c[2][2] * c[3][3] - c[3][2] * c[2][3];
+        let a1323 = c[1][2] * c[3][3] - c[3][2] * c[1][3];
+        let a1223 = c[1][2] * c[2][3] - c[2][2] * c[1][3];
+        let a0323 = c[0][2] * c[3][3] - c[3][2] * c[0][3];
+        let a0223 = c[0][2] * c[2][3] - c[2][2] * c[0][3];
+        let a0123 = c[0][2] * c[1][3] - c[1][2] * c[0][3];
+
+        let x1 = c[1][1] * a2323 - c[2][1] * a1323 + c[3][1] * a1223;
+        let x2 = c[0][1] * a2323 - c[2][1] * a0323 + c[3][1] * a0223;
+        let x3 = c[0][1] * a1323 - c[1][1] * a0323 + c[3][1] * a0123;
+        let x4 = c[0][1] * a1223 - c[1][1] * a0223 + c[2][1] * a0123;
+        let inv_det = f32x4::splat(1.)
+            / f32x4::splat(c[0][0] * x1 - c[1][0] * x2 + c[2][0] * x3 - c[3][0] * x4);
         return Self {
             columns: [
-                (f32x4::from_array([
-                    (c[1].y * a2323 - c[2].y * a1323 + c[3].y * a1223),
-                    -(c[0].y * a2323 - c[2].y * a0323 + c[3].y * a0223),
-                    (c[0].y * a1323 - c[1].y * a0323 + c[3].y * a0123),
-                    -(c[0].y * a1223 - c[1].y * a0223 + c[2].y * a0123),
-                ]) / det)
-                    .into(),
-                (f32x4::from_array([
-                    -(c[1].x * a2323 - c[2].x * a1323 + c[3].x * a1223),
-                    (c[0].x * a2323 - c[2].x * a0323 + c[3].x * a0223),
-                    -(c[0].x * a1323 - c[1].x * a0323 + c[3].x * a0123),
-                    (c[0].x * a1223 - c[1].x * a0223 + c[2].x * a0123),
-                ]) / det)
-                    .into(),
-                (f32x4::from_array([
-                    (c[1].x * a2313 - c[2].x * a1313 + c[3].x * a1213),
-                    -(c[0].x * a2313 - c[2].x * a0313 + c[3].x * a0213),
-                    (c[0].x * a1313 - c[1].x * a0313 + c[3].x * a0113),
-                    -(c[0].x * a1213 - c[1].x * a0213 + c[2].x * a0113),
-                ]) / det)
-                    .into(),
-                (f32x4::from_array([
-                    -(c[1].x * a2312 - c[2].x * a1312 + c[3].x * a1212),
-                    (c[0].x * a2312 - c[2].x * a0312 + c[3].x * a0212),
-                    -(c[0].x * a1312 - c[1].x * a0312 + c[3].x * a0112),
-                    (c[0].x * a1212 - c[1].x * a0212 + c[2].x * a0112),
-                ]) / det)
-                    .into(),
+                (f32x4::from_array([x1, -x2, x3, -x4]) * inv_det).to_array(),
+                {
+                    (f32x4::from_array([
+                        -(c[1][0] * a2323 - c[2][0] * a1323 + c[3][0] * a1223),
+                        (c[0][0] * a2323 - c[2][0] * a0323 + c[3][0] * a0223),
+                        -(c[0][0] * a1323 - c[1][0] * a0323 + c[3][0] * a0123),
+                        (c[0][0] * a1223 - c[1][0] * a0223 + c[2][0] * a0123),
+                    ]) * inv_det)
+                        .to_array()
+                },
+                {
+                    let a1313 = c[1][1] * c[3][3] - c[3][1] * c[1][3];
+                    let a2313 = c[2][1] * c[3][3] - c[3][1] * c[2][3];
+                    let a1213 = c[1][1] * c[2][3] - c[2][1] * c[1][3];
+                    let a0313 = c[0][1] * c[3][3] - c[3][1] * c[0][3];
+                    let a0213 = c[0][1] * c[2][3] - c[2][1] * c[0][3];
+                    let a0113 = c[0][1] * c[1][3] - c[1][1] * c[0][3];
+                    (f32x4::from_array([
+                        (c[1][0] * a2313 - c[2][0] * a1313 + c[3][0] * a1213),
+                        -(c[0][0] * a2313 - c[2][0] * a0313 + c[3][0] * a0213),
+                        (c[0][0] * a1313 - c[1][0] * a0313 + c[3][0] * a0113),
+                        -(c[0][0] * a1213 - c[1][0] * a0213 + c[2][0] * a0113),
+                    ]) * inv_det)
+                        .to_array()
+                },
+                {
+                    let a2312 = c[2][1] * c[3][2] - c[3][1] * c[2][2];
+                    let a1312 = c[1][1] * c[3][2] - c[3][1] * c[1][2];
+                    let a1212 = c[1][1] * c[2][2] - c[2][1] * c[1][2];
+                    let a0312 = c[0][1] * c[3][2] - c[3][1] * c[0][2];
+                    let a0212 = c[0][1] * c[2][2] - c[2][1] * c[0][2];
+                    let a0112 = c[0][1] * c[1][2] - c[1][1] * c[0][2];
+                    (f32x4::from_array([
+                        -(c[1][0] * a2312 - c[2][0] * a1312 + c[3][0] * a1212),
+                        (c[0][0] * a2312 - c[2][0] * a0312 + c[3][0] * a0212),
+                        -(c[0][0] * a1312 - c[1][0] * a0312 + c[3][0] * a0112),
+                        (c[0][0] * a1212 - c[1][0] * a0212 + c[2][0] * a0112),
+                    ]) * inv_det)
+                        .to_array()
+                },
             ],
         };
     }
@@ -906,12 +798,7 @@ impl f32x4x4 {
                 self.columns[0],
                 self.columns[1],
                 self.columns[2],
-                packed_float4 {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                    w: 1.,
-                },
+                [0., 0., 0., 1.],
             ],
         }
     }
@@ -986,19 +873,8 @@ impl f32x4x4 {
     #[allow(dead_code)]
     #[inline]
     pub const fn row<const N: usize>(&self) -> f32x4 {
-        let columns = self.columns;
-        let columns = [
-            f32x4::from_array([columns[0].x, columns[0].y, columns[0].z, columns[0].w]),
-            f32x4::from_array([columns[1].x, columns[1].y, columns[1].z, columns[1].w]),
-            f32x4::from_array([columns[2].x, columns[2].y, columns[2].z, columns[2].w]),
-            f32x4::from_array([columns[3].x, columns[3].y, columns[3].z, columns[3].w]),
-        ];
-        f32x4::from_array([
-            columns[0].as_array()[N],
-            columns[1].as_array()[N],
-            columns[2].as_array()[N],
-            columns[3].as_array()[N],
-        ])
+        let c = self.columns;
+        f32x4::from_array([c[0][N], c[1][N], c[2][N], c[3][N]])
     }
 }
 
@@ -1039,41 +915,16 @@ impl Sub<f32x4x4> for f32x4x4 {
         let columns = self
             .columns
             .zip(rhs.columns)
-            .map(|(l, r)| {
-                let l: f32x4 = l.into();
-                let r: f32x4 = r.into();
-                l - r
-            })
-            .map(|a| a.into());
+            .map(|(l, r)| (f32x4::from_array(l) - f32x4::from_array(r)).to_array());
         Self { columns }
     }
 }
 
 impl From<f32x4x4> for float3x3 {
     #[inline(always)]
-    fn from(m: f32x4x4) -> Self {
-        let c = m.columns;
+    fn from(f32x4x4 { columns: c }: f32x4x4) -> Self {
         float3x3 {
-            columns: [
-                packed_float4 {
-                    x: c[0].x,
-                    y: c[0].y,
-                    z: c[0].z,
-                    w: 0.,
-                },
-                packed_float4 {
-                    x: c[1].x,
-                    y: c[1].y,
-                    z: c[1].z,
-                    w: 0.,
-                },
-                packed_float4 {
-                    x: c[2].x,
-                    y: c[2].y,
-                    z: c[2].z,
-                    w: 0.,
-                },
-            ],
+            columns: [c[0], c[1], c[2]],
         }
     }
 }
@@ -1170,13 +1021,7 @@ mod test {
         );
 
         let result = left * right;
-        let columns = right.columns;
-        let columns = [
-            f32x4::from_array([columns[0].x, columns[0].y, columns[0].z, columns[0].w]),
-            f32x4::from_array([columns[1].x, columns[1].y, columns[1].z, columns[1].w]),
-            f32x4::from_array([columns[2].x, columns[2].y, columns[2].z, columns[2].w]),
-            f32x4::from_array([columns[3].x, columns[3].y, columns[3].z, columns[3].w]),
-        ];
+        let columns = right.columns.map(|a| f32x4::from_array(a));
         assert_eq!(
             result,
             f32x4x4::new(
