@@ -39,45 +39,6 @@ fn bindgen_test_layout_half2() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct packed_half2 {
-    pub x: u16,
-    pub y: u16,
-}
-#[test]
-fn bindgen_test_layout_packed_half2() {
-    assert_eq!(
-        ::std::mem::size_of::<packed_half2>(),
-        4usize,
-        concat!("Size of: ", stringify!(packed_half2))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<packed_half2>(),
-        2usize,
-        concat!("Alignment of ", stringify!(packed_half2))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_half2>())).x as *const _ as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_half2),
-            "::",
-            stringify!(x)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_half2>())).y as *const _ as usize },
-        2usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_half2),
-            "::",
-            stringify!(y)
-        )
-    );
-}
-#[repr(C)]
 #[repr(align(8))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct half4 {
@@ -117,67 +78,6 @@ fn bindgen_test_layout_half4() {
         unsafe { &(*(::std::ptr::null::<half4>())).w as *const _ as usize },
         6usize,
         concat!("Offset of field: ", stringify!(half4), "::", stringify!(w))
-    );
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct packed_half4 {
-    pub x: u16,
-    pub y: u16,
-    pub z: u16,
-    pub w: u16,
-}
-#[test]
-fn bindgen_test_layout_packed_half4() {
-    assert_eq!(
-        ::std::mem::size_of::<packed_half4>(),
-        8usize,
-        concat!("Size of: ", stringify!(packed_half4))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<packed_half4>(),
-        2usize,
-        concat!("Alignment of ", stringify!(packed_half4))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_half4>())).x as *const _ as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_half4),
-            "::",
-            stringify!(x)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_half4>())).y as *const _ as usize },
-        2usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_half4),
-            "::",
-            stringify!(y)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_half4>())).z as *const _ as usize },
-        4usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_half4),
-            "::",
-            stringify!(z)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<packed_half4>())).w as *const _ as usize },
-        6usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(packed_half4),
-            "::",
-            stringify!(w)
-        )
     );
 }
 #[repr(C)]
@@ -293,6 +193,106 @@ fn bindgen_test_layout_ushort2() {
     );
 }
 #[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct packed_half2 {
+    pub x: u16,
+    pub y: u16,
+}
+#[test]
+fn bindgen_test_layout_packed_half2() {
+    assert_eq!(
+        ::std::mem::size_of::<packed_half2>(),
+        4usize,
+        concat!("Size of: ", stringify!(packed_half2))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<packed_half2>(),
+        2usize,
+        concat!("Alignment of ", stringify!(packed_half2))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<packed_half2>())).x as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(packed_half2),
+            "::",
+            stringify!(x)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<packed_half2>())).y as *const _ as usize },
+        2usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(packed_half2),
+            "::",
+            stringify!(y)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct packed_half4 {
+    pub x: u16,
+    pub y: u16,
+    pub z: u16,
+    pub w: u16,
+}
+#[test]
+fn bindgen_test_layout_packed_half4() {
+    assert_eq!(
+        ::std::mem::size_of::<packed_half4>(),
+        8usize,
+        concat!("Size of: ", stringify!(packed_half4))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<packed_half4>(),
+        2usize,
+        concat!("Alignment of ", stringify!(packed_half4))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<packed_half4>())).x as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(packed_half4),
+            "::",
+            stringify!(x)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<packed_half4>())).y as *const _ as usize },
+        2usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(packed_half4),
+            "::",
+            stringify!(y)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<packed_half4>())).z as *const _ as usize },
+        4usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(packed_half4),
+            "::",
+            stringify!(z)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<packed_half4>())).w as *const _ as usize },
+        6usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(packed_half4),
+            "::",
+            stringify!(w)
+        )
+    );
+}
+#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct packed_float2 {
     pub x: f32,
@@ -392,6 +392,64 @@ fn bindgen_test_layout_packed_float4() {
         )
     );
 }
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct float3x3 {
+    pub cols: [packed_float4; 3usize],
+}
+#[test]
+fn bindgen_test_layout_float3x3() {
+    assert_eq!(
+        ::std::mem::size_of::<float3x3>(),
+        48usize,
+        concat!("Size of: ", stringify!(float3x3))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<float3x3>(),
+        16usize,
+        concat!("Alignment of ", stringify!(float3x3))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<float3x3>())).cols as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(float3x3),
+            "::",
+            stringify!(cols)
+        )
+    );
+}
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct float4x4 {
+    pub cols: [packed_float4; 4usize],
+}
+#[test]
+fn bindgen_test_layout_float4x4() {
+    assert_eq!(
+        ::std::mem::size_of::<float4x4>(),
+        64usize,
+        concat!("Size of: ", stringify!(float4x4))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<float4x4>(),
+        16usize,
+        concat!("Alignment of ", stringify!(float4x4))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<float4x4>())).cols as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(float4x4),
+            "::",
+            stringify!(cols)
+        )
+    );
+}
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum TextureFilterMode {
@@ -421,6 +479,12 @@ pub enum FragBufferIndex {
 use metal_app::half::f16;
 use std::simd::Simd;
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// 1. Use f32x2, f32x4, etc.
+// 2. Move matrix types into here
+// 3. Implement From for matrix types
 impl From<Simd<f32, 2>> for packed_half2 {
     #[inline]
     fn from(simd: Simd<f32, 2>) -> Self {
@@ -457,7 +521,7 @@ impl From<Simd<f32, 4>> for half4 {
 
 impl float2 {
     #[inline]
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 }
@@ -480,7 +544,7 @@ impl From<float2> for Simd<f32, 2> {
 
 impl ushort2 {
     #[inline]
-    pub fn new(x: u16, y: u16) -> Self {
+    pub const fn new(x: u16, y: u16) -> Self {
         Self { x, y }
     }
 }
@@ -501,7 +565,7 @@ impl From<ushort2> for Simd<u16, 2> {
 
 impl packed_float2 {
     #[inline]
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 }
@@ -522,7 +586,7 @@ impl From<packed_float2> for Simd<f32, 2> {
 
 impl float4 {
     #[inline]
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 }
@@ -543,7 +607,7 @@ impl From<float4> for Simd<f32, 4> {
 
 impl packed_float4 {
     #[inline]
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 }

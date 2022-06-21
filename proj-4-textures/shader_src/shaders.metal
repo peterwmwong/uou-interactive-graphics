@@ -8,16 +8,6 @@ constant bool  HasDiffuse        [[function_constant(static_cast<uint>(FC::HasDi
 constant bool  HasNormal         [[function_constant(static_cast<uint>(FC::HasNormal))]];
 constant bool  HasSpecular       [[function_constant(static_cast<uint>(FC::HasSpecular))]];
 
-struct World {
-    float4x4 matrix_model_to_projection [[id(WorldID::MatrixModelToProjection)]];
-    float3x3 matrix_normal_to_world     [[id(WorldID::MatrixNormalToWorld)]];
-    float4x4 matrix_world_to_projection [[id(WorldID::MatrixWorldToProjection)]];
-    float4x4 matrix_screen_to_world     [[id(WorldID::MatrixScreenToWorld)]];
-
-    float4   light_position             [[id(WorldID::LightPosition)]];
-    float4   camera_position            [[id(WorldID::CameraPosition)]];
-};
-
 struct VertexOut
 {
     float4 position [[position]];

@@ -11,6 +11,12 @@ include!(concat!(
 use metal_app::half::f16;
 use std::simd::Simd;
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// 1. Use f32x2, f32x4, etc.
+// 2. Move matrix types into here
+// 3. Implement From for matrix types
 impl From<Simd<f32, 2>> for packed_half2 {
     #[inline]
     fn from(simd: Simd<f32, 2>) -> Self {
@@ -47,7 +53,7 @@ impl From<Simd<f32, 4>> for half4 {
 
 impl float2 {
     #[inline]
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 }
@@ -70,7 +76,7 @@ impl From<float2> for Simd<f32, 2> {
 
 impl ushort2 {
     #[inline]
-    pub fn new(x: u16, y: u16) -> Self {
+    pub const fn new(x: u16, y: u16) -> Self {
         Self { x, y }
     }
 }
@@ -91,7 +97,7 @@ impl From<ushort2> for Simd<u16, 2> {
 
 impl packed_float2 {
     #[inline]
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 }
@@ -112,7 +118,7 @@ impl From<packed_float2> for Simd<f32, 2> {
 
 impl float4 {
     #[inline]
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 }
@@ -133,7 +139,7 @@ impl From<float4> for Simd<f32, 4> {
 
 impl packed_float4 {
     #[inline]
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 }

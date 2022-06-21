@@ -10,7 +10,7 @@ fn dot(lhs: f32x4, rhs: f32x4) -> f32 {
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[allow(non_camel_case_types)]
 pub struct f32x4x4 {
-    columns: [f32x4; 4],
+    pub columns: [f32x4; 4],
 }
 
 pub type MetalFloat4x4 = [f32x4; 4];

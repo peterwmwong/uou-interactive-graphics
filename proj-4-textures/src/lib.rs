@@ -39,7 +39,7 @@ const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
     [0., 0., 1., 0.],
 );
 
-pub struct Delegate<const RENDER_LIGHT: bool> {
+pub struct Delegate<'a, const RENDER_LIGHT: bool> {
     camera_ray: ui_ray::UIRay,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
@@ -54,7 +54,7 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
     render_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
     world_arg_buffer: Buffer,
-    world_arg_encoder: ArgumentEncoder,
+    world_arg_ptr: &'a mut World,
     needs_render: bool,
 }
 
@@ -144,7 +144,7 @@ impl GeometryArgumentEncoder<Geometry> for GeometryArgEncoder {
     }
 }
 
-impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
+impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT> {
     fn new(device: Device) -> Self {
         let executable_name = std::env::args()
             .nth(0)
@@ -185,19 +185,30 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             MaterialArgEncoder,
         >(model_file, &device);
 
-        // TODO: START HERE 5
-        // TODO: START HERE 5
-        // TODO: START HERE 5
-        // TODO: Replace with bindless
-        let world_arg_encoder = model_pipeline
-            .fragment_function
-            .new_argument_encoder(FragBufferIndex::World as _);
+        #[cfg(debug_assertions)]
+        {
+            let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
+
+            let vertex_world_arg_size = model_pipeline_reflection
+                .vertex_bindings()
+                .object_at_as::<BufferBindingRef>(VertexBufferIndex::World as _)
+                .expect("Failed to access world vertex buffer argument information")
+                .buffer_data_size() as u32;
+            debug_assert_eq!(std::mem::size_of::<World>(), vertex_world_arg_size as _, "Shader bindings generated a differently sized Vertex World struct than what Metal expects");
+
+            let fragment_world_arg_size = model_pipeline_reflection
+                .fragment_bindings()
+                .object_at_as::<BufferBindingRef>(FragBufferIndex::World as _)
+                .expect("Failed to access world fragment buffer argument information")
+                .buffer_data_size() as u32;
+            debug_assert_eq!(std::mem::size_of::<World>(), fragment_world_arg_size as _, "Shader bindings generated a differently sized Fragment World struct than what Metal expects");
+        }
         let world_arg_buffer = device.new_buffer(
-            world_arg_encoder.encoded_length(),
+            std::mem::size_of::<World>() as _,
             MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
         );
         world_arg_buffer.set_label("World Argument Buffer");
-        world_arg_encoder.set_argument_buffer(&world_arg_buffer, 0);
+        let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
 
         let MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
@@ -212,6 +223,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         let matrix_model_to_world = f32x4x4::scale(scale, scale, scale, 1.)
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.))
             * f32x4x4::translate(cx, cy, cz);
+        world_arg_ptr.matrix_normal_to_world = upper_left_3x3(matrix_model_to_world);
 
         let mut delegate = Self {
             camera_ray: ui_ray::UIRay::new(
@@ -241,7 +253,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             render_light_pipeline_state: light_pipeline.pipeline_state,
             screen_size: f32x2::default(),
             world_arg_buffer,
-            world_arg_encoder,
+            world_arg_ptr,
             needs_render: false,
             command_queue: device.new_command_queue(),
             device,
@@ -251,10 +263,6 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
-        delegate.update_world(
-            WorldID::MatrixNormalToWorld,
-            matrix_model_to_world.metal_float3x3_upper_left(),
-        );
         delegate.update_light();
         delegate.update_camera(delegate.screen_size);
         delegate.reset_needs_render();
@@ -358,10 +366,54 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     }
 }
 
-impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
+const fn into_float4x4(m: f32x4x4) -> float4x4 {
+    let c = m.columns;
+    float4x4 {
+        cols: unsafe {
+            [
+                std::mem::transmute(c[0]),
+                std::mem::transmute(c[1]),
+                std::mem::transmute(c[2]),
+                std::mem::transmute(c[3]),
+            ]
+        },
+    }
+}
+
+const fn upper_left_3x3(m: f32x4x4) -> float3x3 {
+    let c = m.columns;
+    float3x3 {
+        cols: [
+            packed_float4::new(
+                c[0].as_array()[0],
+                c[0].as_array()[1],
+                c[0].as_array()[2],
+                0.,
+            ),
+            packed_float4::new(
+                c[1].as_array()[0],
+                c[1].as_array()[1],
+                c[1].as_array()[2],
+                0.,
+            ),
+            packed_float4::new(
+                c[2].as_array()[0],
+                c[2].as_array()[1],
+                c[2].as_array()[2],
+                0.,
+            ),
+        ],
+    }
+}
+
+impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
     #[inline(always)]
     fn reset_needs_render(&mut self) {
         self.needs_render = false;
+    }
+    #[inline(always)]
+    fn set_needs_render(&mut self) {
+        self.needs_render = true;
     }
 
     fn update_mode(&mut self, mode: Mode) {
@@ -407,19 +459,12 @@ impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
         orthographic_matrix * PERSPECTIVE_MATRIX
     }
 
-    #[inline(always)]
-    fn update_world<T: Sized>(&mut self, id: WorldID, value: T) {
-        unsafe {
-            *(self.world_arg_encoder.constant_data(id as _) as *mut T) = value;
-        };
-        self.needs_render = true;
-    }
-
     fn update_light(&mut self) {
         let &[rotx, roty] = self.light_ray.rotation_xy.as_array();
         let light_position = f32x4x4::rotate(rotx, roty, 0.)
             * f32x4::from_array([0., 0., -self.light_ray.distance_from_origin, 1.]);
-        self.update_world(WorldID::LightPosition, light_position);
+        self.world_arg_ptr.light_position = light_position.into();
+        self.set_needs_render();
     }
 
     fn update_camera(&mut self, screen_size: f32x2) {
@@ -428,30 +473,22 @@ impl<const RENDER_LIGHT: bool> Delegate<RENDER_LIGHT> {
         let matrix_world_to_camera =
             f32x4x4::translate(0., 0., self.camera_ray.distance_from_origin)
                 * f32x4x4::rotate(rotx, roty, 0.);
-        self.update_world(
-            WorldID::CameraPosition,
-            matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]),
-        );
+        self.world_arg_ptr.camera_position =
+            (matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.])).into();
 
         let &[sx, sy, ..] = screen_size.as_array();
         let aspect_ratio = sy / sx;
         let matrix_world_to_projection =
             self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
 
-        self.update_world(
-            WorldID::MatrixWorldToProjection,
-            *matrix_world_to_projection.metal_float4x4(),
-        );
-        self.update_world(
-            WorldID::MatrixModelToProjection,
-            *(matrix_world_to_projection * self.matrix_model_to_world).metal_float4x4(),
-        );
+        self.world_arg_ptr.matrix_world_to_projection = into_float4x4(matrix_world_to_projection);
+        self.world_arg_ptr.matrix_model_to_projection =
+            into_float4x4(matrix_world_to_projection * self.matrix_model_to_world);
         let matrix_screen_to_projection =
             f32x4x4::translate(-1., 1., 0.) * f32x4x4::scale(2. / sx, -2. / sy, 1., 1.);
-        self.update_world(
-            WorldID::MatrixScreenToWorld,
-            matrix_world_to_projection.inverse() * matrix_screen_to_projection,
-        );
+        self.world_arg_ptr.matrix_screen_to_world =
+            into_float4x4(matrix_world_to_projection.inverse() * matrix_screen_to_projection);
+        self.set_needs_render();
     }
 }
 

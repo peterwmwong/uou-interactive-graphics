@@ -200,6 +200,11 @@ pub fn new_basic_render_pipeline_descriptor(
     base_pipeline_desc
 }
 
+// TODO: START HERE 2
+// TODO: START HERE 2
+// TODO: START HERE 2
+// Remove vertex_function and fragment function!
+// - We needed it before for the argument encoder, but we're migrating to Metal 3 Bindless.
 pub struct CreateRenderPipelineResults {
     pub vertex_function: Function,
     pub fragment_function: Function,

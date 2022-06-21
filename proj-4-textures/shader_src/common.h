@@ -34,14 +34,13 @@ struct Geometry {
     CONSTANT_PTR(packed_float2) tx_coords;
 };
 
-enum struct WorldID
-{
-    MatrixModelToProjection = 0,
-    MatrixNormalToWorld,
-    MatrixWorldToProjection,
-    MatrixScreenToWorld,
-    LightPosition,
-    CameraPosition,
+struct World {
+    float4x4 matrix_model_to_projection;
+    float3x3 matrix_normal_to_world;
+    float4x4 matrix_world_to_projection;
+    float4x4 matrix_screen_to_world;
+    float4   light_position;
+    float4   camera_position;
 };
 
 struct Material {
