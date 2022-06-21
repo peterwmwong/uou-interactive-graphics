@@ -13,11 +13,11 @@ use std::{
 };
 
 bitflags! {
-    struct Mode: u8 {
-        const HAS_AMBIENT = 1 << FC::HasAmbient as u8;
-        const HAS_DIFFUSE = 1 << FC::HasDiffuse as u8;
-        const HAS_NORMAL = 1 << FC::HasNormal as u8;
-        const HAS_SPECULAR = 1 << FC::HasSpecular as u8;
+    struct Mode: usize {
+        const HAS_AMBIENT = 1 << FC::HasAmbient as usize;
+        const HAS_DIFFUSE = 1 << FC::HasDiffuse as usize;
+        const HAS_NORMAL = 1 << FC::HasNormal as usize;
+        const HAS_SPECULAR = 1 << FC::HasSpecular as usize;
         const DEFAULT = Self::HAS_AMBIENT.bits | Self::HAS_DIFFUSE.bits | Self::HAS_SPECULAR.bits;
     }
 }
@@ -115,6 +115,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
 // Can we change the API so we're just passing a FnMut() for Material and Geometry Encoding?
 enum MaterialArgEncoder {}
 impl MaterialArgumentEncoder<Material> for MaterialArgEncoder {
+    #[inline(always)]
     fn set(
         arg: &mut Material,
         ambient_texture: MetalGPUAddress,
@@ -131,6 +132,7 @@ impl MaterialArgumentEncoder<Material> for MaterialArgEncoder {
 
 enum GeometryArgEncoder {}
 impl GeometryArgumentEncoder<Geometry> for GeometryArgEncoder {
+    #[inline(always)]
     fn set(
         arg: &mut Geometry,
         indices_buffer: MetalGPUAddress,
@@ -169,12 +171,12 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 .vertex_bindings()
                 .object_at_as::<BufferBindingRef>(VertexBufferIndex::Geometry as _)
                 .expect("Failed to access geometry vertex buffer argument information")
-                .buffer_data_size() as u32;
+                .buffer_data_size();
             let material_arg_size = model_pipeline_reflection
                 .fragment_bindings()
                 .object_at_as::<BufferBindingRef>(FragBufferIndex::Material as _)
                 .expect("Failed to access material fragment buffer argument information")
-                .buffer_data_size() as u32;
+                .buffer_data_size();
             debug_assert_eq!(std::mem::size_of::<Geometry>(), geometry_arg_size as _, "Shader bindings generated a differently sized Geometry struct than what Metal expects");
             debug_assert_eq!(std::mem::size_of::<Material>(), material_arg_size as _, "Shader bindings generated a differently sized Material struct than what Metal expects");
         }

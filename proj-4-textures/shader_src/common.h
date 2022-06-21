@@ -19,7 +19,8 @@ using namespace metal;
 
 #endif
 
-enum struct FC
+/// <div rustbindgen nodebug></div>
+enum struct FC: unsigned char
 {
     HasAmbient = 0,
     HasDiffuse,
@@ -50,21 +51,24 @@ struct Material {
     float                    specular_shineness;
 };
 
-enum struct VertexBufferIndex
+/// <div rustbindgen nodebug></div>
+enum struct VertexBufferIndex: unsigned int
 {
     Geometry = 0,
     World,
     LENGTH
 };
 
-enum struct FragBufferIndex
+/// <div rustbindgen nodebug></div>
+enum struct FragBufferIndex: unsigned int
 {
     Material = 0,
     World,
     LENGTH
 };
 
-enum struct LightVertexBufferIndex
+/// <div rustbindgen nodebug></div>
+enum struct LightVertexBufferIndex: unsigned int
 {
     World = 0,
     LENGTH,

@@ -11,8 +11,8 @@ pub struct MaxBounds {
 
 pub(crate) struct DrawInfo {
     pub(crate) debug_group_name: String,
-    pub(crate) num_indices: u32,
-    pub(crate) material_id: u32,
+    pub(crate) num_indices: usize,
+    pub(crate) material_id: usize,
 }
 
 pub trait GeometryArgumentEncoder<T: Sized> {
@@ -28,7 +28,7 @@ pub trait GeometryArgumentEncoder<T: Sized> {
 // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
 pub(crate) struct GeometryBuffers {
     pub(crate) arguments: Buffer,
-    pub(crate) argument_byte_size: u32,
+    pub(crate) argument_byte_size: usize,
     #[allow(dead_code)]
     indices: Buffer,
     #[allow(dead_code)]
@@ -39,10 +39,6 @@ pub(crate) struct GeometryBuffers {
     tx_coords: Buffer,
 }
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Save space, and use u32 for sizes
 pub(crate) struct Geometry<'a, T: Sized, E: GeometryArgumentEncoder<T>> {
     arguments_byte_size: usize,
     objects: &'a [tobj::Model],
@@ -83,7 +79,6 @@ impl<'a, T: Sized, E: GeometryArgumentEncoder<T>> Geometry<'a, T, E> {
                 (mesh.texcoords.len() / 2) == num_positions,
                 "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
             );
-            // indices_buf_length += std::mem::size_of_val(&mesh.indices);
             indices_buf_length += byte_size_of_slice(&mesh.indices);
             positions_buf_length += byte_size_of_slice(&mesh.positions);
             normals_buf_length += byte_size_of_slice(&mesh.normals);

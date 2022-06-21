@@ -18,7 +18,7 @@ pub trait MaterialArgumentEncoder<T: Sized> {
 
 pub(crate) struct MaterialResults {
     pub(crate) arguments: Buffer,
-    pub(crate) argument_byte_size: u32,
+    pub(crate) argument_byte_size: usize,
     // Needs to be owned and not dropped (causing deallocation from heap).
     #[allow(dead_code)]
     textures: Vec<Texture>,
@@ -80,8 +80,8 @@ impl<'a> MaterialSource<'a> {
         };
 
         let desc = TextureDescriptor::new();
-        desc.set_width(width as _);
-        desc.set_height(height as _);
+        desc.set_width(width);
+        desc.set_height(height);
         desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
         desc.set_storage_mode(MTLStorageMode::Shared);
         desc.set_texture_type(MTLTextureType::D2);
@@ -225,7 +225,7 @@ impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
         let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
             heap,
             "Materials Arguments",
-            self.arguments_byte_size as _,
+            self.arguments_byte_size,
         );
 
         let gpu_handle_sel = sel!(gpuHandle);
@@ -257,7 +257,7 @@ impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
         let textures = texture_cache.into_iter().map(|(_, tx)| tx).collect();
         MaterialResults {
             arguments,
-            argument_byte_size: std::mem::size_of::<T>() as _,
+            argument_byte_size: std::mem::size_of::<T>(),
             textures,
         }
     }

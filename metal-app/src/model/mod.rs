@@ -98,8 +98,8 @@ impl Model {
     pub fn encode_draws(
         &self,
         encoder: &RenderCommandEncoderRef,
-        vertex_geometry_arg_buffer_id: u8,
-        fragment_material_arg_buffer_id: u8,
+        vertex_geometry_arg_buffer_id: usize,
+        fragment_material_arg_buffer_id: usize,
     ) {
         let mut geometry_arg_buffer_offset = 0;
         for d in &self.draws {

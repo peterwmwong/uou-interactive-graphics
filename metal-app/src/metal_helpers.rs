@@ -221,9 +221,9 @@ pub fn create_pipeline(
     label: &str,
     func_constants: Option<&FunctionConstantValues>,
     vertex_func_name: &str,
-    num_vertex_immutable_buffers: u32,
+    num_vertex_immutable_buffers: usize,
     frag_func_name: &str,
-    num_frag_immutable_buffers: u32,
+    num_frag_immutable_buffers: usize,
 ) -> CreateRenderPipelineResults {
     pipeline_desc.set_label(label);
 

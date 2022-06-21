@@ -10,7 +10,7 @@
 
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct half2 {
     pub x: u16,
     pub y: u16,
@@ -40,7 +40,7 @@ fn bindgen_test_layout_half2() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct half4 {
     pub x: u16,
     pub y: u16,
@@ -82,7 +82,7 @@ fn bindgen_test_layout_half4() {
 }
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float2 {
     pub xy: [f32; 2usize],
 }
@@ -111,7 +111,7 @@ fn bindgen_test_layout_float2() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float4 {
     pub xyzw: [f32; 4usize],
 }
@@ -140,7 +140,7 @@ fn bindgen_test_layout_float4() {
 }
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct ushort2 {
     pub xy: [::std::os::raw::c_ushort; 2usize],
 }
@@ -168,7 +168,7 @@ fn bindgen_test_layout_ushort2() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct packed_half2 {
     pub x: u16,
     pub y: u16,
@@ -207,7 +207,7 @@ fn bindgen_test_layout_packed_half2() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct packed_half4 {
     pub x: u16,
     pub y: u16,
@@ -268,7 +268,7 @@ fn bindgen_test_layout_packed_half4() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct packed_float2 {
     pub xy: [f32; 2usize],
 }
@@ -296,7 +296,7 @@ fn bindgen_test_layout_packed_float2() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct packed_float4 {
     pub xyzw: [f32; 4usize],
 }
@@ -325,7 +325,7 @@ fn bindgen_test_layout_packed_float4() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float3x3 {
     pub columns: [[f32; 4usize]; 3usize],
 }
@@ -354,7 +354,7 @@ fn bindgen_test_layout_float3x3() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct float4x4 {
     pub columns: [[f32; 4usize]; 4usize],
 }
@@ -381,8 +381,9 @@ fn bindgen_test_layout_float4x4() {
         )
     );
 }
-#[repr(i32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(u8)]
+#[doc = " <div rustbindgen nodebug></div>"]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FC {
     HasAmbient = 0,
     HasDiffuse = 1,
@@ -390,7 +391,7 @@ pub enum FC {
     HasSpecular = 3,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Geometry {
     pub indices: ::std::os::raw::c_ulong,
     pub positions: ::std::os::raw::c_ulong,
@@ -452,7 +453,7 @@ fn bindgen_test_layout_Geometry() {
 }
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct World {
     pub matrix_model_to_projection: float4x4,
     pub matrix_normal_to_world: float3x3,
@@ -539,7 +540,7 @@ fn bindgen_test_layout_World() {
     );
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Material {
     pub ambient_texture: ::std::os::raw::c_ulong,
     pub diffuse_texture: ::std::os::raw::c_ulong,
@@ -599,22 +600,25 @@ fn bindgen_test_layout_Material() {
         )
     );
 }
-#[repr(i32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(u32)]
+#[doc = " <div rustbindgen nodebug></div>"]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {
     Geometry = 0,
     World = 1,
     LENGTH = 2,
 }
-#[repr(i32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(u32)]
+#[doc = " <div rustbindgen nodebug></div>"]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragBufferIndex {
     Material = 0,
     World = 1,
     LENGTH = 2,
 }
-#[repr(i32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(u32)]
+#[doc = " <div rustbindgen nodebug></div>"]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum LightVertexBufferIndex {
     World = 0,
     LENGTH = 1,
