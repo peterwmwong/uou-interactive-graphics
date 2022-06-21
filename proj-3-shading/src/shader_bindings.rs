@@ -603,6 +603,17 @@ impl f32x4x4 {
 
     #[allow(dead_code)]
     #[inline]
+    pub const fn scale_translate(sx: f32, sy: f32, sz: f32, tx: f32, ty: f32, tz: f32) -> Self {
+        Self::new(
+            [sx, 0., 0., tx],
+            [0., sy, 0., ty],
+            [0., 0., sz, tz],
+            [0., 0., 0., 1.],
+        )
+    }
+
+    #[allow(dead_code)]
+    #[inline]
     pub const fn translate(x: f32, y: f32, z: f32) -> Self {
         Self::new(
             [1., 0., 0., x],

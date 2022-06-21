@@ -437,16 +437,15 @@ impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
         self.world_arg_ptr.camera_position =
             (matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.])).into();
 
-        let &[sx, sy, ..] = screen_size.as_array();
-        let aspect_ratio = sy / sx;
+        let &[sx, sy, ..] = (f32x2::splat(2.) / screen_size).as_array();
+        let aspect_ratio = sx / sy;
         let matrix_world_to_projection =
             self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
 
         self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
         self.world_arg_ptr.matrix_model_to_projection =
             matrix_world_to_projection * self.matrix_model_to_world;
-        let matrix_screen_to_projection =
-            f32x4x4::translate(-1., 1., 0.) * f32x4x4::scale(2. / sx, -2. / sy, 1., 1.);
+        let matrix_screen_to_projection = f32x4x4::scale_translate(sx, -sy, 1., -1., 1., 0.);
         self.world_arg_ptr.matrix_screen_to_world =
             matrix_world_to_projection.inverse() * matrix_screen_to_projection;
         self.set_needs_render();
