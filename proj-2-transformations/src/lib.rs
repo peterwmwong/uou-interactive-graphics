@@ -1,3 +1,4 @@
+#![feature(array_zip)]
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;

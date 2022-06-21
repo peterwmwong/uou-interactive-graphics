@@ -1,3 +1,4 @@
+#![feature(array_zip)]
 #![feature(portable_simd)]
 use metal_app::metal::*;
 use metal_app::*;

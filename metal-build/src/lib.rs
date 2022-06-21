@@ -1,3 +1,4 @@
+#![feature(array_zip)]
 #![feature(portable_simd)]
 mod vector_type_helpers;
 

@@ -1,3 +1,4 @@
+#![feature(array_zip)]
 #![feature(portable_simd)]
 mod shader_bindings;
 
@@ -223,7 +224,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         let matrix_model_to_world = f32x4x4::scale(scale, scale, scale, 1.)
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.))
             * f32x4x4::translate(cx, cy, cz);
-        world_arg_ptr.matrix_normal_to_world = upper_left_3x3(matrix_model_to_world);
+        world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         let mut delegate = Self {
             camera_ray: ui_ray::UIRay::new(
@@ -366,46 +367,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
     }
 }
 
-const fn into_float4x4(m: f32x4x4) -> float4x4 {
-    let c = m.columns;
-    float4x4 {
-        cols: unsafe {
-            [
-                std::mem::transmute(c[0]),
-                std::mem::transmute(c[1]),
-                std::mem::transmute(c[2]),
-                std::mem::transmute(c[3]),
-            ]
-        },
-    }
-}
-
-const fn upper_left_3x3(m: f32x4x4) -> float3x3 {
-    let c = m.columns;
-    float3x3 {
-        cols: [
-            packed_float4::new(
-                c[0].as_array()[0],
-                c[0].as_array()[1],
-                c[0].as_array()[2],
-                0.,
-            ),
-            packed_float4::new(
-                c[1].as_array()[0],
-                c[1].as_array()[1],
-                c[1].as_array()[2],
-                0.,
-            ),
-            packed_float4::new(
-                c[2].as_array()[0],
-                c[2].as_array()[1],
-                c[2].as_array()[2],
-                0.,
-            ),
-        ],
-    }
-}
-
 impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
     #[inline(always)]
     fn reset_needs_render(&mut self) {
@@ -481,13 +442,13 @@ impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
         let matrix_world_to_projection =
             self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
 
-        self.world_arg_ptr.matrix_world_to_projection = into_float4x4(matrix_world_to_projection);
+        self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
         self.world_arg_ptr.matrix_model_to_projection =
-            into_float4x4(matrix_world_to_projection * self.matrix_model_to_world);
+            matrix_world_to_projection * self.matrix_model_to_world;
         let matrix_screen_to_projection =
             f32x4x4::translate(-1., 1., 0.) * f32x4x4::scale(2. / sx, -2. / sy, 1., 1.);
         self.world_arg_ptr.matrix_screen_to_world =
-            into_float4x4(matrix_world_to_projection.inverse() * matrix_screen_to_projection);
+            matrix_world_to_projection.inverse() * matrix_screen_to_projection;
         self.set_needs_render();
     }
 }

@@ -8,6 +8,11 @@
 
 // Spec: 2.2 Vector Data Types / Table 2.3. Size and alignment of vector data types
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Try making these structs hold arrays.
+
 typedef struct alignas(4) half2
 {
     __fp16 x;
@@ -76,12 +81,12 @@ typedef struct alignas(4) packed_float4
 
 typedef struct alignas(16) float3x3
 {
-    packed_float4 cols[3];
+    packed_float4 columns[3];
 } float3x3;
 
 typedef struct alignas(16) float4x4
 {
-    packed_float4 cols[4];
+    packed_float4 columns[4];
 } float4x4;
 
 

@@ -1,3 +1,4 @@
+#![feature(array_zip)]
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
@@ -221,18 +222,18 @@ impl RendererDelgate for Delegate {
                 // Conceptually, we want a matrix that ONLY applies rotation (no translation).
                 // Since normals are directions (not positions, relative to a point on a surface),
                 // translations are meaningless.
-                &self.matrix_model_to_world.metal_float3x3_upper_left(),
+                &self.matrix_model_to_world,
             );
             encode_vertex_bytes(
                 &encoder,
                 VertexBufferIndex::MatrixModelToProjection as _,
-                self.matrix_model_to_projection.metal_float4x4(),
+                &self.matrix_model_to_projection,
             );
             encode_fragment_bytes(&encoder, FragBufferIndex::FragMode as _, &self.mode);
             encode_fragment_bytes(
                 &encoder,
                 FragBufferIndex::MatrixProjectionToWorld as _,
-                self.matrix_projection_to_world.metal_float4x4(),
+                &self.matrix_projection_to_world,
             );
             encode_fragment_bytes(
                 &encoder,
@@ -278,7 +279,7 @@ impl RendererDelgate for Delegate {
             encode_vertex_bytes(
                 &encoder,
                 LightVertexBufferIndex::MatrixWorldToProjection as _,
-                self.matrix_world_to_projection.metal_float4x4(),
+                &self.matrix_world_to_projection,
             );
             encode_vertex_bytes(
                 &encoder,

@@ -1,3 +1,4 @@
+#![feature(array_zip)]
 #![feature(portable_simd)]
 mod shader_bindings;
 
@@ -179,7 +180,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             encode_vertex_bytes(
                 encoder,
                 VertexBufferIndex::MatrixModelToProjection as _,
-                self.matrix_model_to_projection.metal_float4x4(),
+                &self.matrix_model_to_projection,
             );
             encoder.set_fragment_texture(FragBufferIndex::Texture as _, Some(plane_texture));
             encode_fragment_bytes(
