@@ -4,6 +4,7 @@ mod shader_bindings;
 
 use bitflags::bitflags;
 use metal_app::{metal::*, ui_ray, *};
+use metal_build::metal_types::*;
 use shader_bindings::*;
 use std::{
     f32::consts::PI,

@@ -1,6 +1,7 @@
 #![feature(array_zip)]
 #![feature(portable_simd)]
-mod vector_type_helpers;
+pub mod metal_types;
+mod rust_bindgen_only_metal_types_list;
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -20,10 +21,7 @@ fn generate_rust_shader_bindings() {
     let shader_common_header_file = PathBuf::from("shader_src").join("common.h");
     let rust_bindgen_only_vector_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
         .join("src")
-        .join("rust-bindgen-only-vector-types.h");
-    let vector_type_helpers_file = Path::new(METAL_BUILD_MANIFEST_DIR)
-        .join("src")
-        .join("vector_type_helpers.rs");
+        .join("rust_bindgen_only_metal_types.h");
 
     let cached_hash_path =
         PathBuf::from(env::var("OUT_DIR").unwrap()).join("shader_src_common_h_hash");
@@ -31,7 +29,6 @@ fn generate_rust_shader_bindings() {
         &PathBuf::from("build.rs"),
         &shader_common_header_file,
         &rust_bindgen_only_vector_types_header_file,
-        &vector_type_helpers_file,
     ]);
     if let Some(old_hash) = read_cached_shader_src_hash(&cached_hash_path) {
         if old_hash == current_hash {
@@ -60,12 +57,14 @@ fn generate_rust_shader_bindings() {
  `metal_build::build()`.
  Structs and Enums are generated based on `shader_src/common.h`.
 ***************************************************************************************************/
+#[allow(unused_imports)]
+use metal_build::metal_types::*;
 "#
                 .as_bytes(),
             )
             .unwrap();
 
-        bindgen::Builder::default()
+        let mut builder = bindgen::Builder::default()
             .header(rust_bindgen_only_vector_types_header_file.to_string_lossy())
             .header(shader_common_header_file.to_string_lossy())
             .clang_arg("-xc++")
@@ -76,25 +75,15 @@ fn generate_rust_shader_bindings() {
             })
             .derive_debug(false)
             .no_debug("*")
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+        for block_item in rust_bindgen_only_metal_types_list::TYPES {
+            builder = builder.blocklist_type(block_item);
+        }
+        builder
             .generate()
             .expect("Unable to generate bindings")
             .write(Box::new(&shader_bindings_file))
-            .unwrap();
-
-        let mut found_start_here = false;
-        for line in fs::read_to_string(vector_type_helpers_file)
-            .unwrap()
-            .lines()
-        {
-            if !found_start_here {
-                found_start_here = line == "// APPEND THE FOLLOWING TO `shader_bindings.rs`";
-            } else {
-                shader_bindings_file
-                    .write_fmt(format_args!("{line}\n"))
-                    .expect("Could not add vector type helpers to shader_bindings.rs");
-            }
-        }
+            .expect("Unable to write shader_bindings.rs file");
     }
 
     save_shader_src_hash(current_hash, &cached_hash_path);

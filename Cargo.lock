@@ -422,7 +422,7 @@ name = "metal-build"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "metal-app",
+ "half",
 ]
 
 [[package]]

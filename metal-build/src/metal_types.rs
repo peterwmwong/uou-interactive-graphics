@@ -1,14 +1,13 @@
 include!(concat!(
     env!("OUT_DIR"),
-    "/rust-bindgen-only-vector-type-bindings.rs"
+    "/rust_bindgen_only_metal_type_bindings.rs"
 ));
-// APPEND THE FOLLOWING TO `shader_bindings.rs`
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.
  See `metal-build/src/vector_type_helpers.rs`.
 ***************************************************************************************************/
-use metal_app::half::f16;
+use half::f16;
 use std::{
     ops::{Mul, Sub},
     simd::{f32x2, f32x4, u16x2},
@@ -327,124 +326,136 @@ impl From<f32x4x4> for float3x3 {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::simd::f32x4;
 
-    #[test]
-    fn test_inverse() {
-        let m = f32x4x4::rotate(1., 2., 3.) * f32x4x4::translate(40., 50., 60.);
-        let inv_m = m.inverse();
+    mod test_f32x4x4 {
+        use super::*;
+        use std::{fmt::Debug, simd::f32x4};
 
-        let expected = f32x4x4::identity();
-        let actual = inv_m * m;
-        let diff = actual - expected;
-
-        const TOLERANCE: f32x4 = f32x4::splat(3.82e-6);
-        for c in diff.columns {
-            let c: f32x4 = c.into();
-            assert!(c.abs().lanes_lt(TOLERANCE).all());
+        impl Debug for f32x4x4 {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_struct("float4x4")
+                    .field("columns", &self.columns)
+                    .finish()
+            }
         }
-    }
 
-    #[test]
-    fn test_translate() {
-        let t = f32x4x4::translate(40., 50., 60.);
-        let p = f32x4::from_array([1., 2., 3., 1.]);
+        #[test]
+        fn test_inverse() {
+            let m = f32x4x4::rotate(1., 2., 3.) * f32x4x4::translate(40., 50., 60.);
+            let inv_m = m.inverse();
 
-        let result = t * p;
-        assert_eq!(result, f32x4::from_array([41., 52., 63., 1.]));
-    }
+            let expected = f32x4x4::identity();
+            let actual = inv_m * m;
+            let diff = actual - expected;
 
-    #[test]
-    fn test_zero_translate() {
-        let r = f32x4x4::rotate(1., 2., 3.);
-        let m = r * f32x4x4::translate(40., 50., 60.);
+            const TOLERANCE: f32x4 = f32x4::splat(3.82e-6);
+            for c in diff.columns {
+                let c: f32x4 = c.into();
+                assert!(c.abs().lanes_lt(TOLERANCE).all());
+            }
+        }
 
-        let result = m.zero_translate();
-        assert_eq!(result, r);
-    }
+        #[test]
+        fn test_translate() {
+            let t = f32x4x4::translate(40., 50., 60.);
+            let p = f32x4::from_array([1., 2., 3., 1.]);
 
-    #[test]
-    fn test_row() {
-        let m = f32x4x4::new(
-            [5., 6., 7., 8.],
-            [9., 10., 11., 12.],
-            [13., 14., 15., 16.],
-            [17., 18., 19., 20.],
-        );
+            let result = t * p;
+            assert_eq!(result, f32x4::from_array([41., 52., 63., 1.]));
+        }
 
-        assert_eq!(m.row::<0>(), f32x4::from_array([5., 6., 7., 8.]));
-        assert_eq!(m.row::<1>(), f32x4::from_array([9., 10., 11., 12.]));
-        assert_eq!(m.row::<2>(), f32x4::from_array([13., 14., 15., 16.]));
-        assert_eq!(m.row::<3>(), f32x4::from_array([17., 18., 19., 20.]));
-    }
+        #[test]
+        fn test_zero_translate() {
+            let r = f32x4x4::rotate(1., 2., 3.);
+            let m = r * f32x4x4::translate(40., 50., 60.);
 
-    #[test]
-    fn test_mul_with_f32x4() {
-        let r = f32x4::from_array([1., 2., 3., 4.]);
-        let m = f32x4x4::new(
-            [5., 6., 7., 8.],
-            [9., 10., 11., 12.],
-            [13., 14., 15., 16.],
-            [17., 18., 19., 20.],
-        );
+            let result = m.zero_translate();
+            assert_eq!(result, r);
+        }
 
-        let result = m * r;
-        assert_eq!(
-            result,
-            f32x4::from_array([
-                5. * 1. + 6. * 2. + 7. * 3. + 8. * 4.,
-                9. * 1. + 10. * 2. + 11. * 3. + 12. * 4.,
-                13. * 1. + 14. * 2. + 15. * 3. + 16. * 4.,
-                17. * 1. + 18. * 2. + 19. * 3. + 20. * 4.,
-            ])
-        )
-    }
+        #[test]
+        fn test_row() {
+            let m = f32x4x4::new(
+                [5., 6., 7., 8.],
+                [9., 10., 11., 12.],
+                [13., 14., 15., 16.],
+                [17., 18., 19., 20.],
+            );
 
-    #[test]
-    fn test_mul_with_f32x4x4() {
-        let left = f32x4x4::new(
-            [1., 2., 3., 4.],
-            [5., 6., 7., 8.],
-            [9., 10., 11., 12.],
-            [13., 14., 15., 16.],
-        );
-        let right = f32x4x4::new(
-            [17., 18., 19., 20.],
-            [21., 22., 23., 24.],
-            [25., 26., 27., 28.],
-            [29., 30., 31., 32.],
-        );
+            assert_eq!(m.row::<0>(), f32x4::from_array([5., 6., 7., 8.]));
+            assert_eq!(m.row::<1>(), f32x4::from_array([9., 10., 11., 12.]));
+            assert_eq!(m.row::<2>(), f32x4::from_array([13., 14., 15., 16.]));
+            assert_eq!(m.row::<3>(), f32x4::from_array([17., 18., 19., 20.]));
+        }
 
-        let result = left * right;
-        let columns = right.columns.map(|a| f32x4::from_array(a));
-        assert_eq!(
-            result,
-            f32x4x4::new(
-                [
-                    (left.row::<0>() * columns[0]).reduce_sum(),
-                    (left.row::<0>() * columns[1]).reduce_sum(),
-                    (left.row::<0>() * columns[2]).reduce_sum(),
-                    (left.row::<0>() * columns[3]).reduce_sum(),
-                ],
-                [
-                    (left.row::<1>() * columns[0]).reduce_sum(),
-                    (left.row::<1>() * columns[1]).reduce_sum(),
-                    (left.row::<1>() * columns[2]).reduce_sum(),
-                    (left.row::<1>() * columns[3]).reduce_sum(),
-                ],
-                [
-                    (left.row::<2>() * columns[0]).reduce_sum(),
-                    (left.row::<2>() * columns[1]).reduce_sum(),
-                    (left.row::<2>() * columns[2]).reduce_sum(),
-                    (left.row::<2>() * columns[3]).reduce_sum(),
-                ],
-                [
-                    (left.row::<3>() * columns[0]).reduce_sum(),
-                    (left.row::<3>() * columns[1]).reduce_sum(),
-                    (left.row::<3>() * columns[2]).reduce_sum(),
-                    (left.row::<3>() * columns[3]).reduce_sum(),
-                ]
+        #[test]
+        fn test_mul_with_f32x4() {
+            let r = f32x4::from_array([1., 2., 3., 4.]);
+            let m = f32x4x4::new(
+                [5., 6., 7., 8.],
+                [9., 10., 11., 12.],
+                [13., 14., 15., 16.],
+                [17., 18., 19., 20.],
+            );
+
+            let result = m * r;
+            assert_eq!(
+                result,
+                f32x4::from_array([
+                    5. * 1. + 6. * 2. + 7. * 3. + 8. * 4.,
+                    9. * 1. + 10. * 2. + 11. * 3. + 12. * 4.,
+                    13. * 1. + 14. * 2. + 15. * 3. + 16. * 4.,
+                    17. * 1. + 18. * 2. + 19. * 3. + 20. * 4.,
+                ])
             )
-        );
+        }
+
+        #[test]
+        fn test_mul_with_f32x4x4() {
+            let left = f32x4x4::new(
+                [1., 2., 3., 4.],
+                [5., 6., 7., 8.],
+                [9., 10., 11., 12.],
+                [13., 14., 15., 16.],
+            );
+            let right = f32x4x4::new(
+                [17., 18., 19., 20.],
+                [21., 22., 23., 24.],
+                [25., 26., 27., 28.],
+                [29., 30., 31., 32.],
+            );
+
+            let result = left * right;
+            let columns = right.columns.map(|a| f32x4::from_array(a));
+            assert_eq!(
+                result,
+                f32x4x4::new(
+                    [
+                        (left.row::<0>() * columns[0]).reduce_sum(),
+                        (left.row::<0>() * columns[1]).reduce_sum(),
+                        (left.row::<0>() * columns[2]).reduce_sum(),
+                        (left.row::<0>() * columns[3]).reduce_sum(),
+                    ],
+                    [
+                        (left.row::<1>() * columns[0]).reduce_sum(),
+                        (left.row::<1>() * columns[1]).reduce_sum(),
+                        (left.row::<1>() * columns[2]).reduce_sum(),
+                        (left.row::<1>() * columns[3]).reduce_sum(),
+                    ],
+                    [
+                        (left.row::<2>() * columns[0]).reduce_sum(),
+                        (left.row::<2>() * columns[1]).reduce_sum(),
+                        (left.row::<2>() * columns[2]).reduce_sum(),
+                        (left.row::<2>() * columns[3]).reduce_sum(),
+                    ],
+                    [
+                        (left.row::<3>() * columns[0]).reduce_sum(),
+                        (left.row::<3>() * columns[1]).reduce_sum(),
+                        (left.row::<3>() * columns[2]).reduce_sum(),
+                        (left.row::<3>() * columns[3]).reduce_sum(),
+                    ]
+                )
+            );
+        }
     }
 }

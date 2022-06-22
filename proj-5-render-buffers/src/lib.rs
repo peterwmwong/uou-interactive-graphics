@@ -3,6 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{metal::*, *};
+use metal_build::metal_types::*;
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
 use std::{f32::consts::PI, ops::Neg, simd::f32x2};

@@ -5,6 +5,7 @@ mod shader_bindings;
 
 use metal_app::metal::*;
 use metal_app::*;
+use metal_build::metal_types::*;
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
