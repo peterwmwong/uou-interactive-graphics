@@ -10,7 +10,10 @@ use materials::{MaterialResults, Materials};
 use std::path::{Path, PathBuf};
 use tobj::LoadOptions;
 
-pub struct Model {
+pub struct Model<
+    const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
+    const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64,
+> {
     heap: Heap,
     draws: Vec<DrawInfo>,
     pub geometry_max_bounds: MaxBounds,
@@ -22,7 +25,9 @@ pub struct Model {
     materials: MaterialResults,
 }
 
-impl Model {
+impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>
+    Model<VERTEX_GEOMETRY_ARG_BUFFER_ID, FRAGMENT_MATERIAL_ARG_BUFFER_ID>
+{
     pub fn from_file<
         T: AsRef<Path>,
         G: Sized,
@@ -88,17 +93,8 @@ impl Model {
         )
     }
 
-    // TODO: START HERE 4
-    // TODO: START HERE 4
-    // TODO: START HERE 4
-    // Change vertex_geometry_arg_buffer_id and fragment_material_arg_buffer_id as generic constants
     #[inline]
-    pub fn encode_draws(
-        &self,
-        encoder: &RenderCommandEncoderRef,
-        vertex_geometry_arg_buffer_id: usize,
-        fragment_material_arg_buffer_id: usize,
-    ) {
+    pub fn encode_draws(&self, encoder: &RenderCommandEncoderRef) {
         let mut geometry_arg_buffer_offset = 0;
         for d in &self.draws {
             encoder.push_debug_group(&d.debug_group_name);
@@ -108,12 +104,12 @@ impl Model {
             // For the first object, encode the vertex/fragment buffer.
             if geometry_arg_buffer_offset == 0 {
                 encoder.set_vertex_buffer(
-                    vertex_geometry_arg_buffer_id as _,
+                    VERTEX_GEOMETRY_ARG_BUFFER_ID,
                     Some(self.geometry_buffers.arguments.as_ref()),
                     0,
                 );
                 encoder.set_fragment_buffer(
-                    fragment_material_arg_buffer_id as _,
+                    FRAGMENT_MATERIAL_ARG_BUFFER_ID,
                     Some(self.materials.arguments.as_ref()),
                     material_arg_buffer_offset as _,
                 );
@@ -121,12 +117,12 @@ impl Model {
             // Subsequent objects, just move the vertex/fragment buffer offsets
             else {
                 encoder.set_vertex_buffer_offset(
-                    vertex_geometry_arg_buffer_id as _,
+                    VERTEX_GEOMETRY_ARG_BUFFER_ID,
                     geometry_arg_buffer_offset as _,
                 );
 
                 encoder.set_fragment_buffer_offset(
-                    fragment_material_arg_buffer_id as _,
+                    FRAGMENT_MATERIAL_ARG_BUFFER_ID,
                     material_arg_buffer_offset as _,
                 );
             }

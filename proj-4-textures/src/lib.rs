@@ -50,7 +50,7 @@ pub struct Delegate<'a, const RENDER_LIGHT: bool> {
     light_ray: ui_ray::UIRay,
     matrix_model_to_world: f32x4x4,
     mode: Mode,
-    model: Model,
+    model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
     render_light_pipeline_state: RenderPipelineState,
     render_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
@@ -282,11 +282,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 Some(&self.world_arg_buffer),
                 0,
             );
-            self.model.encode_draws(
-                &encoder,
-                VertexBufferIndex::Geometry as _,
-                FragBufferIndex::Material as _,
-            );
+            self.model.encode_draws(&encoder);
             encoder.pop_debug_group();
         }
         // Render Light
