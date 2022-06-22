@@ -56,9 +56,6 @@
 # metal-build
 
 - Consider moving rust polyfill metal_types (codegen and code) into it's own crate.
-    - Move going further... why even codegen metal types?
-    - Couldn't we simply define these types in rust with the correct size/alignment?
-    - Other than size/alignment what could get out-of-sync with metal compiler version?
 - Make first build faster
     - Currently, the first build will run bindgen because there is no cached hash file (hash value based on `src/rust_bindgen_only_metal_types.h`)...
         - ... which means we need to generate `$OUT_DIR/rust_bindgen_only_metal_type_bindings.rs` and `rust_bindgen_only_metal_types_list.rs`
