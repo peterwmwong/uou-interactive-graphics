@@ -3,7 +3,7 @@
 mod shader_bindings;
 
 use bitflags::bitflags;
-use metal_app::{metal::*, metal_types::*, ui_ray, *};
+use metal_app::{components::*, metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -23,25 +23,14 @@ bitflags! {
 }
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
-const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: Mode = Mode::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
-const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
-
-const N: f32 = 0.1;
-const F: f32 = 100000.0;
-const NEAR_FIELD_MAJOR_AXIS: f32 = N / INITIAL_CAMERA_DISTANCE;
-const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
-    [N, 0., 0., 0.],
-    [0., N, 0., 0.],
-    [0., 0., N + F, -N * F],
-    [0., 0., 1., 0.],
-);
+const LIGHT_DISTANCE: f32 = 0.5;
 
 pub struct Delegate<'a, const RENDER_LIGHT: bool> {
-    camera_ray: ui_ray::UIRay,
+    camera: camera::Camera,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     command_queue: CommandQueue,
@@ -53,7 +42,6 @@ pub struct Delegate<'a, const RENDER_LIGHT: bool> {
     model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
     render_light_pipeline_state: RenderPipelineState,
     render_pipeline_state: RenderPipelineState,
-    screen_size: f32x2,
     world_arg_buffer: Buffer,
     world_arg_ptr: &'a mut World,
     needs_render: bool,
@@ -200,24 +188,23 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         let &[cx, cy, cz, _] = center.neg().as_array();
 
         // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
-        // 1. INITIAL_CAMERA_DISTANCE is invariant of the model's coordinate range
+        // 1. Camera distance is invariant of the model's coordinate range
         // 2. Dramatically reduces precision errors (compared to ranges >1000, like in Yoda model)
         //    - In the Vertex Shader, z-fighting in the depth buffer, even with Depth32Float.
         //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
         //      exhibit a weird triangal-ish pattern.
         let scale = 1. / size.reduce_max();
+
+        // TODO: This generates an immense amount of code!
+        // - It's the matrix multiplications we're unable to avoid with const evaluation (currently not supported in rust for floating point operations)
+        // - We can create combo helpers, see f32x4x4::scale_translate()
         let matrix_model_to_world = f32x4x4::scale(scale, scale, scale, 1.)
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.))
             * f32x4x4::translate(cx, cy, cz);
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         let mut delegate = Self {
-            camera_ray: ui_ray::UIRay::new(
-                ModifierKeys::empty(),
-                INITIAL_CAMERA_DISTANCE,
-                INITIAL_CAMERA_ROTATION,
-                false,
-            ),
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty()),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -237,7 +224,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             model,
             render_pipeline_state: model_pipeline.pipeline_state,
             render_light_pipeline_state: light_pipeline.pipeline_state,
-            screen_size: f32x2::default(),
             world_arg_buffer,
             world_arg_ptr,
             needs_render: false,
@@ -250,14 +236,13 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
         delegate.update_light();
-        delegate.update_camera(delegate.screen_size);
-        delegate.reset_needs_render();
+        delegate.needs_render = false;
         delegate
     }
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
-        self.reset_needs_render();
+        self.needs_render = false;
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
@@ -313,9 +298,23 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if self.camera_ray.on_event(event) {
-            self.update_camera(self.screen_size);
-        } else if self.light_ray.on_event(event) {
+        self.camera.on_event(
+            event,
+            |camera::CameraUpdate {
+                 camera_position,
+                 matrix_screen_to_world,
+                 matrix_world_to_projection,
+             }| {
+                self.world_arg_ptr.camera_position = camera_position.into();
+                self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+                self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+                self.world_arg_ptr.matrix_model_to_projection =
+                    matrix_world_to_projection * self.matrix_model_to_world;
+                self.needs_render = true;
+            },
+        );
+
+        if self.light_ray.on_event(event) {
             self.update_light();
         } else {
             match event {
@@ -331,7 +330,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 }
                 UserEvent::WindowResize { size, .. } => {
                     self.update_depth_texture_size(size);
-                    self.update_camera(size);
                 }
                 _ => {}
             }
@@ -349,15 +347,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
 }
 
 impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
-    #[inline(always)]
-    fn reset_needs_render(&mut self) {
-        self.needs_render = false;
-    }
-    #[inline(always)]
-    fn set_needs_render(&mut self) {
-        self.needs_render = true;
-    }
-
     fn update_mode(&mut self, mode: Mode) {
         if mode != self.mode {
             self.mode = mode;
@@ -381,55 +370,12 @@ impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
         self.depth_texture = Some(texture);
     }
 
-    #[inline]
-    fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        let &[x, y, ..] = self.model.geometry_max_bounds.size.as_array();
-        let (w, h) = if x > y {
-            (NEAR_FIELD_MAJOR_AXIS, aspect_ratio * NEAR_FIELD_MAJOR_AXIS)
-        } else {
-            (NEAR_FIELD_MAJOR_AXIS / aspect_ratio, NEAR_FIELD_MAJOR_AXIS)
-        };
-        let orthographic_matrix = {
-            f32x4x4::new(
-                [2. / w, 0., 0., 0.],
-                [0., 2. / h, 0., 0.],
-                // IMPORTANT: Metal's NDC coordinate space has a z range of [0.,1], **NOT [-1,1]** (OpenGL).
-                [0., 0., 1. / (F - N), -N / (F - N)],
-                [0., 0., 0., 1.],
-            )
-        };
-        orthographic_matrix * PERSPECTIVE_MATRIX
-    }
-
     fn update_light(&mut self) {
         let &[rotx, roty] = self.light_ray.rotation_xy.as_array();
         let light_position = f32x4x4::rotate(rotx, roty, 0.)
             * f32x4::from_array([0., 0., -self.light_ray.distance_from_origin, 1.]);
         self.world_arg_ptr.light_position = light_position.into();
-        self.set_needs_render();
-    }
-
-    fn update_camera(&mut self, screen_size: f32x2) {
-        self.screen_size = screen_size;
-        let &[rotx, roty] = self.camera_ray.rotation_xy.neg().as_array();
-        let matrix_world_to_camera =
-            f32x4x4::translate(0., 0., self.camera_ray.distance_from_origin)
-                * f32x4x4::rotate(rotx, roty, 0.);
-        self.world_arg_ptr.camera_position =
-            (matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.])).into();
-
-        let &[sx, sy, ..] = (f32x2::splat(2.) / screen_size).as_array();
-        let aspect_ratio = sx / sy;
-        let matrix_world_to_projection =
-            self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
-
-        self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
-        self.world_arg_ptr.matrix_model_to_projection =
-            matrix_world_to_projection * self.matrix_model_to_world;
-        let matrix_screen_to_projection = f32x4x4::scale_translate(sx, -sy, 1., -1., 1., 0.);
-        self.world_arg_ptr.matrix_screen_to_world =
-            matrix_world_to_projection.inverse() * matrix_screen_to_projection;
-        self.set_needs_render();
+        self.needs_render = true;
     }
 }
 
