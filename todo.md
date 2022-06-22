@@ -55,7 +55,7 @@
 
 # metal-build
 
-- Consider moving rust polyfill metal_types (codegen and code) into it's own crate.
+# metal-types
 
 # xcode-project
 

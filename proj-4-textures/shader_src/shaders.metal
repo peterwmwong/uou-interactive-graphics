@@ -28,7 +28,7 @@ main_vertex(         uint       vertex_id [[vertex_id]],
         .position  = world.matrix_model_to_projection * position,
         .normal    = world.matrix_normal_to_world * normal,
         // TODO: Should flipping-x be determined by some data in the material?
-        .tx_coord  = float2(tx_coord.x, 1.0 - tx_coord.y)
+        .tx_coord  = float2(tx_coord.x, 1. - tx_coord.y)
     };
 }
 

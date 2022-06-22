@@ -50,7 +50,7 @@ VertexOut main_vertex(         uint       vertex_id                  [[vertex_id
     const float2 tx_coord   = fma(position2d, 0.5, 0.5);
     return {
         .position  = matrix_model_to_projection * position,
-        .tx_coord  = float2(tx_coord.x, 1. - tx_coord.y)
+        .tx_coord  = 1. - tx_coord
     };
 }
 
