@@ -20,7 +20,7 @@ pub use application::launch_application;
 pub use half;
 pub use metal;
 pub use metal_helpers::*;
-pub use model::{GeometryArgumentEncoder, MaterialArgumentEncoder, MaxBounds, Model};
+pub use model::{GeometryToEncode, MaterialToEncode, MaxBounds, Model};
 pub use objc_helpers::*;
 pub use renderer::*;
 pub use unwrap_helpers::*;

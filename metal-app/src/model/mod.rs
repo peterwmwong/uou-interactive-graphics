@@ -2,9 +2,10 @@ mod geometry;
 mod materials;
 
 use crate::metal::*;
+pub use geometry::GeometryToEncode;
+pub use geometry::MaxBounds;
 use geometry::{DrawInfo, Geometry, GeometryBuffers};
-pub use geometry::{GeometryArgumentEncoder, MaxBounds};
-pub use materials::MaterialArgumentEncoder;
+pub use materials::MaterialToEncode;
 use materials::{MaterialResults, Materials};
 use std::path::{Path, PathBuf};
 use tobj::LoadOptions;
@@ -24,13 +25,15 @@ pub struct Model {
 impl Model {
     pub fn from_file<
         T: AsRef<Path>,
-        TG: Sized,
-        G: GeometryArgumentEncoder<TG>,
-        TM: Sized,
-        M: MaterialArgumentEncoder<TM>,
+        G: Sized,
+        M: Sized,
+        EG: FnMut(&mut G, GeometryToEncode),
+        EM: FnMut(&mut M, MaterialToEncode),
     >(
         obj_file: T,
         device: &Device,
+        encode_geometry_arg: EG,
+        encode_material_arg: EM,
     ) -> Self {
         let obj_file_ref = obj_file.as_ref();
         let (models, materials) = tobj::load_obj(
@@ -52,8 +55,8 @@ impl Model {
         );
 
         // Size Heap for Geometry and Materials
-        let mut materials = Materials::<TM, M>::new(device, &material_file_dir, &materials);
-        let mut geometry = Geometry::<TG, G>::new(&models, device);
+        let mut materials = Materials::new(device, &material_file_dir, &materials);
+        let mut geometry = Geometry::new(&models, device);
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
@@ -65,8 +68,8 @@ impl Model {
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
-        let materials = materials.allocate_and_encode(&heap);
-        let geometry_buffers = geometry.allocate_and_encode(&heap);
+        let materials = materials.allocate_and_encode(&heap, encode_material_arg);
+        let geometry_buffers = geometry.allocate_and_encode(&heap, encode_geometry_arg);
 
         Self {
             heap,

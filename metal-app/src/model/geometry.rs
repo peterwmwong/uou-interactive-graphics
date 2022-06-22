@@ -15,14 +15,11 @@ pub(crate) struct DrawInfo {
     pub(crate) material_id: usize,
 }
 
-pub trait GeometryArgumentEncoder<T: Sized> {
-    fn set(
-        arg: &mut T,
-        indices_buffer: MetalGPUAddress,
-        positions_buffer: MetalGPUAddress,
-        normals_buffer: MetalGPUAddress,
-        tx_coords_buffer: MetalGPUAddress,
-    );
+pub struct GeometryToEncode {
+    pub indices_buffer: MetalGPUAddress,
+    pub positions_buffer: MetalGPUAddress,
+    pub normals_buffer: MetalGPUAddress,
+    pub tx_coords_buffer: MetalGPUAddress,
 }
 
 // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
@@ -39,7 +36,7 @@ pub(crate) struct GeometryBuffers {
     tx_coords: Buffer,
 }
 
-pub(crate) struct Geometry<'a, T: Sized, E: GeometryArgumentEncoder<T>> {
+pub(crate) struct Geometry<'a, T: Sized> {
     arguments_byte_size: usize,
     objects: &'a [tobj::Model],
     indices_buf_length: usize,
@@ -49,10 +46,10 @@ pub(crate) struct Geometry<'a, T: Sized, E: GeometryArgumentEncoder<T>> {
     heap_size: usize,
     pub(crate) max_bounds: MaxBounds,
     pub(crate) draws: Vec<DrawInfo>,
-    _p: PhantomData<(T, E)>,
+    _p: PhantomData<T>,
 }
 
-impl<'a, T: Sized, E: GeometryArgumentEncoder<T>> Geometry<'a, T, E> {
+impl<'a, T: Sized> Geometry<'a, T> {
     pub(crate) fn new(objects: &'a [tobj::Model], device: &Device) -> Self {
         let mut heap_size = 0;
 
@@ -134,7 +131,11 @@ impl<'a, T: Sized, E: GeometryArgumentEncoder<T>> Geometry<'a, T, E> {
         self.heap_size
     }
 
-    pub fn allocate_and_encode(&mut self, heap: &Heap) -> GeometryBuffers {
+    pub fn allocate_and_encode(
+        &mut self,
+        heap: &Heap,
+        mut encode_arg: impl FnMut(&mut T, GeometryToEncode),
+    ) -> GeometryBuffers {
         let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
             heap,
             "Geometry Arguments",
@@ -158,12 +159,14 @@ impl<'a, T: Sized, E: GeometryArgumentEncoder<T>> Geometry<'a, T, E> {
             get_gpu_addresses([&indices_buf, &positions_buf, &normals_buf, &tx_coords_buf]);
 
         for tobj::Model { mesh, .. } in self.objects.into_iter() {
-            E::set(
+            encode_arg(
                 unsafe { &mut *arguments_ptr },
-                indices_gpu_address + (indices_offset as MetalGPUAddress),
-                positions_gpu_address + (positions_offset as MetalGPUAddress),
-                normals_gpu_address + (normals_offset as MetalGPUAddress),
-                tx_coords_gpu_address + (tx_coords_offset as MetalGPUAddress),
+                GeometryToEncode {
+                    indices_buffer: indices_gpu_address + (indices_offset as MetalGPUAddress),
+                    positions_buffer: positions_gpu_address + (positions_offset as MetalGPUAddress),
+                    normals_buffer: normals_gpu_address + (normals_offset as MetalGPUAddress),
+                    tx_coords_buffer: tx_coords_gpu_address + (tx_coords_offset as MetalGPUAddress),
+                },
             );
             indices_offset = copy_into_buffer(&mesh.indices, indices_ptr, indices_offset);
             normals_offset = copy_into_buffer(&mesh.normals, normals_ptr, normals_offset);

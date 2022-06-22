@@ -109,44 +109,6 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
     }
 }
 
-// TODO: START HERE 3
-// TODO: START HERE 3
-// TODO: START HERE 3
-// Can we change the API so we're just passing a FnMut() for Material and Geometry Encoding?
-enum MaterialArgEncoder {}
-impl MaterialArgumentEncoder<Material> for MaterialArgEncoder {
-    #[inline(always)]
-    fn set(
-        arg: &mut Material,
-        ambient_texture: MetalGPUAddress,
-        diffuse_texture: MetalGPUAddress,
-        specular_texture: MetalGPUAddress,
-        specular_shineness: f32,
-    ) {
-        arg.ambient_texture = ambient_texture;
-        arg.diffuse_texture = diffuse_texture;
-        arg.specular_texture = specular_texture;
-        arg.specular_shineness = specular_shineness;
-    }
-}
-
-enum GeometryArgEncoder {}
-impl GeometryArgumentEncoder<Geometry> for GeometryArgEncoder {
-    #[inline(always)]
-    fn set(
-        arg: &mut Geometry,
-        indices_buffer: MetalGPUAddress,
-        positions_buffer: MetalGPUAddress,
-        normals_buffer: MetalGPUAddress,
-        tx_coords_buffer: MetalGPUAddress,
-    ) {
-        arg.indices = indices_buffer;
-        arg.positions = positions_buffer;
-        arg.normals = normals_buffer;
-        arg.tx_coords = tx_coords_buffer;
-    }
-}
-
 impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT> {
     fn new(device: Device) -> Self {
         let executable_name = std::env::args()
@@ -180,13 +142,34 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             debug_assert_eq!(std::mem::size_of::<Geometry>(), geometry_arg_size as _, "Shader bindings generated a differently sized Geometry struct than what Metal expects");
             debug_assert_eq!(std::mem::size_of::<Material>(), material_arg_size as _, "Shader bindings generated a differently sized Material struct than what Metal expects");
         }
-        let model = Model::from_file::<
-            PathBuf,
-            Geometry,
-            GeometryArgEncoder,
-            Material,
-            MaterialArgEncoder,
-        >(model_file, &device);
+        let model = Model::from_file(
+            model_file,
+            &device,
+            |arg: &mut Geometry,
+             GeometryToEncode {
+                 indices_buffer,
+                 positions_buffer,
+                 normals_buffer,
+                 tx_coords_buffer,
+             }| {
+                arg.indices = indices_buffer;
+                arg.positions = positions_buffer;
+                arg.normals = normals_buffer;
+                arg.tx_coords = tx_coords_buffer;
+            },
+            |arg: &mut Material,
+             MaterialToEncode {
+                 ambient_texture,
+                 diffuse_texture,
+                 specular_texture,
+                 specular_shineness,
+             }| {
+                arg.ambient_texture = ambient_texture;
+                arg.diffuse_texture = diffuse_texture;
+                arg.specular_texture = specular_texture;
+                arg.specular_shineness = specular_shineness;
+            },
+        );
 
         #[cfg(debug_assertions)]
         {

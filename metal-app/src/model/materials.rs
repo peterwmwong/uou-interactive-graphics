@@ -6,14 +6,11 @@ use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 type RGB32 = [f32; 3];
 
-pub trait MaterialArgumentEncoder<T: Sized> {
-    fn set(
-        arg: &mut T,
-        ambient_texture: MetalGPUAddress,
-        diffuse_texture: MetalGPUAddress,
-        specular_texture: MetalGPUAddress,
-        specular_shineness: f32,
-    );
+pub struct MaterialToEncode {
+    pub ambient_texture: MetalGPUAddress,
+    pub diffuse_texture: MetalGPUAddress,
+    pub specular_texture: MetalGPUAddress,
+    pub specular_shineness: f32,
 }
 
 pub(crate) struct MaterialResults {
@@ -158,16 +155,16 @@ struct Material<'a> {
     specular_shineness: f32,
 }
 
-pub(crate) struct Materials<'a, T: Sized, E: MaterialArgumentEncoder<T>> {
+pub(crate) struct Materials<'a, T: Sized> {
     arguments_byte_size: usize,
     heap_size: usize,
     materials: Vec<Material<'a>>,
     max_load_texture_buffer_size: usize,
     sources: HashMap<MaterialSourceKey<'a>, MaterialSource<'a>>,
-    _p: PhantomData<(T, E)>,
+    _p: PhantomData<T>,
 }
 
-impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
+impl<'a, T: Sized> Materials<'a, T> {
     pub(crate) fn new<'b>(
         device: &Device,
         material_file_dir: &'b PathBuf,
@@ -221,7 +218,11 @@ impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
         self.heap_size
     }
 
-    pub fn allocate_and_encode(&mut self, heap: &Heap) -> MaterialResults {
+    pub fn allocate_and_encode(
+        &mut self,
+        heap: &Heap,
+        mut encode_arg: impl FnMut(&mut T, MaterialToEncode),
+    ) -> MaterialResults {
         let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
             heap,
             "Materials Arguments",
@@ -234,7 +235,7 @@ impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
         let mut read_png_buffer: Vec<u8> = Vec::with_capacity(self.max_load_texture_buffer_size);
         unsafe { read_png_buffer.set_len(self.max_load_texture_buffer_size) };
         for mat in &self.materials {
-            let [ambient, diffuse, specular] =
+            let [ambient_texture, diffuse_texture, specular_texture] =
                 [mat.ambient, mat.diffuse, mat.specular].map(|source_key| {
                     let texture: &TextureRef =
                         texture_cache.entry(source_key).or_insert_with(|| {
@@ -245,12 +246,14 @@ impl<'a, T: Sized, E: MaterialArgumentEncoder<T>> Materials<'a, T, E> {
                         });
                     unsafe { objc_sendmsg_with_cached_sel(texture, gpu_handle_sel) }
                 });
-            E::set(
+            encode_arg(
                 unsafe { &mut *arguments_ptr },
-                ambient,
-                diffuse,
-                specular,
-                mat.specular_shineness,
+                MaterialToEncode {
+                    ambient_texture,
+                    diffuse_texture,
+                    specular_texture,
+                    specular_shineness: mat.specular_shineness,
+                },
             );
             unsafe { arguments_ptr = arguments_ptr.add(1) };
         }
