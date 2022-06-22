@@ -13,17 +13,16 @@ pub fn build() {
 }
 
 fn generate_rust_shader_bindings() {
-    let shader_common_header_file = PathBuf::from("shader_src").join("common.h");
+    let shader_src_dir = PathBuf::from("shader_src");
+    let shader_common_header_file = shader_src_dir.join("common.h");
     let rust_bindgen_only_vector_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
         .join("..")
         .join("metal-types")
         .join("src")
         .join("rust_bindgen_only_metal_types.h");
 
-    let cached_hash_path =
-        PathBuf::from(env::var("OUT_DIR").unwrap()).join("shader_src_common_h_hash");
+    let cached_hash_path = shader_src_dir.join("common_h_hash");
     let current_hash = hash_shader_src([
-        &PathBuf::from("build.rs"),
         &shader_common_header_file,
         &rust_bindgen_only_vector_types_header_file,
     ]);
