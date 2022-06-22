@@ -22,6 +22,20 @@ set +e
 FUNCTION_LIST=$(get_function_list)
 set -e
 
+i=0
+while IFS= read -r line; do
+    func=$(echo "$line" | cut -d, -f1)
+    size=$(echo "$line" | cut -d, -f2)
+    echo "/* $size */ \"$func\":\`" > "$TMP_OUTPUT_PATH$i"
+    cargo asm --release --lib -p "$CRATE_NAME" --full-name "$func" |
+        tail -n +2 |                                               # Remove first line (function name, already printed above).
+        egrep -v "^L(tmp|loh|BB)\d+" |                             # Remove lines that labels (diff noise reduction)
+        sed 's/LBB\([0-9]\)*_\([0-9]\)*/LBB###/g' |                # Normalize all Branch Labels (diff noise reduction), ex. LBB123_1 -> LBB###
+        sed 's/Lloh\([0-9]\)*/Lloh###/g' >> "$TMP_OUTPUT_PATH$i" & # Normalize all Lloh Addresses (diff noise reduction), ex. Lloh123 -> Lloh123
+    pids[${i}]=$!
+    i=$((i+1))
+done <<< "$FUNCTION_LIST"
+
 echo "/*" > "$TMP_OUTPUT_PATH"
 padding=$(printf '%0.1s' " "{1..9})
 while IFS= read -r line; do
@@ -31,19 +45,12 @@ while IFS= read -r line; do
 done <<< "$FUNCTION_LIST"
 echo "*/" >> "$TMP_OUTPUT_PATH"
 
-
 echo "export default {" >> "$TMP_OUTPUT_PATH"
-while IFS= read -r line; do
-    func=$(echo "$line" | cut -d, -f1)
-    size=$(echo "$line" | cut -d, -f2)
-    echo "/* $size */ \"$func\":\`" >> "$TMP_OUTPUT_PATH"
-    cargo asm --release --lib -p "$CRATE_NAME" --full-name "$func" |
-        tail -n +2 |                                       # Remove first line (function name, already printed above).
-        egrep -v "^L(tmp|loh|BB)\d+" |                     # Remove lines that labels (diff noise reduction)
-        sed 's/LBB\([0-9]\)*_\([0-9]\)*/LBB###/g' |        # Normalize all Branch Labels (diff noise reduction), ex. LBB123_1 -> LBB###
-        sed 's/Lloh\([0-9]\)*/Lloh###/g' >> "$TMP_OUTPUT_PATH" # Normalize all Lloh Addresses (diff noise reduction), ex. Lloh123 -> Lloh123
+for i in ${!pids[@]}; do
+    wait "${pids[$i]}"
+    cat "$TMP_OUTPUT_PATH$i" >> "$TMP_OUTPUT_PATH"
     echo "\`," >> "$TMP_OUTPUT_PATH"
-done <<< "$FUNCTION_LIST"
+done
 echo "}" >> "$TMP_OUTPUT_PATH"
 
-cp "$TMP_OUTPUT_PATH" "$OUTPUT_PATH"
+mv "$TMP_OUTPUT_PATH" "$OUTPUT_PATH"
