@@ -1,8 +1,7 @@
 use crate::{unwrap_option_dcheck, unwrap_result_dcheck};
-use foreign_types::ForeignType;
 use metal::*;
-use objc::runtime::{Object, Sel};
-use std::ffi::{c_void, CStr};
+use objc::runtime::Sel;
+use std::ffi::c_void;
 
 pub const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
     MTLResourceOptions::StorageModeShared.bits()
@@ -114,71 +113,6 @@ pub fn encode_fragment_bytes<T: Sized + Copy + Clone>(
     );
 }
 
-// TODO: Consider upstreaming change to metal-rs
-// - This avoids needing to FunctionConstantValues.clone() (under the covers, calls Obj-C `retain()`).
-#[inline]
-pub fn new_function_from_library(
-    library: &Library,
-    name: &str,
-    constants: Option<&FunctionConstantValues>,
-) -> Result<Function, String> {
-    macro_rules! try_objc {
-        {
-            $err_name: ident => $body:expr
-        } => {
-            {
-                let mut $err_name: *mut ::objc::runtime::Object = ::std::ptr::null_mut();
-                let value = $body;
-                if !$err_name.is_null() {
-                    let desc: *mut Object = msg_send![$err_name, localizedDescription];
-                    let compile_error: *const std::os::raw::c_char = msg_send![desc, UTF8String];
-                    let message = CStr::from_ptr(compile_error).to_string_lossy().into_owned();
-                    let () = msg_send![$err_name, release];
-                    return Err(message);
-                }
-                value
-            }
-        };
-    }
-
-    fn nsstring_from_str(string: &str) -> *mut objc::runtime::Object {
-        const UTF8_ENCODING: usize = 4;
-
-        let cls = class!(NSString);
-        let bytes = string.as_ptr() as *const c_void;
-        unsafe {
-            let obj: *mut objc::runtime::Object = msg_send![cls, alloc];
-            let obj: *mut objc::runtime::Object = msg_send![
-                obj,
-                initWithBytes:bytes
-                length:string.len()
-                encoding:UTF8_ENCODING
-            ];
-            let _: *mut c_void = msg_send![obj, autorelease];
-            obj
-        }
-    }
-
-    unsafe {
-        let nsname = nsstring_from_str(name);
-
-        let function: *mut MTLFunction = match constants {
-            Some(c) => try_objc! { err => msg_send![library.as_ref(),
-                newFunctionWithName: nsname.as_ref()
-                constantValues: c.as_ref()
-                error: &mut err
-            ]},
-            None => msg_send![library.as_ref(), newFunctionWithName: nsname.as_ref()],
-        };
-
-        if !function.is_null() {
-            Ok(Function::from_ptr(function))
-        } else {
-            Err(format!("Function '{}' does not exist", name))
-        }
-    }
-}
-
 pub const DEFAULT_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
 
 #[inline]
@@ -200,14 +134,7 @@ pub fn new_basic_render_pipeline_descriptor(
     base_pipeline_desc
 }
 
-// TODO: START HERE 2
-// TODO: START HERE 2
-// TODO: START HERE 2
-// Remove vertex_function and fragment function!
-// - We needed it before for the argument encoder, but we're migrating to Metal 3 Bindless.
 pub struct CreateRenderPipelineResults {
-    pub vertex_function: Function,
-    pub fragment_function: Function,
     pub pipeline_state: RenderPipelineState,
     #[cfg(debug_assertions)]
     pub pipeline_state_reflection: RenderPipelineReflection,
@@ -228,12 +155,12 @@ pub fn create_pipeline(
     pipeline_desc.set_label(label);
 
     let vertex_function = unwrap_result_dcheck(
-        new_function_from_library(library, vertex_func_name, func_constants),
+        library.get_function(vertex_func_name, func_constants.map(|f| f.to_owned())),
         "Failed to access vertex shader function from metal library",
     );
     pipeline_desc.set_vertex_function(Some(&vertex_function));
     let fragment_function = unwrap_result_dcheck(
-        new_function_from_library(library, frag_func_name, func_constants),
+        library.get_function(frag_func_name, func_constants.map(|f| f.to_owned())),
         "Failed to access fragment shader function from metal library",
     );
     pipeline_desc.set_fragment_function(Some(&fragment_function));
@@ -270,8 +197,6 @@ pub fn create_pipeline(
     );
 
     CreateRenderPipelineResults {
-        vertex_function,
-        fragment_function,
         pipeline_state,
         #[cfg(debug_assertions)]
         pipeline_state_reflection,

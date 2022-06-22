@@ -22,11 +22,6 @@ pub struct Model {
 }
 
 impl Model {
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // Change api to take in a GeometryArgumentEncoder, MaterialArgumentEncode (new traits), that
-    // allow using common.h generated struct AND metal 3 bindless.
     pub fn from_file<
         T: AsRef<Path>,
         TG: Sized,
