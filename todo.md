@@ -44,13 +44,11 @@
             - CommandQueue
             - CommandBuffer
             - Device
-- Metal 3
-    - Use new gpuAddress/gpuHandle, and remove calls to argument encoder for Materials
-        - https://developer.apple.com/videos/play/wwdc2022/10101/
 - Performance: Reduce/Batch Obj-C implicit `sel!` calls
     - Part of the overhead with calling into Obj-C is registering an Obj-C Selector (`sel!`) before using it.
     - Find other places where we make repeated Obj-C calls, and cache the Obj-C Selector and reuse it.
     - See example `get_gpu_addresses()`
+    - Watch for `objc2` updates: https://github.com/madsmtm/objc2/pull/104
 - Write tests for Materials
 - Write tests for Geometry
 - Write tests for Model

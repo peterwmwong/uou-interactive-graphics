@@ -74,7 +74,8 @@ fn generate_rust_shader_bindings() {
             .default_enum_style(bindgen::EnumVariation::Rust {
                 non_exhaustive: false,
             })
-            .derive_debug(cfg!(debug_assertions))
+            .derive_debug(false)
+            .no_debug("*")
             .parse_callbacks(Box::new(bindgen::CargoCallbacks))
             .generate()
             .expect("Unable to generate bindings")
