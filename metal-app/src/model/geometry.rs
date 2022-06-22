@@ -22,18 +22,14 @@ pub struct GeometryToEncode {
     pub tx_coords_buffer: MetalGPUAddress,
 }
 
-// Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
 pub(crate) struct GeometryBuffers {
     pub(crate) arguments: Buffer,
     pub(crate) argument_byte_size: usize,
-    #[allow(dead_code)]
-    indices: Buffer,
-    #[allow(dead_code)]
-    positions: Buffer,
-    #[allow(dead_code)]
-    normals: Buffer,
-    #[allow(dead_code)]
-    tx_coords: Buffer,
+    // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
+    _indices: Buffer,
+    _positions: Buffer,
+    _normals: Buffer,
+    _tx_coords: Buffer,
 }
 
 pub(crate) struct Geometry<'a, T: Sized> {
@@ -177,10 +173,10 @@ impl<'a, T: Sized> Geometry<'a, T> {
         GeometryBuffers {
             arguments,
             argument_byte_size: std::mem::size_of::<T>() as _,
-            indices: indices_buf,
-            positions: positions_buf,
-            normals: normals_buf,
-            tx_coords: tx_coords_buf,
+            _indices: indices_buf,
+            _positions: positions_buf,
+            _normals: normals_buf,
+            _tx_coords: tx_coords_buf,
         }
     }
 }

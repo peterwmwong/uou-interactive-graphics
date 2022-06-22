@@ -17,11 +17,7 @@ pub struct Model<
     heap: Heap,
     draws: Vec<DrawInfo>,
     pub geometry_max_bounds: MaxBounds,
-    // Needs to be owned and not dropped (causing deallocation from heap).
-    #[allow(dead_code)]
     geometry_buffers: GeometryBuffers,
-    // Needs to be owned and not dropped (causing deallocation from heap).
-    #[allow(dead_code)]
     materials: MaterialResults,
 }
 

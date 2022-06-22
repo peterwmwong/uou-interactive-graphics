@@ -17,8 +17,7 @@ pub(crate) struct MaterialResults {
     pub(crate) arguments: Buffer,
     pub(crate) argument_byte_size: usize,
     // Needs to be owned and not dropped (causing deallocation from heap).
-    #[allow(dead_code)]
-    textures: Vec<Texture>,
+    _textures: Vec<Texture>,
 }
 
 #[derive(Hash, Copy, Clone, Eq, PartialEq)]
@@ -261,7 +260,7 @@ impl<'a, T: Sized> Materials<'a, T> {
         MaterialResults {
             arguments,
             argument_byte_size: std::mem::size_of::<T>(),
-            textures,
+            _textures: textures,
         }
     }
 }
