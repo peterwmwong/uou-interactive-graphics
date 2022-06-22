@@ -13,7 +13,7 @@ get_function_list() {
     cargo asm --release --lib -p "$CRATE_NAME" --full-name |
         cut -d\" -f2,3 |
         egrep "^<?($CRATE_NAME_NORMALIZED$ADDITIONAL_CRATES)" |
-        sed -r 's/\" [\[](\d*)/,\1/g' |
+        sed -r 's/\" [\[](\d*)/\|\1/g' |
         sed -r 's/(\[|\])//g' |
         sort
 }
@@ -24,8 +24,8 @@ set -e
 
 i=0
 while IFS= read -r line; do
-    func=$(echo "$line" | cut -d, -f1)
-    size=$(echo "$line" | cut -d, -f2)
+    func=$(echo "$line" | cut -d\| -f1)
+    size=$(echo "$line" | cut -d\| -f2)
     echo "/* $size */ \"$func\":\`" > "$TMP_OUTPUT_PATH$i"
     cargo asm --release --lib -p "$CRATE_NAME" --full-name "$func" |
         tail -n +2 |                                               # Remove first line (function name, already printed above).
@@ -39,8 +39,8 @@ done <<< "$FUNCTION_LIST"
 echo "/*" > "$TMP_OUTPUT_PATH"
 padding=$(printf '%0.1s' " "{1..9})
 while IFS= read -r line; do
-    func=$(echo "$line" | cut -d, -f1)
-    size=$(echo "$line" | cut -d, -f2)
+    func=$(echo "$line" | cut -d\| -f1)
+    size=$(echo "$line" | cut -d\| -f2)
     printf "%s%s %s\n" "${padding:${#size}}" "$size" "$func" >> "$TMP_OUTPUT_PATH"
 done <<< "$FUNCTION_LIST"
 echo "*/" >> "$TMP_OUTPUT_PATH"
