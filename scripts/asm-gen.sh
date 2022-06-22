@@ -8,9 +8,10 @@ TMP_OUTPUT_PATH="/tmp/$CRATE_NAME-$OUTPUT_POSTFIX-TMP.js"
 OUTPUT_PATH="/tmp/$CRATE_NAME-$OUTPUT_POSTFIX.js"
 
 ADDITIONAL_CRATES="|metal"
+DEFAULT_CARGO_ASM_ARGS="asm --release --lib --full-name -p $CRATE_NAME"
 
 get_function_list() {
-    cargo asm --release --lib -p "$CRATE_NAME" --full-name |
+    cargo $DEFAULT_CARGO_ASM_ARGS |
         cut -d\" -f2,3 |
         egrep "^<?($CRATE_NAME_NORMALIZED$ADDITIONAL_CRATES)" |
         sed -r 's/\" [\[](\d*)/\|\1/g' |
@@ -27,7 +28,7 @@ while IFS= read -r line; do
     func=$(echo "$line" | cut -d\| -f1)
     size=$(echo "$line" | cut -d\| -f2)
     echo "/* $size */ \"$func\":\`" > "$TMP_OUTPUT_PATH$i"
-    cargo asm --release --lib -p "$CRATE_NAME" --full-name "$func" |
+    cargo $DEFAULT_CARGO_ASM_ARGS "$func" |
         tail -n +2 |                                               # Remove first line (function name, already printed above).
         egrep -v "^L(tmp|loh|BB)\d+" |                             # Remove lines that labels (diff noise reduction)
         sed 's/LBB\([0-9]\)*_\([0-9]\)*/LBB###/g' |                # Normalize all Branch Labels (diff noise reduction), ex. LBB123_1 -> LBB###

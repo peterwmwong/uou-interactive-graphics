@@ -1,6 +1,8 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     env,
     fmt::Debug,
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
 };
 
@@ -40,12 +42,39 @@ impl ParseCallbacks for CollectItems {
     }
 }
 
+fn hash_file(path: &PathBuf) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    std::fs::read(path).unwrap().hash(&mut hasher);
+    println!("cargo:rerun-if-changed={}", path.to_string_lossy());
+    hasher.finish()
+}
+
+fn read_cached_hash(cached_hash_path: &PathBuf) -> Option<u64> {
+    if let Ok(hash) = std::fs::read(cached_hash_path) {
+        return Some(u64::from_ne_bytes(hash.try_into().unwrap()));
+    }
+    None
+}
+
+fn save_cached_hash(hash: u64, cached_hash_path: &PathBuf) {
+    std::fs::write(cached_hash_path, hash.to_ne_bytes()).unwrap();
+}
+
 // Verifies `vector_type_helpers.rs`.
 pub fn main() {
     // TODO: Figure out a way to keep this in-sync with lib.rs
     let header = Path::new(METAL_BUILD_MANIFEST_DIR)
         .join("src")
         .join("rust_bindgen_only_metal_types.h");
+
+    let cached_hash_path =
+        PathBuf::from(env::var("OUT_DIR").unwrap()).join("rust_bindgen_only_metal_types_h_hash");
+    let current_hash = hash_file(&header);
+    if let Some(old_hash) = read_cached_hash(&cached_hash_path) {
+        if old_hash == current_hash {
+            return;
+        }
+    }
 
     bindgen::Builder::default()
         .header(header.to_string_lossy())
@@ -87,4 +116,5 @@ pub const TYPES: [&'static str; {num_items}] = [
         },
     )
     .expect("Failed to write tmp.txt");
+    save_cached_hash(current_hash, &cached_hash_path);
 }
