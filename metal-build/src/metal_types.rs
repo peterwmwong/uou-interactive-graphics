@@ -1,7 +1,4 @@
-include!(concat!(
-    env!("OUT_DIR"),
-    "/rust_bindgen_only_metal_type_bindings.rs"
-));
+pub use crate::rust_bindgen_only_metal_type_bindings::*;
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.

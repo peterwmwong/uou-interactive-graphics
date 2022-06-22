@@ -63,12 +63,10 @@ fn save_cached_hash(hash: u64, cached_hash_path: &PathBuf) {
 // Verifies `vector_type_helpers.rs`.
 pub fn main() {
     // TODO: Figure out a way to keep this in-sync with lib.rs
-    let header = Path::new(METAL_BUILD_MANIFEST_DIR)
-        .join("src")
-        .join("rust_bindgen_only_metal_types.h");
+    let src_dir = Path::new(METAL_BUILD_MANIFEST_DIR).join("src");
+    let header = src_dir.join("rust_bindgen_only_metal_types.h");
 
-    let cached_hash_path =
-        PathBuf::from(env::var("OUT_DIR").unwrap()).join("rust_bindgen_only_metal_types_h_hash");
+    let cached_hash_path = src_dir.join("rust_bindgen_only_metal_types_h_hash");
     let current_hash = hash_file(&header);
     if let Some(old_hash) = read_cached_hash(&cached_hash_path) {
         if old_hash == current_hash {
@@ -89,14 +87,10 @@ pub fn main() {
         .parse_callbacks(Box::new(CollectItems::new()))
         .generate()
         .expect("Unable to generate bindings")
-        .write_to_file(
-            PathBuf::from(env::var("OUT_DIR").unwrap())
-                .join("rust_bindgen_only_metal_type_bindings.rs"),
-        )
+        .write_to_file(src_dir.join("rust_bindgen_only_metal_type_bindings.rs"))
         .expect("Failed to generate rust_bindgen_only_metal_type_bindings.rs");
     std::fs::write(
-        Path::new(METAL_BUILD_MANIFEST_DIR)
-            .join("src")
+        src_dir
             .join("rust_bindgen_only_metal_types_list.rs"),
         unsafe {
             ITEMS.sort();

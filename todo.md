@@ -56,13 +56,6 @@
 # metal-build
 
 - Consider moving rust polyfill metal_types (codegen and code) into it's own crate.
-- Make first build faster
-    - Currently, the first build will run bindgen because there is no cached hash file (hash value based on `src/rust_bindgen_only_metal_types.h`)...
-        - ... which means we need to generate `$OUT_DIR/rust_bindgen_only_metal_type_bindings.rs` and `rust_bindgen_only_metal_types_list.rs`
-    - What we could do....
-        - Write `rust_bindgen_only_metal_type_bindings.rs` to `src/` (instead of `$OUT_DIR`)
-        - Write the cached hash file to `src/`
-        - Change the `build.rs` to compare the hash file with current has of `src/rust_bindgen_only_metal_types.h`, before running bindgen.
 
 # xcode-project
 

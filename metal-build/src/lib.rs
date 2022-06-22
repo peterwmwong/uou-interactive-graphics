@@ -1,6 +1,7 @@
 #![feature(array_zip)]
 #![feature(portable_simd)]
 pub mod metal_types;
+mod rust_bindgen_only_metal_type_bindings;
 mod rust_bindgen_only_metal_types_list;
 
 use std::collections::hash_map::DefaultHasher;
