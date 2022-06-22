@@ -311,12 +311,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
-name = "half"
-version = "1.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
-
-[[package]]
 name = "hashbrown"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -432,8 +426,8 @@ dependencies = [
  "dispatch",
  "display-link",
  "foreign-types",
- "half",
  "metal",
+ "metal-types",
  "objc",
  "png",
  "tobj",
@@ -444,7 +438,14 @@ name = "metal-build"
 version = "0.1.0"
 dependencies = [
  "bindgen",
- "half",
+ "metal-types",
+]
+
+[[package]]
+name = "metal-types"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
 ]
 
 [[package]]
@@ -608,7 +609,6 @@ version = "0.1.0"
 dependencies = [
  "metal-app",
  "metal-build",
- "tobj",
 ]
 
 [[package]]
@@ -617,7 +617,6 @@ version = "0.1.0"
 dependencies = [
  "metal-app",
  "metal-build",
- "tobj",
 ]
 
 [[package]]
@@ -626,7 +625,6 @@ version = "0.1.0"
 dependencies = [
  "metal-app",
  "metal-build",
- "tobj",
 ]
 
 [[package]]
@@ -635,7 +633,6 @@ version = "0.1.0"
 dependencies = [
  "metal-app",
  "metal-build",
- "tobj",
 ]
 
 [[package]]

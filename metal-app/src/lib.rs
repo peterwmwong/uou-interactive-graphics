@@ -17,9 +17,9 @@ pub mod ui_ray;
 mod unwrap_helpers;
 
 pub use application::launch_application;
-pub use half;
 pub use metal;
 pub use metal_helpers::*;
+pub use metal_types;
 pub use model::{GeometryToEncode, MaterialToEncode, MaxBounds, Model};
 pub use objc_helpers::*;
 pub use renderer::*;

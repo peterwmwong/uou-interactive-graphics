@@ -9,4 +9,3 @@ metal-build = { path = "../metal-build" }
 [dependencies]
 bitflags = "1.3.2"
 metal-app = { path = "../metal-app" }
-metal-build = { path = "../metal-build" }

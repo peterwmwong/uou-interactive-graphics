@@ -1,9 +1,3 @@
-#![feature(array_zip)]
-#![feature(portable_simd)]
-pub mod metal_types;
-mod rust_bindgen_only_metal_type_bindings;
-mod rust_bindgen_only_metal_types_list;
-
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -21,6 +15,8 @@ pub fn build() {
 fn generate_rust_shader_bindings() {
     let shader_common_header_file = PathBuf::from("shader_src").join("common.h");
     let rust_bindgen_only_vector_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
+        .join("..")
+        .join("metal-types")
         .join("src")
         .join("rust_bindgen_only_metal_types.h");
 
@@ -59,7 +55,7 @@ fn generate_rust_shader_bindings() {
  Structs and Enums are generated based on `shader_src/common.h`.
 ***************************************************************************************************/
 #[allow(unused_imports)]
-use metal_build::metal_types::*;
+use metal_app::metal_types::*;
 "#
                 .as_bytes(),
             )
@@ -77,7 +73,7 @@ use metal_build::metal_types::*;
             .derive_debug(false)
             .no_debug("*")
             .parse_callbacks(Box::new(bindgen::CargoCallbacks));
-        for block_item in rust_bindgen_only_metal_types_list::TYPES {
+        for block_item in metal_types::TYPES {
             builder = builder.blocklist_type(block_item);
         }
         builder

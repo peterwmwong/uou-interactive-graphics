@@ -1,48 +1,19 @@
-pub use crate::rust_bindgen_only_metal_type_bindings::*;
+#![feature(array_zip)]
+#![feature(portable_simd)]
+mod rust_bindgen_only_metal_type_bindings;
+mod rust_bindgen_only_metal_types_list;
+
+pub use rust_bindgen_only_metal_type_bindings::*;
+pub use rust_bindgen_only_metal_types_list::*;
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read vector types from Metal.
  See `metal-build/src/vector_type_helpers.rs`.
 ***************************************************************************************************/
-use half::f16;
 use std::{
     ops::{Mul, Sub},
     simd::{f32x2, f32x4, u16x2},
 };
-
-impl From<f32x2> for packed_half2 {
-    #[inline]
-    fn from(simd: f32x2) -> Self {
-        packed_half2 {
-            x: f16::from_f32(simd[0]).to_bits(),
-            y: f16::from_f32(simd[1]).to_bits(),
-        }
-    }
-}
-
-impl From<f32x4> for packed_half4 {
-    #[inline]
-    fn from(simd: f32x4) -> Self {
-        packed_half4 {
-            x: f16::from_f32(simd[0]).to_bits(),
-            y: f16::from_f32(simd[1]).to_bits(),
-            z: f16::from_f32(simd[2]).to_bits(),
-            w: f16::from_f32(simd[3]).to_bits(),
-        }
-    }
-}
-
-impl From<f32x4> for half4 {
-    #[inline]
-    fn from(simd: f32x4) -> Self {
-        half4 {
-            x: f16::from_f32(simd[0]).to_bits(),
-            y: f16::from_f32(simd[1]).to_bits(),
-            z: f16::from_f32(simd[2]).to_bits(),
-            w: f16::from_f32(simd[3]).to_bits(),
-        }
-    }
-}
 
 // TODO: Add some tests to verify this actually correct for whatever platfrom this is
 // running on.

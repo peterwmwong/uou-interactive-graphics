@@ -13,8 +13,8 @@ core-graphics-types = "0.1.1"
 dispatch = "0.2.0"
 display-link = "0.2.0"
 foreign-types = "0.3.2"
-half = "1.8.2"
 metal = { git = "https://github.com/peterwmwong/metal-rs.git", rev = "719029f607b7df9a9bc4c5ee4a6a55a155e169dc" }
+metal-types = { path = "../metal-types" }
 png = "0.17.5"
 tobj = "3.2.2"
 
