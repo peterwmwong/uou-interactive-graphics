@@ -54,3 +54,4 @@ done
 echo "}" >> "$TMP_OUTPUT_PATH"
 
 mv "$TMP_OUTPUT_PATH" "$OUTPUT_PATH"
+rm "$TMP_OUTPUT_PATH"*
