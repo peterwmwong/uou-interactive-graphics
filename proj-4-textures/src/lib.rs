@@ -341,6 +341,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
 }
 
 impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
+    #[inline]
     fn update_mode(&mut self, mode: Mode) {
         if mode != self.mode {
             self.mode = mode;
@@ -351,6 +352,7 @@ impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
         }
     }
 
+    #[inline]
     fn update_depth_texture_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();
         let &[x, y] = size.as_array();
