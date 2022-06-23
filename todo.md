@@ -70,3 +70,9 @@
 
 - Could saving a metal file, auto restart a running application (based on the crate directory)?
     - Would make fiddling shaders alot faster, but maybe it's not any faster than doing it in xcode shader debugger?
+
+# scripts
+
+## asm-gen
+
+- Generate instruction type counts (ex. how many branch instructions?)
