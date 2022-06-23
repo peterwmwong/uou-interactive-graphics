@@ -109,6 +109,11 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             model_pipeline,
             light_pipeline,
         } = create_pipelines(&device, &library, mode);
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Create a metal-app helper that verifies the size of an Argument Buffer Binding
+        // - debug_assert_argument_buffer_size::<Index, ArgumentStruct>(vertex_bindings)
         #[cfg(debug_assertions)]
         {
             let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;

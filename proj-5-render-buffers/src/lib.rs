@@ -2,25 +2,14 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{metal::*, metal_types::*, *};
+use metal_app::{components::camera, metal::*, metal_types::*, *};
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
-use std::{f32::consts::PI, ops::Neg, simd::f32x2};
+use std::{f32::consts::PI, simd::f32x2};
 
 const INITIAL_PLANE_TEXTURE_FILTER_MODE: TextureFilterMode = TextureFilterMode::Anistropic;
-const INITIAL_CAMERA_DISTANCE: f32 = 0.5;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
-
-const N: f32 = 0.001;
-const F: f32 = 100000.0;
-const NEAR_FIELD_MAJOR_AXIS: f32 = N / INITIAL_CAMERA_DISTANCE;
-const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
-    [N, 0., 0., 0.],
-    [0., N, 0., 0.],
-    [0., 0., N + F, -N * F],
-    [0., 0., 1., 0.],
-);
 
 struct CheckerboardDelegate {
     command_queue: CommandQueue,
@@ -87,8 +76,7 @@ impl RendererDelgate for CheckerboardDelegate {
 }
 
 struct Delegate<R: RendererDelgate> {
-    camera_distance: f32,
-    camera_rotation: f32x2,
+    camera: camera::Camera,
     command_queue: CommandQueue,
     matrix_model_to_world: f32x4x4,
     matrix_model_to_projection: f32x4x4,
@@ -96,7 +84,6 @@ struct Delegate<R: RendererDelgate> {
     plane_renderer: R,
     plane_texture: Option<Texture>,
     plane_texture_filter_mode: TextureFilterMode,
-    screen_size: f32x2,
     needs_render: bool,
 }
 
@@ -123,9 +110,8 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::scale(0.5, 0.5, 0.5, 1.);
         let command_queue = device.new_command_queue();
 
-        let mut delegate = Self {
-            camera_distance: INITIAL_CAMERA_DISTANCE,
-            camera_rotation: INITIAL_CAMERA_ROTATION,
+        Self {
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
             command_queue,
             matrix_model_to_projection: f32x4x4::identity(),
             matrix_model_to_world,
@@ -134,16 +120,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             plane_texture_filter_mode: INITIAL_PLANE_TEXTURE_FILTER_MODE,
             plane_texture: None,
             render_pipeline_state,
-            screen_size: f32x2::default(),
-            // plane_renderer: Proj4Delegate::<false>::new(device),
-        };
-        delegate.update_camera(
-            delegate.screen_size,
-            delegate.camera_rotation,
-            delegate.camera_distance,
-        );
-        delegate.reset_needs_render();
-        delegate
+        }
     }
 
     #[inline]
@@ -197,36 +174,25 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        use MouseButton::*;
         use UserEvent::*;
+
+        self.camera.on_event(
+            event,
+            |camera::CameraUpdate {
+                 matrix_world_to_projection,
+                 ..
+             }| {
+                self.matrix_model_to_projection =
+                    matrix_world_to_projection * self.matrix_model_to_world;
+                self.needs_render = true;
+            },
+        );
+
         match event {
-            MouseDrag {
-                button,
-                modifier_keys,
-                drag_amount,
-                ..
-            } => {
+            MouseDrag { modifier_keys, .. } => {
                 if modifier_keys.contains(ModifierKeys::ALT_OPTION) {
                     self.plane_renderer
                         .on_event(remove_modifier_keys(event, ModifierKeys::ALT_OPTION))
-                } else if modifier_keys.is_empty() {
-                    let mut camera_rotation = self.camera_rotation;
-                    let mut camera_distance = self.camera_distance;
-                    match button {
-                        Left => {
-                            camera_rotation += {
-                                let adjacent = f32x2::splat(self.camera_distance);
-                                let opposite = drag_amount / f32x2::splat(500.);
-                                let &[x, y] = (opposite / adjacent).as_array();
-                                f32x2::from_array([
-                                    y.atan(), // Rotation on x-axis
-                                    x.atan(), // Rotation on y-axis
-                                ])
-                            }
-                        }
-                        Right => camera_distance += -drag_amount[1] / 250.,
-                    }
-                    self.update_camera(self.screen_size, camera_rotation, camera_distance);
                 }
             }
             KeyDown {
@@ -250,7 +216,6 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             WindowFocusedOrResized { size, .. } => {
                 self.plane_renderer.on_event(event);
                 self.update_plane_texture_size(size);
-                self.update_camera(size, self.camera_rotation, self.camera_distance);
             }
             _ => {}
         }
@@ -278,21 +243,6 @@ impl<R: RendererDelgate> Delegate<R> {
     }
 
     #[inline]
-    fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        let (w, h) = (NEAR_FIELD_MAJOR_AXIS, aspect_ratio * NEAR_FIELD_MAJOR_AXIS);
-        let orthographic_matrix = {
-            f32x4x4::new(
-                [2. / w, 0., 0., 0.],
-                [0., 2. / h, 0., 0.],
-                // IMPORTANT: Metal's NDC coordinate space has a z range of [0.,1], **NOT [-1,1]** (OpenGL).
-                [0., 0., 1. / (F - N), -N / (F - N)],
-                [0., 0., 0., 1.],
-            )
-        };
-        orthographic_matrix * PERSPECTIVE_MATRIX
-    }
-
-    #[inline]
     fn update_plane_texture_filter_mode(&mut self, mode: TextureFilterMode) {
         self.needs_render = mode != std::mem::replace(&mut self.plane_texture_filter_mode, mode);
     }
@@ -312,21 +262,6 @@ impl<R: RendererDelgate> Delegate<R> {
         self.plane_texture = Some(plane_texture);
         self.plane_renderer
             .on_event(UserEvent::WindowFocusedOrResized { size: plane_size });
-    }
-
-    fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
-        self.screen_size = screen_size;
-        self.camera_rotation = camera_rotation;
-        self.camera_distance = camera_distance;
-        let &[rotx, roty] = self.camera_rotation.neg().as_array();
-        let matrix_world_to_camera =
-            f32x4x4::translate(0., 0., self.camera_distance) * f32x4x4::rotate(rotx, roty, 0.);
-        let &[sx, sy, ..] = screen_size.as_array();
-        let aspect_ratio = sy / sx;
-        let matrix_world_to_projection =
-            self.calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
-        self.matrix_model_to_projection = matrix_world_to_projection * self.matrix_model_to_world;
-        self.needs_render = true;
     }
 }
 
