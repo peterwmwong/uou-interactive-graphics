@@ -263,6 +263,35 @@ where
     result.unwrap_unchecked()
 }
 
+pub enum FunctionType {
+    Vertex,
+    Fragment,
+}
+
+pub fn debug_assert_argument_buffer_size<const BUFFER_INDEX: u64, T>(
+    p: &CreateRenderPipelineResults,
+    func_type: FunctionType,
+) {
+    #[cfg(debug_assertions)]
+    {
+        let bindings: &BindingArrayRef = match func_type {
+            FunctionType::Vertex => p.pipeline_state_reflection.vertex_bindings(),
+            FunctionType::Fragment => p.pipeline_state_reflection.fragment_bindings(),
+        };
+        let geometry_arg_size = bindings
+            .object_at_as::<BufferBindingRef>(BUFFER_INDEX)
+            .expect(&format!(
+                "Failed to access binding information at buffer index {BUFFER_INDEX}"
+            ))
+            .buffer_data_size();
+        debug_assert_eq!(
+            std::mem::size_of::<T>(),
+            geometry_arg_size as _,
+            "Shader bindings generated a differently sized argument struct than what Metal expects for buffer index {BUFFER_INDEX}"
+        );
+    }
+}
+
 // TODO: Investigate when this improves performance.
 // - In quick performance profiling of proj-4, no performance improvements were observed
 //   - Methodology

@@ -109,27 +109,14 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             model_pipeline,
             light_pipeline,
         } = create_pipelines(&device, &library, mode);
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Create a metal-app helper that verifies the size of an Argument Buffer Binding
-        // - debug_assert_argument_buffer_size::<Index, ArgumentStruct>(vertex_bindings)
-        #[cfg(debug_assertions)]
-        {
-            let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
-            let geometry_arg_size = model_pipeline_reflection
-                .vertex_bindings()
-                .object_at_as::<BufferBindingRef>(VertexBufferIndex::Geometry as _)
-                .expect("Failed to access geometry vertex buffer argument information")
-                .buffer_data_size();
-            let material_arg_size = model_pipeline_reflection
-                .fragment_bindings()
-                .object_at_as::<BufferBindingRef>(FragBufferIndex::Material as _)
-                .expect("Failed to access material fragment buffer argument information")
-                .buffer_data_size();
-            debug_assert_eq!(std::mem::size_of::<Geometry>(), geometry_arg_size as _, "Shader bindings generated a differently sized Geometry struct than what Metal expects");
-            debug_assert_eq!(std::mem::size_of::<Material>(), material_arg_size as _, "Shader bindings generated a differently sized Material struct than what Metal expects");
-        }
+        debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+            &model_pipeline,
+            FunctionType::Vertex,
+        );
+        debug_assert_argument_buffer_size::<{ FragBufferIndex::Material as _ }, Material>(
+            &model_pipeline,
+            FunctionType::Fragment,
+        );
         let model = Model::from_file(
             model_file,
             &device,
@@ -158,25 +145,14 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 arg.specular_shineness = specular_shineness;
             },
         );
-
-        #[cfg(debug_assertions)]
-        {
-            let model_pipeline_reflection = &model_pipeline.pipeline_state_reflection;
-
-            let vertex_world_arg_size = model_pipeline_reflection
-                .vertex_bindings()
-                .object_at_as::<BufferBindingRef>(VertexBufferIndex::World as _)
-                .expect("Failed to access world vertex buffer argument information")
-                .buffer_data_size() as u32;
-            debug_assert_eq!(std::mem::size_of::<World>(), vertex_world_arg_size as _, "Shader bindings generated a differently sized Vertex World struct than what Metal expects");
-
-            let fragment_world_arg_size = model_pipeline_reflection
-                .fragment_bindings()
-                .object_at_as::<BufferBindingRef>(FragBufferIndex::World as _)
-                .expect("Failed to access world fragment buffer argument information")
-                .buffer_data_size() as u32;
-            debug_assert_eq!(std::mem::size_of::<World>(), fragment_world_arg_size as _, "Shader bindings generated a differently sized Fragment World struct than what Metal expects");
-        }
+        debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            &model_pipeline,
+            FunctionType::Vertex,
+        );
+        debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            &model_pipeline,
+            FunctionType::Fragment,
+        );
         let world_arg_buffer = device.new_buffer(
             std::mem::size_of::<World>() as _,
             MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
