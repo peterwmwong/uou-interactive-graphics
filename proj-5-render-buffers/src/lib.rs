@@ -125,7 +125,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
-        self.reset_needs_render();
+        self.needs_render = false;
 
         let plane_texture = self
             .plane_texture
@@ -235,11 +235,6 @@ impl<R: RendererDelgate> Delegate<R> {
     #[inline(always)]
     fn device(&self) -> &Device {
         &self.plane_renderer.device()
-    }
-
-    #[inline(always)]
-    fn reset_needs_render(&mut self) {
-        self.needs_render = false;
     }
 
     #[inline]
