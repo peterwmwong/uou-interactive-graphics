@@ -45,7 +45,7 @@ pub enum UserEvent {
         key_code: c_ushort,
         modifier_keys: ModifierKeys,
     },
-    WindowResize {
+    WindowFocusedOrResized {
         size: f32x2,
     },
 }
@@ -141,7 +141,8 @@ impl<R: RendererDelgate> MetalRenderer<R> {
             self.layer
                 .set_drawable_size(CGSize::new(size[0] as CGFloat, size[1] as CGFloat));
             self.screen_size = size;
-            self.delegate.on_event(UserEvent::WindowResize { size });
+            self.delegate
+                .on_event(UserEvent::WindowFocusedOrResized { size });
         }
     }
 

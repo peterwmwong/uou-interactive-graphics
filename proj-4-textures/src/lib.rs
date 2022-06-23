@@ -5,12 +5,7 @@ mod shader_bindings;
 use bitflags::bitflags;
 use metal_app::{components::*, metal::*, metal_types::*, *};
 use shader_bindings::*;
-use std::{
-    f32::consts::PI,
-    ops::Neg,
-    path::PathBuf,
-    simd::{f32x2, f32x4},
-};
+use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
 
 bitflags! {
     struct Mode: usize {
@@ -36,7 +31,7 @@ pub struct Delegate<'a, const RENDER_LIGHT: bool> {
     command_queue: CommandQueue,
     pub device: Device,
     library: Library,
-    light_ray: ui_ray::UIRay,
+    light: light::Light,
     matrix_model_to_world: f32x4x4,
     mode: Mode,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
@@ -201,10 +196,15 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         let matrix_model_to_world = f32x4x4::scale(scale, scale, scale, 1.)
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.))
             * f32x4x4::translate(cx, cy, cz);
+
+        // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
+        // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
+        // (no translation). Since normals are directions (not positions, relative to a
+        // point on a surface), translations are meaningless.
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
-        let mut delegate = Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty()),
+        Self {
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -213,10 +213,10 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             },
             depth_texture: None,
             library,
-            light_ray: ui_ray::UIRay::new(
-                ModifierKeys::CONTROL,
+            light: light::Light::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
+                ModifierKeys::CONTROL,
                 true,
             ),
             matrix_model_to_world,
@@ -229,15 +229,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             needs_render: false,
             command_queue: device.new_command_queue(),
             device,
-        };
-
-        // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
-        // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
-        // (no translation). Since normals are directions (not positions, relative to a
-        // point on a surface), translations are meaningless.
-        delegate.update_light();
-        delegate.needs_render = false;
-        delegate
+        }
     }
 
     #[inline]
@@ -314,25 +306,27 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             },
         );
 
-        if self.light_ray.on_event(event) {
-            self.update_light();
-        } else {
-            match event {
-                UserEvent::KeyDown { key_code, .. } => {
-                    self.update_mode(match key_code {
-                    29 /* 0 */ => Mode::DEFAULT,
-                    18 /* 1 */ => Mode::HAS_NORMAL,
-                    19 /* 2 */ => Mode::HAS_AMBIENT,
-                    20 /* 3 */ => Mode::HAS_AMBIENT | Mode::HAS_DIFFUSE,
-                    21 /* 4 */ => Mode::HAS_SPECULAR,
-                    _ => self.mode
-                });
-                }
-                UserEvent::WindowResize { size, .. } => {
-                    self.update_depth_texture_size(size);
-                }
-                _ => {}
+        self.light
+            .on_event(event, |light::LightUpdate { position }| {
+                self.world_arg_ptr.light_position = position.into();
+                self.needs_render = true;
+            });
+
+        match event {
+            UserEvent::KeyDown { key_code, .. } => {
+                self.update_mode(match key_code {
+                29 /* 0 */ => Mode::DEFAULT,
+                18 /* 1 */ => Mode::HAS_NORMAL,
+                19 /* 2 */ => Mode::HAS_AMBIENT,
+                20 /* 3 */ => Mode::HAS_AMBIENT | Mode::HAS_DIFFUSE,
+                21 /* 4 */ => Mode::HAS_SPECULAR,
+                _ => self.mode
+            });
             }
+            UserEvent::WindowFocusedOrResized { size, .. } => {
+                self.update_depth_texture_size(size);
+            }
+            _ => {}
         }
     }
 
@@ -368,14 +362,6 @@ impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
         let texture = self.device.new_texture(&desc);
         texture.set_label("Depth");
         self.depth_texture = Some(texture);
-    }
-
-    fn update_light(&mut self) {
-        let &[rotx, roty] = self.light_ray.rotation_xy.as_array();
-        let light_position = f32x4x4::rotate(rotx, roty, 0.)
-            * f32x4::from_array([0., 0., -self.light_ray.distance_from_origin, 1.]);
-        self.world_arg_ptr.light_position = light_position.into();
-        self.needs_render = true;
     }
 }
 

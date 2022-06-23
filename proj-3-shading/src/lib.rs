@@ -348,7 +348,7 @@ impl RendererDelgate for Delegate {
                     _ => self.mode
                 };
             }
-            WindowResize { size, .. } => {
+            WindowFocusedOrResized { size, .. } => {
                 self.update_depth_texture_size(size);
                 self.update_camera(size, self.camera_rotation, self.camera_distance);
             }

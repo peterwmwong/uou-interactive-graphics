@@ -180,7 +180,7 @@ impl RendererDelgate for Delegate {
                     self.use_perspective = !self.use_perspective;
                 }
             }
-            WindowResize { size, .. } => {
+            WindowFocusedOrResized { size, .. } => {
                 self.screen_size = size;
             }
             _ => {}

@@ -78,7 +78,7 @@ impl RendererDelgate for CheckerboardDelegate {
 
     #[inline(always)]
     fn on_event(&mut self, event: UserEvent) {
-        self.needs_render = matches!(event, UserEvent::WindowResize { .. });
+        self.needs_render = matches!(event, UserEvent::WindowFocusedOrResized { .. });
     }
 
     fn device(&self) -> &Device {
@@ -247,7 +247,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                     });
                 }
             }
-            WindowResize { size, .. } => {
+            WindowFocusedOrResized { size, .. } => {
                 self.plane_renderer.on_event(event);
                 self.update_plane_texture_size(size);
                 self.update_camera(size, self.camera_rotation, self.camera_distance);
@@ -311,7 +311,7 @@ impl<R: RendererDelgate> Delegate<R> {
         plane_texture.set_label("Plane Texture");
         self.plane_texture = Some(plane_texture);
         self.plane_renderer
-            .on_event(UserEvent::WindowResize { size: plane_size });
+            .on_event(UserEvent::WindowFocusedOrResized { size: plane_size });
     }
 
     fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {

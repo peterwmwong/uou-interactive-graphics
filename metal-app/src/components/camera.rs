@@ -31,13 +31,17 @@ pub struct Camera {
 
 impl Camera {
     #[inline(always)]
-    pub const fn new(init_rotation: f32x2, on_mouse_drag_modifier_keys: ModifierKeys) -> Self {
+    pub const fn new(
+        init_rotation: f32x2,
+        on_mouse_drag_modifier_keys: ModifierKeys,
+        invert_drag: bool,
+    ) -> Self {
         Self {
             ray: UIRay {
                 distance_from_origin: INITIAL_CAMERA_DISTANCE,
                 rotation_xy: init_rotation,
                 on_mouse_drag_modifier_keys,
-                invert_drag: false,
+                invert_drag,
             },
             double_inv_screen_size: f32x2::splat(1.),
         }
@@ -47,7 +51,7 @@ impl Camera {
     pub fn on_event(&mut self, event: UserEvent, on_update: impl FnMut(CameraUpdate)) {
         let ray_update = self.ray.on_event(event);
         let screen_update = match event {
-            UserEvent::WindowResize { size, .. } => {
+            UserEvent::WindowFocusedOrResized { size, .. } => {
                 self.double_inv_screen_size = f32x2::splat(2.) / size;
                 true
             }
