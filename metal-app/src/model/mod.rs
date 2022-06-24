@@ -7,8 +7,15 @@ pub use geometry::MaxBounds;
 use geometry::{DrawInfo, Geometry, GeometryBuffers};
 pub use materials::MaterialToEncode;
 use materials::{MaterialResults, Materials};
+use std::any::TypeId;
 use std::path::{Path, PathBuf};
 use tobj::LoadOptions;
+
+pub const NO_MATERIALS_ID: u64 = u64::MAX;
+
+pub struct NoMaterial {}
+#[allow(non_snake_case)]
+pub fn NO_MATERIALS_ENCODER(_: &mut NoMaterial, _: MaterialToEncode) {}
 
 pub struct Model<
     const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
@@ -18,7 +25,7 @@ pub struct Model<
     draws: Vec<DrawInfo>,
     pub geometry_max_bounds: MaxBounds,
     geometry_buffers: GeometryBuffers,
-    materials: MaterialResults,
+    materials: Option<MaterialResults>,
 }
 
 impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>
@@ -26,8 +33,8 @@ impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFE
 {
     pub fn from_file<
         T: AsRef<Path>,
-        G: Sized,
-        M: Sized,
+        G: Sized + 'static,
+        M: Sized + 'static,
         EG: FnMut(&mut G, GeometryToEncode),
         EM: FnMut(&mut M, MaterialToEncode),
     >(
@@ -55,21 +62,38 @@ impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFE
                 .expect("Failed to get obj file's parent directory"),
         );
 
+        debug_assert_eq!(
+            FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID,
+            TypeId::of::<M>() == TypeId::of::<NoMaterial>(),
+            r#"
+Only one of these must be true:
+1. FRAGMENT_MATERIAL_ARG_BUFFER_ID != NO_MATERIALS AND Material type is not ()
+2. FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS AND Material type is ()
+"#
+        );
+
         // Size Heap for Geometry and Materials
-        let mut materials = Materials::new(device, &material_file_dir, &materials);
+        let mut materials = if FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID {
+            None
+        } else {
+            Some(Materials::new(device, &material_file_dir, &materials))
+        };
         let mut geometry = Geometry::new(&models, device);
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
         desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
         desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_size((materials.heap_size() + geometry.heap_size()) as _);
+        let material_heap_size = materials.as_ref().map_or(0, |m| m.heap_size());
+        desc.set_size((material_heap_size + geometry.heap_size()) as _);
         let heap = device.new_heap(&desc);
-        heap.set_label("Geometry and Materials Heap");
+        heap.set_label("Model Heap");
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
-        let materials = materials.allocate_and_encode(&heap, encode_material_arg);
+        let materials = materials
+            .as_mut()
+            .map(|m| m.allocate_and_encode(&heap, encode_material_arg));
         let geometry_buffers = geometry.allocate_and_encode(&heap, encode_geometry_arg);
 
         Self {
@@ -92,10 +116,16 @@ impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFE
     #[inline]
     pub fn encode_draws(&self, encoder: &RenderCommandEncoderRef) {
         let mut geometry_arg_buffer_offset = 0;
+        let materials = if FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID {
+            None
+        } else {
+            Some(self.materials.as_ref().expect("Model is misconfigured. FRAGMENT_MATERIAL_ARG_BUFFER_ID is not NO_MATERIALS, but an invalid (or NO_MATERIALS_ENCODER) material encoder was specified"))
+        };
         for d in &self.draws {
             encoder.push_debug_group(&d.debug_group_name);
 
-            let material_arg_buffer_offset = d.material_id * self.materials.argument_byte_size;
+            let material_arg_buffer_offset =
+                d.material_id * materials.map_or(0, |m| m.argument_byte_size);
 
             // For the first object, encode the vertex/fragment buffer.
             if geometry_arg_buffer_offset == 0 {
@@ -104,11 +134,15 @@ impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFE
                     Some(self.geometry_buffers.arguments.as_ref()),
                     0,
                 );
-                encoder.set_fragment_buffer(
-                    FRAGMENT_MATERIAL_ARG_BUFFER_ID,
-                    Some(self.materials.arguments.as_ref()),
-                    material_arg_buffer_offset as _,
-                );
+                // TODO: Change condition to FRAGMENT_MATERIAL_ARG_BUFFER_ID != NO_MATERIALS
+                // - Should generate better code
+                if let Some(materials) = materials {
+                    encoder.set_fragment_buffer(
+                        FRAGMENT_MATERIAL_ARG_BUFFER_ID,
+                        Some(materials.arguments.as_ref()),
+                        material_arg_buffer_offset as _,
+                    );
+                }
             }
             // Subsequent objects, just move the vertex/fragment buffer offsets
             else {
@@ -116,11 +150,12 @@ impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFE
                     VERTEX_GEOMETRY_ARG_BUFFER_ID,
                     geometry_arg_buffer_offset as _,
                 );
-
-                encoder.set_fragment_buffer_offset(
-                    FRAGMENT_MATERIAL_ARG_BUFFER_ID,
-                    material_arg_buffer_offset as _,
-                );
+                if self.materials.is_some() {
+                    encoder.set_fragment_buffer_offset(
+                        FRAGMENT_MATERIAL_ARG_BUFFER_ID,
+                        material_arg_buffer_offset as _,
+                    );
+                }
             }
             geometry_arg_buffer_offset += self.geometry_buffers.argument_byte_size;
 
