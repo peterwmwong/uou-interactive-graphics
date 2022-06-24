@@ -232,11 +232,6 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
 }
 
 impl<R: RendererDelgate> Delegate<R> {
-    #[inline(always)]
-    fn device(&self) -> &Device {
-        &self.plane_renderer.device()
-    }
-
     #[inline]
     fn update_plane_texture_filter_mode(&mut self, mode: TextureFilterMode) {
         self.needs_render = mode != std::mem::replace(&mut self.plane_texture_filter_mode, mode);

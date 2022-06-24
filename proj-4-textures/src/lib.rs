@@ -149,7 +149,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             &model_pipeline,
             FunctionType::Vertex,
         );
-        debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+        debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
             &model_pipeline,
             FunctionType::Fragment,
         );
