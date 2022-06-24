@@ -73,11 +73,12 @@ Only one of these must be true:
         );
 
         // Size Heap for Geometry and Materials
-        let mut materials = if FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID {
-            None
-        } else {
-            Some(Materials::new(device, &material_file_dir, &materials))
-        };
+        let mut materials =
+            if FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID || materials.is_empty() {
+                None
+            } else {
+                Some(Materials::new(device, &material_file_dir, &materials))
+            };
         let mut geometry = Geometry::new(&models, device);
 
         // Allocate Heap for Geometry and Materials
@@ -116,16 +117,14 @@ Only one of these must be true:
     #[inline]
     pub fn encode_draws(&self, encoder: &RenderCommandEncoderRef) {
         let mut geometry_arg_buffer_offset = 0;
-        let materials = if FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID {
-            None
-        } else {
-            Some(self.materials.as_ref().expect("Model is misconfigured. FRAGMENT_MATERIAL_ARG_BUFFER_ID is not NO_MATERIALS, but an invalid (or NO_MATERIALS_ENCODER) material encoder was specified"))
-        };
+        let materials = self.materials.as_ref();
         for d in &self.draws {
             encoder.push_debug_group(&d.debug_group_name);
 
-            let material_arg_buffer_offset =
-                d.material_id * materials.map_or(0, |m| m.argument_byte_size);
+            let material_arg_buffer_offset = d
+                .material_id
+                .zip(materials)
+                .map(|(mid, m)| (mid * m.argument_byte_size, &m.arguments));
 
             // For the first object, encode the vertex/fragment buffer.
             if geometry_arg_buffer_offset == 0 {
@@ -136,10 +135,12 @@ Only one of these must be true:
                 );
                 // TODO: Change condition to FRAGMENT_MATERIAL_ARG_BUFFER_ID != NO_MATERIALS
                 // - Should generate better code
-                if let Some(materials) = materials {
+                if let Some((material_arg_buffer_offset, materials_arguments)) =
+                    material_arg_buffer_offset
+                {
                     encoder.set_fragment_buffer(
                         FRAGMENT_MATERIAL_ARG_BUFFER_ID,
-                        Some(materials.arguments.as_ref()),
+                        Some(&materials_arguments),
                         material_arg_buffer_offset as _,
                     );
                 }
@@ -150,7 +151,7 @@ Only one of these must be true:
                     VERTEX_GEOMETRY_ARG_BUFFER_ID,
                     geometry_arg_buffer_offset as _,
                 );
-                if self.materials.is_some() {
+                if let Some((material_arg_buffer_offset, ..)) = material_arg_buffer_offset {
                     encoder.set_fragment_buffer_offset(
                         FRAGMENT_MATERIAL_ARG_BUFFER_ID,
                         material_arg_buffer_offset as _,

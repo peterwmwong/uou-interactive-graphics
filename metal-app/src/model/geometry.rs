@@ -12,7 +12,7 @@ pub struct MaxBounds {
 pub(crate) struct DrawInfo {
     pub(crate) debug_group_name: String,
     pub(crate) num_indices: usize,
-    pub(crate) material_id: usize,
+    pub(crate) material_id: Option<usize>,
 }
 
 pub struct GeometryToEncode {
@@ -79,7 +79,7 @@ impl<'a, T: Sized> Geometry<'a, T> {
             draws.push(DrawInfo {
                 debug_group_name: name.to_owned(),
                 num_indices: mesh.indices.len() as _,
-                material_id: mesh.material_id.expect("No material found for object.") as _,
+                material_id: mesh.material_id,
             });
             for &[x, y, z] in mesh.positions.as_chunks::<3>().0 {
                 let input = f32x4::from_array([x, y, z, 0.0]);
