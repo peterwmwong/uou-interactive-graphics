@@ -36,6 +36,13 @@
 
 # metal-app
 
+- Camera
+    - Implement Reverse-Z + Infinity Z for better depth precision (ex. fix Z-fighting)
+        - https://dev.theomader.com/depth-precision/
+        - https://developer.nvidia.com/content/depth-precision-visualized
+        - Currently, I think I'm seeing Z-fighting on the Yoda model, zooming out slightly, and noting the flicker in Yoda's eye
+        - Setup a z-fighting example rendering to verify the benefit
+            - Ex. https://austin-eng.com/webgpu-samples/samples/reversedZ
 - Rethink RenderDelegate API
     - proj-5 exposed how awkward it is for one Delegate to use another
         - It's not easy to initialize
@@ -64,7 +71,8 @@
 
 # All Projects
 
-- Add gif/picture to readmes
+- Move common assets to a root directory
+    - Too many Teapots and Yodas
 
 # tasks.json
 

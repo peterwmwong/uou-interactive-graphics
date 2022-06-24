@@ -87,7 +87,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         world_arg_buffer.set_label("World Argument Buffer");
         let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
 
-        let MaxBounds { center, size } = &model.geometry_max_bounds;
+        let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
 
         // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
@@ -96,14 +96,14 @@ impl<'a> RendererDelgate for Delegate<'a> {
         //    - In the Vertex Shader, z-fighting in the depth buffer, even with Depth32Float.
         //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
         //      exhibit a weird triangal-ish pattern.
-        let scale = 1. / size.reduce_max();
+        let scale = 0.5 / size.reduce_max();
 
         // TODO: This generates an immense amount of code!
         // - It's the matrix multiplications we're unable to avoid with const evaluation (currently not supported in rust for floating point operations)
         // - We can create combo helpers, see f32x4x4::scale_translate()
-        let matrix_model_to_world = f32x4x4::scale(scale, scale, scale, 1.)
-            * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.))
-            * f32x4x4::translate(cx, cy, cz);
+        let model_to_world_scale_rot = f32x4x4::scale(scale, scale, scale, 1.)
+            * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.));
+        let matrix_model_to_world = model_to_world_scale_rot * f32x4x4::translate(cx, cy, cz);
 
         // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
@@ -112,7 +112,12 @@ impl<'a> RendererDelgate for Delegate<'a> {
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera: camera::Camera::new(
+                (model_to_world_scale_rot * size).abs(),
+                INITIAL_CAMERA_ROTATION,
+                ModifierKeys::empty(),
+                false,
+            ),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);

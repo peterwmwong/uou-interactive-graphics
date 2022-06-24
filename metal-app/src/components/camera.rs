@@ -7,10 +7,9 @@ use std::{
     simd::{f32x2, f32x4},
 };
 
-const INITIAL_CAMERA_DISTANCE: f32 = 1.;
+const INITIAL_CAMERA_DISTANCE: f32 = 2.;
 const N: f32 = 0.1;
 const F: f32 = 100000.0;
-const NEAR_FIELD_MAJOR_AXIS: f32 = N / INITIAL_CAMERA_DISTANCE;
 const PERSPECTIVE_MATRIX: f32x4x4 = f32x4x4::new(
     [N, 0., 0., 0.],
     [0., N, 0., 0.],
@@ -25,6 +24,7 @@ pub struct CameraUpdate {
 }
 
 pub struct Camera {
+    focal_bounds: f32x4,
     ray: UIRay,
     double_inv_screen_size: f32x2,
 }
@@ -32,11 +32,18 @@ pub struct Camera {
 impl Camera {
     #[inline(always)]
     pub const fn new(
+        // Assuming the camera is pointed a model, the `focal_bounds` is the width, height, and
+        // depth of the model. This is used to make sure the view volume is initially big enough to
+        // contain the model.
+        // TODO: Figure out better name, potentially means something completely different in
+        // computer graphics.
+        focal_bounds: f32x4,
         init_rotation: f32x2,
         on_mouse_drag_modifier_keys: ModifierKeys,
         invert_drag: bool,
     ) -> Self {
         Self {
+            focal_bounds,
             ray: UIRay {
                 distance_from_origin: INITIAL_CAMERA_DISTANCE,
                 rotation_xy: init_rotation,
@@ -92,10 +99,20 @@ impl Camera {
         });
     }
 
+    // TODO: Is this really the best way to calculate FOV calculation
+    // - Currently using the `focal_bounds` to determine the overall size of view volume and
+    //   the `aspect_ratio` the view volume has the... right aspect ratio.
+    // - The caller determines `focal_bounds` based on the loaded model's bounding box.
+    // - Haven't worked out the math yet, but I can't imagine this maintains a realistic FOV
+    // - Read up https://en.wikipedia.org/wiki/Field_of_view_in_video_games
     #[inline]
     fn calc_matrix_camera_to_projection(&self, aspect_ratio: f32) -> f32x4x4 {
-        let w = NEAR_FIELD_MAJOR_AXIS;
-        let h = aspect_ratio * NEAR_FIELD_MAJOR_AXIS;
+        let [fw, _fh, fd, _] = self.focal_bounds.to_array();
+        // Use the Width/Depth ratio to size the View Volume to contain the focal bounds.
+        // Put another way, we want to see the whole model (size represented as the focal bounds).
+        let ratio = (fw / 2.) / (INITIAL_CAMERA_DISTANCE - (fd / 2.0));
+        let w = 2. * (ratio * N);
+        let h = aspect_ratio * w;
         let orthographic_matrix = {
             f32x4x4::new(
                 [2. / w, 0., 0., 0.],
