@@ -42,9 +42,14 @@ cargo run --bin proj-4-textures proj-4-textures proj-4-textures/assets/yoda/yoda
 | Alt/Option + Right button drag | Camera zoom in/out model rendered to texture |
 | Alt/Option + Left button drag  | Camera orbits model rendered to texture      |
 
-| Key | Action                                 |
-|-----|----------------------------------------|
-|  1  | Texture Filter: Nearest                |
-|  2  | Texture Filter: Bilinear               |
-|  3  | Texture Filter: Trilinear              |
-|  4  | Texture Filter: Anisotropic (max 4)    |
+|   Key   | Action                                 |
+|---------|----------------------------------------|
+|    1    | Texture Filter: Nearest                |
+|    2    | Texture Filter: Bilinear               |
+|    3    | Texture Filter: Trilinear              |
+|    4    | Texture Filter: Anisotropic (max 4)    |
+| Alt + 0 | Ambient + Diffuse + Specular (default) |
+| Alt + 1 | Normals                                |
+| Alt + 2 | Ambient                                |
+| Alt + 3 | Ambient + Diffuse                      |
+| Alt + 4 | Specular                               |
