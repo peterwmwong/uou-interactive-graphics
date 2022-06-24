@@ -5,16 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug 'proj-4-textures'",
+            "name": "Debug 'proj-6-environment-mapping'",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "build",
-                    "--package=proj-4-textures"
+                    "--package=proj-6-environment-mapping"
                 ],
                 "filter": {
-                    "name": "proj-4-textures",
+                    "name": "proj-6-environment-mapping",
                     "kind": "bin"
                 }
             },

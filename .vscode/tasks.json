@@ -4,6 +4,48 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "asm after",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures AFTER",
+            "problemMatcher": []
+        },
+        {
+            "label": "asm before",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures BEFORE",
+            "problemMatcher": []
+        },
+        {
+            "label": "asm diff",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-4-textures BEFORE AFTER",
+            "problemMatcher": []
+        },
+        {
             "label": "open-xcode",
             "type": "shell",
             "presentation": {
@@ -178,46 +220,18 @@
             "label": "Run proj-5-render-buffers checkerboard"
         },
         {
-            "label": "asm after",
-            "type": "shell",
-            "presentation": {
-                "echo": true,
-                "reveal": "silent",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": true
-            },
-            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures AFTER",
-            "problemMatcher": []
-        },
-        {
-            "label": "asm before",
-            "type": "shell",
-            "presentation": {
-                "echo": true,
-                "reveal": "silent",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": true
-            },
-            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures BEFORE",
-            "problemMatcher": []
-        },
-        {
-            "label": "asm diff",
-            "type": "shell",
-            "presentation": {
-                "echo": true,
-                "reveal": "silent",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": true,
-                "clear": true
-            },
-            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-4-textures BEFORE AFTER",
-            "problemMatcher": []
-        },
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-6-environment-mapping",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+            ],
+            "label": "Run proj-6-environment-mapping teapot"
+        }
     ]
 }
