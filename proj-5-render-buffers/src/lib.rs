@@ -5,7 +5,10 @@ mod shader_bindings;
 use metal_app::{components::camera, metal::*, metal_types::*, *};
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
-use std::{f32::consts::PI, simd::f32x2};
+use std::{
+    f32::consts::PI,
+    simd::{f32x2, f32x4},
+};
 
 const INITIAL_PLANE_TEXTURE_FILTER_MODE: TextureFilterMode = TextureFilterMode::Anistropic;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
@@ -110,8 +113,14 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::scale(0.5, 0.5, 0.5, 1.);
         let command_queue = device.new_command_queue();
 
+        let assumed_plane_size = f32x4::from_array([1., 0., 1., 0.]);
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera: camera::Camera::new(
+                assumed_plane_size,
+                INITIAL_CAMERA_ROTATION,
+                ModifierKeys::empty(),
+                false,
+            ),
             command_queue,
             matrix_model_to_projection: f32x4x4::identity(),
             matrix_model_to_world,
