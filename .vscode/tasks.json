@@ -187,6 +187,20 @@
             ],
             "args": [
                 "--bin",
+                "proj-4-textures",
+                "--",
+                "${workspaceFolder}/proj-6-environment-mapping/assets/sphere.obj"
+            ],
+            "label": "Run proj-4-textures sphere"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
                 "proj-5-render-buffers",
                 "--",
                 "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
@@ -229,9 +243,37 @@
                 "--bin",
                 "proj-6-environment-mapping",
                 "--",
+                "${workspaceFolder}/proj-6-environment-mapping/assets/sphere.obj"
+            ],
+            "label": "Run proj-6-environment-mapping sphere"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-6-environment-mapping",
+                "--",
                 "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
             ],
             "label": "Run proj-6-environment-mapping teapot"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-6-environment-mapping",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
+            ],
+            "label": "Run proj-6-environment-mapping yoda"
         }
     ]
 }
