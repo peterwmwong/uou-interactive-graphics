@@ -1,5 +1,8 @@
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=4
 
+![Project 4 Teapot](./p4.gif)
+![Project 4 Yoda](./p4-yoda.gif)
+
 # Usage
 
 ```sh

@@ -1,5 +1,8 @@
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=5
 
+![Project 5 Checkerboard](./p5-checkerboard.gif)
+![Project 5 Yoda](./p5-yoda.gif)
+
 # Usage
 
 ```sh
