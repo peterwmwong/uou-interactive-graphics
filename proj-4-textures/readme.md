@@ -22,7 +22,7 @@ cargo run --bin proj-4-textures proj-4-textures/assets/teapot.obj
 ### Yoda model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures proj-4-textures/assets/yoda/yoda.obj
+cargo run --bin proj-4-textures proj-4-textures/assets/yoda/yoda.obj
 ```
 
 # Controls
