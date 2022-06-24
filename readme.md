@@ -49,6 +49,9 @@ Beyond meeting the project requirements, I want a better understanding of how I 
 
 > TODO: Document motivation and usage of VSCode tasks `compile-and-emit-shader-asm` and `diff-shader-asm`
 
+## TODO: Build Performance
+
+> TODO: Review https://nnethercote.github.io/perf-book/compile-times.html
 
 # [Project 1: Hello World](./proj-1-hello-world/)
 
