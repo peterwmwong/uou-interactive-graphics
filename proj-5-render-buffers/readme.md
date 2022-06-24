@@ -24,13 +24,13 @@ cargo run --bin proj-5-render-buffers
 ### Teapot model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures/assets/teapot.obj
+cargo run --bin proj-5-render-buffers proj-4-textures/assets/teapot.obj
 ```
 
 ### Yoda model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures proj-4-textures/assets/yoda/yoda.obj
+cargo run --bin proj-5-render-buffers proj-4-textures/assets/yoda/yoda.obj
 ```
 
 # Controls
