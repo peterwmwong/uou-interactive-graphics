@@ -96,7 +96,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         //    - In the Vertex Shader, z-fighting in the depth buffer, even with Depth32Float.
         //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
         //      exhibit a weird triangal-ish pattern.
-        let scale = 0.5 / size.reduce_max();
+        let scale = 1. / size.reduce_max();
 
         // TODO: This generates an immense amount of code!
         // - It's the matrix multiplications we're unable to avoid with const evaluation (currently not supported in rust for floating point operations)
