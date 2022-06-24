@@ -12,14 +12,16 @@ I'm trying to learn new stuff on top of new stuff.
 - [Apple Metal](https://developer.apple.com/metal/)
     - [metal-rs](https://github.com/gfx-rs/metal-rs) Crate for Rust/Metal bindings
         - [Forked with some Metal 3 additions](https://github.com/gfx-rs/metal-rs/compare/master...peterwmwong:metal3)
-    - [Metal 3] techniques used
+    - Metal 3 techniques used
         - [Bindless Argument buffers](https://developer.apple.com/videos/play/wwdc2022/10101/)
         - Coming soon: [Faster Resource Loading with MTLIO](https://developer.apple.com/videos/play/wwdc2022/10104/)
         - Coming soon: [Offline Native Shader Compilation/Loading](https://developer.apple.com/videos/play/wwdc2022/10102/)
 
 # Common Project Architecture
 
-> TODO: Document `metal-types`/`metal-build` crates and how C++ structures are shared between Metal and Rust.
+> TODO: Document `metal-types`/`metal-build` crates and how C++ structures are shared between Metal and Rust
+
+> TODO: Document how `metal-build` provides `build.rs` support for each project to precompile shaders
 
 > TODO: Document `metal-app`
 
