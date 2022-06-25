@@ -3,6 +3,43 @@
 
 using namespace metal;
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Compare with a sky box approach
+// - With the current approach, haven't quite figured out how to nicely "zoom out"
+// - It might help to try the sky box just to see what is "correct" and try to reverse engineer it.
+struct BGVertexOut {
+    float4 position [[position]];
+};
+
+vertex BGVertexOut
+bg_vertex(uint vertex_id [[vertex_id]])
+{
+    constexpr const float2 plane_triange_strip_vertices[4] = {
+        {-1.h, -1.h}, // Bottom Left
+        {-1.h,  1.h}, // Top    Left
+        { 1.h, -1.h}, // Bottom Right
+        { 1.h,  1.h}, // Top    Right
+    };
+    const float2 position2d = plane_triange_strip_vertices[vertex_id];
+    return { .position = float4(position2d, 0, 1) };
+}
+
+
+fragment half4
+bg_fragment(         BGVertexOut         in       [[stage_in]],
+            constant World             & world    [[buffer(BGFragBufferIndex::World)]],
+                     texturecube<half>   texture  [[texture(BGFragTextureIndex::CubeMapTexture)]])
+{
+    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
+
+    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
+    const float4 pos = world.matrix_screen_to_world * float4(world.screen_size - in.position.xy, 1, 1);
+    const half4 color = texture.sample(tx_sampler, pos.xyz * float3(1, -1, 1));
+    return color;
+}
+
 struct VertexOut
 {
     float4 position [[position]];
