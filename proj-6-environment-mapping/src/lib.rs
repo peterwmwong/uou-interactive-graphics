@@ -222,9 +222,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
         // TODO: This generates an immense amount of code!
         // - It's the matrix multiplications we're unable to avoid with const evaluation (currently not supported in rust for floating point operations)
         // - We can create combo helpers, see f32x4x4::scale_translate()
-        let model_to_world_scale_rot = f32x4x4::scale(scale, scale, scale, 1.)
-            * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.));
-        let matrix_model_to_world = model_to_world_scale_rot * f32x4x4::translate(cx, cy, cz);
+        let matrix_model_to_world = (f32x4x4::scale(scale, scale, scale, 1.)
+            * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
+            * f32x4x4::translate(cx, cy, cz);
 
         // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
@@ -233,12 +233,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         Self {
-            camera: camera::Camera::new(
-                (model_to_world_scale_rot * size).abs(),
-                INITIAL_CAMERA_ROTATION,
-                ModifierKeys::empty(),
-                false,
-            ),
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
             cubemap_texture,
             bg_depth_state: {
                 let desc = DepthStencilDescriptor::new();
