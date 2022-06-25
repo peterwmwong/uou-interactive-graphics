@@ -60,6 +60,14 @@ main_fragment(         VertexOut   in       [[stage_in]],
     -------   ---------   ---------------
     Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
     */
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Switch to putting everything in View Space
+    // - Seems more common when I read examples online
+    // - Should be a performance improvement
+    //      1. Memory reduction: no need to store world.camera_position
+    //      2. Faster: calculating `c` (direction/unit vector towards camera) is simply `-pos` (assuming pos is now in view space)
     const half3 l = normalize(half3(world.light_position.xyz) - pos);  // Light  - world space direction from fragment to light
     const half3 c = normalize(half3(world.camera_position.xyz) - pos); // Camera - world space direction from fragment to camera
     const half3 h = normalize(l + c);                                  // Half   - half-way vector between Light and Camera
