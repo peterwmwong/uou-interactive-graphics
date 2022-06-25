@@ -333,7 +333,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
 
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
-                self.world_arg_ptr.screen_size = size.into();
                 self.update_depth_texture_size(size);
                 self.needs_render = true;
             }
