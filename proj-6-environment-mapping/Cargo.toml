@@ -8,3 +8,4 @@ metal-build = { path = "../metal-build" }
 
 [dependencies]
 metal-app = { path = "../metal-app" }
+png = "0.17.5"

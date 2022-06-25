@@ -32,7 +32,21 @@ struct World {
     float4x4 matrix_world_to_projection;
     float4x4 matrix_screen_to_world;
     float4   camera_position;
+    float2   screen_size;
 };
+
+enum struct BGFragBufferIndex: unsigned int
+{
+    World = 0,
+    LENGTH
+};
+
+enum struct BGFragTextureIndex: unsigned int
+{
+    CubeMapTexture = 0,
+    LENGTH
+};
+
 
 enum struct VertexBufferIndex: unsigned int
 {
