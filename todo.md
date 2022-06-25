@@ -51,6 +51,12 @@
             - CommandQueue
             - CommandBuffer
             - Device
+- Objective-C Exception information lost during Application initialization
+    - Currently, if an Objective-C Exception occurs within launchApplication, the actual exception seems to be obscured.
+    - Thankfully, running Xcode, will automatically debugger breakpoint at the offending location, it just lacks why.
+        - I've hit this a few times by making an erroneous request of a Metal API during initialization (Bad texture allocation)
+    - Is there something to be done?
+        - Should certain initialization be deferred?
 - Performance: Reduce/Batch Obj-C implicit `sel!` calls
     - Part of the overhead with calling into Obj-C is registering an Obj-C Selector (`sel!`) before using it.
     - Find other places where we make repeated Obj-C calls, and cache the Obj-C Selector and reuse it.
