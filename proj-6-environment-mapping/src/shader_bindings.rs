@@ -107,13 +107,12 @@ pub struct World {
     pub matrix_world_to_projection: float4x4,
     pub matrix_screen_to_world: float4x4,
     pub camera_position: float4,
-    pub screen_size: float2,
 }
 #[test]
 fn bindgen_test_layout_World() {
     assert_eq!(
         ::std::mem::size_of::<World>(),
-        272usize,
+        256usize,
         concat!("Size of: ", stringify!(World))
     );
     assert_eq!(
@@ -206,23 +205,6 @@ fn bindgen_test_layout_World() {
         );
     }
     test_field_camera_position();
-    fn test_field_screen_size() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<World>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).screen_size) as usize - ptr as usize
-            },
-            256usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(World),
-                "::",
-                stringify!(screen_size)
-            )
-        );
-    }
-    test_field_screen_size();
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]

@@ -32,11 +32,9 @@ bg_fragment(         BGVertexOut         in       [[stage_in]],
             constant World             & world    [[buffer(BGFragBufferIndex::World)]],
                      texturecube<half>   texture  [[texture(BGFragTextureIndex::CubeMapTexture)]])
 {
-    constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
-
-    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
-    const float4 pos = world.matrix_screen_to_world * float4(world.screen_size - in.position.xy, 1, 1);
-    const half4 color = texture.sample(tx_sampler, pos.xyz * float3(1, -1, 1));
+    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
+    const float4 pos   = world.matrix_screen_to_world * float4(in.position.xy, 1, 1);
+    const half4  color = texture.sample(tx_sampler, pos.xyz);
     return color;
 }
 
