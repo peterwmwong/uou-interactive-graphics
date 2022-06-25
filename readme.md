@@ -1,4 +1,4 @@
-I'm learning computer graphics by watching the [**a l a r m i n g l y well produced** recorded lectures](https://www.youtube.com/playlist?list=PLplnkTzzqsZTfYh4UbhLGpI5kGd5oW_Hh) by [Cem Yuksel](http://www.cemyuksel.com/) for University of Utah's [Interactive Computer Graphics CS 5610/6610](https://graphics.cs.utah.edu/courses/cs6610/spring2022/).
+I'm learning computer graphics by watching the [**a l a r m i n g l y well produced** recorded lectures](https://www.youtube.com/playlist?list=PLplnkTzzqsZS3R5DjmCQsqupu43oS9CFN) by [Cem Yuksel](http://www.cemyuksel.com/) for University of Utah's [Interactive Computer Graphics CS 5610/6610](https://graphics.cs.utah.edu/courses/cs6610/spring2022/).
 
 This repository contains my attempt to complete the projects associated with the course.
 

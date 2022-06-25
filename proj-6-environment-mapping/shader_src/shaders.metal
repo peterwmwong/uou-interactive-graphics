@@ -3,12 +3,6 @@
 
 using namespace metal;
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Compare with a sky box approach
-// - With the current approach, haven't quite figured out how to nicely "zoom out"
-// - It might help to try the sky box just to see what is "correct" and try to reverse engineer it.
 struct BGVertexOut {
     float4 position [[position]];
 };
