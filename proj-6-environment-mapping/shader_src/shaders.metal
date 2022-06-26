@@ -10,14 +10,13 @@ struct BGVertexOut {
 vertex BGVertexOut
 bg_vertex(uint vertex_id [[vertex_id]])
 {
-    constexpr const float2 plane_triange_strip_vertices[4] = {
-        {-1.h, -1.h}, // Bottom Left
+    constexpr const float2 plane_triange_strip_vertices[3] = {
         {-1.h,  1.h}, // Top    Left
-        { 1.h, -1.h}, // Bottom Right
-        { 1.h,  1.h}, // Top    Right
+        {-1.h, -3.h}, // Bottom Left
+        { 3.h,  1.h}, // Top    Right
     };
     const float2 position2d = plane_triange_strip_vertices[vertex_id];
-    return { .position = float4(position2d, 0, 1) };
+    return { .position = float4(position2d, 1, 1) };
 }
 
 

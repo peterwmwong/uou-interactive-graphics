@@ -22,7 +22,7 @@ struct Delegate<'a> {
     camera: camera::Camera,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
-    depth_state: DepthStencilState,
+    model_depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
     matrix_model_to_world: f32x4x4,
@@ -233,15 +233,17 @@ impl<'a> RendererDelgate for Delegate<'a> {
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
-            cubemap_texture,
             bg_depth_state: {
                 let desc = DepthStencilDescriptor::new();
-                desc.set_depth_compare_function(MTLCompareFunction::Always);
+                desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 desc.set_depth_write_enabled(false);
                 device.new_depth_stencil_state(&desc)
             },
-            depth_state: {
+            bg_pipeline_state: bg_pipeline.pipeline_state,
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            command_queue: device.new_command_queue(),
+            cubemap_texture,
+            model_depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 desc.set_depth_write_enabled(true);
@@ -251,11 +253,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
             matrix_model_to_world,
             model,
             model_pipeline_state: model_pipeline.pipeline_state,
-            bg_pipeline_state: bg_pipeline.pipeline_state,
             world_arg_buffer,
             world_arg_ptr,
             needs_render: false,
-            command_queue: device.new_command_queue(),
             device,
         }
     }
@@ -272,10 +272,27 @@ impl<'a> RendererDelgate for Delegate<'a> {
             render_target,
             self.depth_texture.as_ref(),
         ));
-        // Render Model
         {
             encoder.push_debug_group("Model");
             self.model.encode_use_resources(encoder);
+
+            encoder.set_render_pipeline_state(&self.model_pipeline_state);
+            encoder.set_depth_stencil_state(&self.model_depth_state);
+            encoder.set_vertex_buffer(
+                VertexBufferIndex::World as _,
+                Some(&self.world_arg_buffer),
+                0,
+            );
+            encoder.set_fragment_buffer(
+                FragBufferIndex::World as _,
+                Some(&self.world_arg_buffer),
+                0,
+            );
+            self.model.encode_draws(encoder);
+            encoder.pop_debug_group();
+        }
+        {
+            encoder.push_debug_group("BG");
             encoder.set_render_pipeline_state(&self.bg_pipeline_state);
             encoder.set_depth_stencil_state(&self.bg_depth_state);
             encoder.set_fragment_buffer(
@@ -287,21 +304,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 BGFragTextureIndex::CubeMapTexture as _,
                 Some(&self.cubemap_texture),
             );
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
-            // TODO: Temporarily disabled to focus on background
-            // encoder.set_render_pipeline_state(&self.model_pipeline_state);
-            // encoder.set_depth_stencil_state(&self.depth_state);
-            // encoder.set_vertex_buffer(
-            //     VertexBufferIndex::World as _,
-            //     Some(&self.world_arg_buffer),
-            //     0,
-            // );
-            // encoder.set_fragment_buffer(
-            //     FragBufferIndex::World as _,
-            //     Some(&self.world_arg_buffer),
-            //     0,
-            // );
-            // self.model.encode_draws(encoder);
+            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 3);
             encoder.pop_debug_group();
         }
         encoder.end_encoding();
