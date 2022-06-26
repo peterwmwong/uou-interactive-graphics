@@ -40,7 +40,7 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       enableGPUFrameCaptureMode = "1"
-      allowLocationSimulation = "YES"
+      allowLocationSimulation = "NO"
       GPUProfilerEnabled = "No">
       <PathRunnable
          runnableDebuggingMode = "0"
@@ -57,7 +57,7 @@
       </MacroExpansion>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "$(SRCROOT)/../proj-6-environment-mapping/assets/sphere.obj"
+            argument = "$(SRCROOT)/../proj-4-textures/assets/teapot.obj"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

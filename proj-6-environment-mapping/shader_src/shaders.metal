@@ -52,11 +52,18 @@ main_vertex(         uint       vertex_id [[vertex_id]],
 }
 
 fragment half4
-main_fragment(         VertexOut   in       [[stage_in]],
-              constant World     & world    [[buffer(FragBufferIndex::World)]])
+main_fragment(         VertexOut           in      [[stage_in]],
+              constant World             & world   [[buffer(FragBufferIndex::World)]],
+                       texturecube<half>   texture [[texture(FragTextureIndex::CubeMapTexture)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
-    // const float4 pos_w = world.matrix_screen_to_world * float4(in.position.xyz, 1);
-    // const half3  pos   = half3(pos_w.xyz / pos_w.w);
-    return half4(0, 1, 0, 1);
+    const float4 pos_w  = world.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const half3 pos     = half3(pos_w.xyz / pos_w.w);
+
+    const half3 cam_dir = normalize(pos - half3(world.camera_position.xyz));
+    const half3 ref     = reflect(cam_dir, normalize(half3(in.normal)));
+
+    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
+    const half4 color = texture.sample(tx_sampler, float3(ref));
+    return color;
 };
