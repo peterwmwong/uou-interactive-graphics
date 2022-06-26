@@ -231,3 +231,9 @@ pub enum FragBufferIndex {
     World = 0,
     LENGTH = 1,
 }
+#[repr(u32)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FragTextureIndex {
+    CubeMapTexture = 0,
+    LENGTH = 1,
+}

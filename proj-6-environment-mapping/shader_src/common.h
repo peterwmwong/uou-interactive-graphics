@@ -60,4 +60,11 @@ enum struct FragBufferIndex: unsigned int
     LENGTH
 };
 
+enum struct FragTextureIndex: unsigned int
+{
+    CubeMapTexture = 0,
+    LENGTH
+};
+
+
 #endif

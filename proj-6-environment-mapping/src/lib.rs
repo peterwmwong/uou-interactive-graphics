@@ -288,6 +288,10 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 Some(&self.world_arg_buffer),
                 0,
             );
+            encoder.set_fragment_texture(
+                FragTextureIndex::CubeMapTexture as _,
+                Some(&self.cubemap_texture),
+            );
             self.model.encode_draws(encoder);
             encoder.pop_debug_group();
         }
