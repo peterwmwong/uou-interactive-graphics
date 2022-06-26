@@ -16,6 +16,15 @@ const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Render mirror plane below the model
+
+// TODO: START HERE 2
+// TODO: START HERE 2
+// TODO: START HERE 2
+// Render reflection of model on the plane
 struct Delegate<'a> {
     bg_pipeline_state: RenderPipelineState,
     bg_depth_state: DepthStencilState,
