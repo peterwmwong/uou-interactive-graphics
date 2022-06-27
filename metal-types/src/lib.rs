@@ -42,6 +42,28 @@ transmute_from_to!(float2, packed_float2);
 transmute_from_to!(float4, packed_float4);
 transmute_from_to!(u16x2, ushort2);
 
+#[allow(non_camel_case_types)]
+pub trait f32x4_extras {
+    fn length(&self) -> f32;
+    fn normalize(&self) -> f32x4;
+    fn reflect(&self, incident: f32x4) -> f32x4;
+}
+
+impl f32x4_extras for f32x4 {
+    fn length(&self) -> f32 {
+        (self * self).reduce_sum().sqrt()
+    }
+
+    fn normalize(&self) -> f32x4 {
+        self * f32x4::splat(1. / self.length())
+    }
+
+    fn reflect(&self, incident: f32x4) -> f32x4 {
+        let self_norm = self.normalize();
+        incident - (f32x4::splat(2. * dot(self_norm, incident)) * self_norm)
+    }
+}
+
 #[inline]
 fn dot(lhs: f32x4, rhs: f32x4) -> f32 {
     (lhs * rhs).reduce_sum()
@@ -294,6 +316,46 @@ impl From<f32x4x4> for float3x3 {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    mod test_f32x4_extras {
+        use super::*;
+        const TOLERANCE: f32x4 = f32x4::splat(1e-6);
+
+        #[test]
+        fn test_length() {
+            let actual = f32x4::from_array([1., 2., 3., 4.]).length();
+            let expected =
+                (1_f32.powf(2.) + 2_f32.powf(2.) + 3_f32.powf(2.) + 4_f32.powf(2.)).sqrt();
+            assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_normalize() {
+            let v = f32x4::from_array([1., 2., 3., 4.]);
+            let actual = v.normalize();
+            let expected = v / f32x4::splat(v.length());
+            assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_reflect() {
+            fn t(v: [f32; 4], i: [f32; 4], expected: [f32; 4]) {
+                let v: f32x4 = v.into();
+                let i: f32x4 = i.into();
+                let expected: f32x4 = expected.into();
+                let actual = v.reflect(i);
+
+                let pass = (actual - expected).abs().lanes_lt(TOLERANCE).all();
+                if !pass {
+                    dbg!(expected, actual);
+                }
+                assert!(pass);
+            }
+            t([1., 0., 0., 0.], [1., 1., 0., 0.], [-1., 1., 0., 0.]);
+            t([1., 1., 0., 0.], [1., 0., 0., 0.], [0., -1., 0., 0.]);
+            t([1., 1., 0., 0.], [0., 1., 0., 0.], [-1., 0., 0., 0.]);
+        }
+    }
 
     mod test_f32x4x4 {
         use super::*;
