@@ -41,6 +41,12 @@ impl Camera {
         }
     }
 
+    // TODO: Consider changing this type of API (Ray, Light) to return an Option<CameraUpdate>
+    // It's more flexible for the caller to use...
+    //
+    //     if let Some(update) = camera.on_event(...) {}
+    //
+    // ... caller can more easily integrate with control flow.
     #[inline]
     pub fn on_event(&mut self, event: UserEvent, on_update: impl FnMut(CameraUpdate)) {
         let ray_update = self.ray.on_event(event);

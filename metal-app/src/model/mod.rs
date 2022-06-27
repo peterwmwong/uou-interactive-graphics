@@ -113,9 +113,18 @@ Only one of these must be true:
             MTLRenderStages::Vertex | MTLRenderStages::Fragment,
         )
     }
-
     #[inline]
     pub fn encode_draws(&self, encoder: &RenderCommandEncoderRef) {
+        self.encode_draws_instances(encoder, 1, 0);
+    }
+
+    #[inline]
+    pub fn encode_draws_instances(
+        &self,
+        encoder: &RenderCommandEncoderRef,
+        instance_count: u64,
+        instance_start: u64,
+    ) {
         let mut geometry_arg_buffer_offset = 0;
         let materials = self.materials.as_ref();
         for d in &self.draws {
@@ -160,7 +169,15 @@ Only one of these must be true:
             }
             geometry_arg_buffer_offset += self.geometry_buffers.argument_byte_size;
 
-            encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, d.num_indices as _);
+            // TODO: This may have performance impact vs draw_primitives
+            // - Consider an "fast path" if instance count == 1 and instance start == 0
+            encoder.draw_primitives_instanced_base_instance(
+                MTLPrimitiveType::Triangle,
+                0,
+                d.num_indices as _,
+                instance_count,
+                instance_start,
+            );
 
             encoder.pop_debug_group();
         }

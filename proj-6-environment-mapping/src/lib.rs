@@ -280,11 +280,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
         // TODO: START HERE
         // TODO: START HERE
         // 1. Put the whole transformation into a matrix (model_to_world and translate-y)
-        // 2. Remove World::is_mirror
         world_arg_ptr.matrix_model_to_world = matrix_model_to_world.into();
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
         world_arg_ptr.plane_y = -0.5 * scale * size[2];
-        world_arg_ptr.is_mirror = true;
 
         Self {
             bg_depth_state: {
@@ -324,18 +322,43 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder({
-            let desc = new_basic_render_pass_descriptor(render_target, self.depth_texture.as_ref());
-            // let a = desc
-            //     .color_attachments()
-            //     .object_at(MODEL_COLOR_TARGET as _)
-            //     .expect("Failed to access color attachment for (MODEL_COLOR_TARGET) on render pass descriptor");
-            // a.set_texture(self.model_texture.as_deref());
-            // a.set_load_action(MTLLoadAction::Clear);
-            // a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
-            // a.set_store_action(MTLStoreAction::Store);
-            desc
-        });
+        {
+            let encoder =
+                command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
+                    self.model_texture
+                        .as_deref()
+                        .expect("Model texture is not set"),
+                    self.depth_texture.as_ref(),
+                ));
+            {
+                encoder.push_debug_group("Model (mirrored)");
+                self.model.encode_use_resources(encoder);
+                encoder.set_render_pipeline_state(&self.model_pipeline_state);
+                encoder.set_depth_stencil_state(&self.model_depth_state);
+                encoder.set_vertex_buffer(
+                    VertexBufferIndex::World as _,
+                    Some(&self.world_arg_buffer),
+                    0,
+                );
+                encoder.set_fragment_buffer(
+                    FragBufferIndex::World as _,
+                    Some(&self.world_arg_buffer),
+                    0,
+                );
+                encoder.set_fragment_texture(
+                    FragTextureIndex::CubeMapTexture as _,
+                    Some(&self.cubemap_texture),
+                );
+                self.model
+                    .encode_draws_instances(encoder, 1, PLANE_INSTANCE_ID as _);
+                encoder.pop_debug_group();
+            }
+            encoder.end_encoding();
+        }
+        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
+            render_target,
+            self.depth_texture.as_ref(),
+        ));
         {
             encoder.push_debug_group("Model");
             self.model.encode_use_resources(encoder);
@@ -355,16 +378,16 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 FragTextureIndex::CubeMapTexture as _,
                 Some(&self.cubemap_texture),
             );
-            // encoder.set_fragment_texture(
-            //     FragTextureIndex::ModelTexture as _,
-            //     self.model_texture.as_deref(),
-            // );
             self.model.encode_draws(encoder);
             encoder.pop_debug_group();
         }
         {
             encoder.push_debug_group("Plane");
             encoder.set_render_pipeline_state(&self.plane_pipeline_state);
+            encoder.set_fragment_texture(
+                FragTextureIndex::ModelTexture as _,
+                self.model_texture.as_deref(),
+            );
             encoder.draw_primitives_instanced_base_instance(
                 MTLPrimitiveType::TriangleStrip,
                 0,
@@ -415,10 +438,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
                 self.update_textures_size(size);
-                self.needs_render = true;
-            }
-            UserEvent::KeyDown { key_code: 49, .. } => {
-                self.world_arg_ptr.is_mirror = !self.world_arg_ptr.is_mirror;
                 self.needs_render = true;
             }
             _ => {}

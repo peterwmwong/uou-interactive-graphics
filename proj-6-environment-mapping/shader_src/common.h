@@ -39,7 +39,6 @@ struct World {
     float4x4 matrix_screen_to_world;
     float4   camera_position;
     float    plane_y;
-    bool     is_mirror;
 };
 
 enum struct BGFragBufferIndex: unsigned int
