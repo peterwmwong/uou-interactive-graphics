@@ -33,11 +33,13 @@ struct Geometry {
 
 struct World {
     float4x4 matrix_model_to_projection;
+    float4x4 matrix_model_to_world;
     float3x3 matrix_normal_to_world;
     float4x4 matrix_world_to_projection;
     float4x4 matrix_screen_to_world;
     float4   camera_position;
     float    plane_y;
+    bool     is_mirror;
 };
 
 enum struct BGFragBufferIndex: unsigned int

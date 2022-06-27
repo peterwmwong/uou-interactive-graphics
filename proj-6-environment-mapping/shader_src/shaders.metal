@@ -45,8 +45,16 @@ main_vertex(         uint       vertex_id [[vertex_id]],
             constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]])
 {
     const uint idx = geometry.indices[vertex_id];
+    float4 pos = float4(geometry.positions[idx], 1.0);
+    if (world.is_mirror) {
+        const float3 pos_world = (world.matrix_model_to_world * pos).xyz + float3(0, -(2. * world.plane_y), 0);
+        const float3 refl = normalize(float3(pos_world.x, 0.0, pos_world.z));
+        pos = world.matrix_world_to_projection * float4(reflect(-pos_world.xyz, refl), 1.0);
+    } else {
+        pos = world.matrix_model_to_projection * pos;
+    }
     return {
-        .position = world.matrix_model_to_projection * float4(geometry.positions[idx], 1.0),
+        .position = pos,
         .normal   = world.matrix_normal_to_world * float3(geometry.normals[idx])
     };
 }
