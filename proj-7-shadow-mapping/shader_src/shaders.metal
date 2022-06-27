@@ -11,7 +11,6 @@ struct VertexOut
 
 vertex VertexOut
 main_vertex(         uint       vertex_id [[vertex_id]],
-                     uint       inst_id   [[instance_id]],
             constant World    & world     [[buffer(VertexBufferIndex::World)]],
             constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]])
 {

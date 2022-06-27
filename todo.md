@@ -89,8 +89,14 @@
         - Can everything be done in a single render pass?
             - Raster Order Groups
             - Amplification / Viewports
+- Allow Camera to freely move and rotate
+    - I suspect many calculations were simplified knowing the camera is *ALWAYS* looking the world coordinate origin
+        - Ex. mirror transformation: calculating the vector to reflect
+    - What is affected?
+    - How much more complicated do to they become?
+    - How well do I maths?
+    - Let's find out.
 - Bring back a moveable light?
-
 
 # tasks.json
 

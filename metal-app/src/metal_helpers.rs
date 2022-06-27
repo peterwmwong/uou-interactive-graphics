@@ -147,38 +147,43 @@ pub fn create_pipeline(
     pipeline_desc: &mut RenderPipelineDescriptor,
     label: &str,
     func_constants: Option<&FunctionConstantValues>,
-    vertex_func_name: &str,
-    num_vertex_immutable_buffers: usize,
-    frag_func_name: &str,
-    num_frag_immutable_buffers: usize,
+    vertex_func_name_num_imm_buffers: (&str, usize),
+    frag_func_name_num_imm_buffers: Option<(&str, usize)>,
 ) -> CreateRenderPipelineResults {
     pipeline_desc.set_label(label);
 
+    let (vertex_func_name, num_vertex_immutable_buffers) = vertex_func_name_num_imm_buffers;
     let vertex_function = unwrap_result_dcheck(
         library.get_function(vertex_func_name, func_constants.map(|f| f.to_owned())),
         "Failed to access vertex shader function from metal library",
     );
     pipeline_desc.set_vertex_function(Some(&vertex_function));
-    let fragment_function = unwrap_result_dcheck(
-        library.get_function(frag_func_name, func_constants.map(|f| f.to_owned())),
-        "Failed to access fragment shader function from metal library",
-    );
-    pipeline_desc.set_fragment_function(Some(&fragment_function));
 
-    for (buffers, num) in [
-        (pipeline_desc.vertex_buffers(), num_vertex_immutable_buffers),
-        (pipeline_desc.fragment_buffers(), num_frag_immutable_buffers),
-    ] {
-        let buffers = unwrap_option_dcheck(
-            buffers,
-            "Failed to access render pipeline descriptor buffers (vertex or fragment)",
+    if let Some((frag_func_name, ..)) = frag_func_name_num_imm_buffers {
+        let fragment_function = unwrap_result_dcheck(
+            library.get_function(frag_func_name, func_constants.map(|f| f.to_owned())),
+            "Failed to access fragment shader function from metal library",
         );
-        for buffer_index in 0..num {
-            unwrap_option_dcheck(
-                buffers.object_at(buffer_index as _),
-                "Failed to access fragment buffer",
-            )
-            .set_mutability(MTLMutability::Immutable);
+        pipeline_desc.set_fragment_function(Some(&fragment_function));
+    }
+    for r in [
+        Some((pipeline_desc.vertex_buffers(), num_vertex_immutable_buffers)),
+        frag_func_name_num_imm_buffers.map(|(_, num_immutable_buffers)| {
+            (pipeline_desc.fragment_buffers(), num_immutable_buffers)
+        }),
+    ] {
+        if let Some((buffers, num)) = r {
+            let buffers = unwrap_option_dcheck(
+                buffers,
+                "Failed to access render pipeline descriptor buffers (vertex or fragment)",
+            );
+            for buffer_index in 0..num {
+                unwrap_option_dcheck(
+                    buffers.object_at(buffer_index as _),
+                    "Failed to access fragment buffer",
+                )
+                .set_mutability(MTLMutability::Immutable);
+            }
         }
     }
 

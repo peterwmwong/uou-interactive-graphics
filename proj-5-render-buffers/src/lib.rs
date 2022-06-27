@@ -31,10 +31,8 @@ impl RendererDelgate for CheckerboardDelegate {
                 &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                 "Checkerboard",
                 None,
-                &"checkerboard_vertex",
-                0,
-                &"checkerboard_fragment",
-                0,
+                (&"checkerboard_vertex", 0),
+                Some((&"checkerboard_fragment", 0)),
             )
             .pipeline_state,
             device,
@@ -99,10 +97,8 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                 &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                 "Plane",
                 None,
-                &"main_vertex",
-                VertexBufferIndex::LENGTH as _,
-                &"main_fragment",
-                FragBufferIndex::LENGTH as _,
+                (&"main_vertex", VertexBufferIndex::LENGTH as _),
+                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
             )
             .pipeline_state
         };
@@ -176,17 +172,15 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
     fn on_event(&mut self, event: UserEvent) {
         use UserEvent::*;
 
-        self.camera.on_event(
-            event,
-            |camera::CameraUpdate {
-                 matrix_world_to_projection,
-                 ..
-             }| {
-                self.matrix_model_to_projection =
-                    matrix_world_to_projection * self.matrix_model_to_world;
-                self.needs_render = true;
-            },
-        );
+        if let Some(camera::CameraUpdate {
+            matrix_world_to_projection,
+            ..
+        }) = self.camera.on_event(event)
+        {
+            self.matrix_model_to_projection =
+                matrix_world_to_projection * self.matrix_model_to_world;
+            self.needs_render = true;
+        }
 
         match event {
             MouseDrag { modifier_keys, .. } => {

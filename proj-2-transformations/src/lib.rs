@@ -87,10 +87,8 @@ impl RendererDelgate for Delegate {
                     &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                     "Render Pipeline",
                     None,
-                    &"main_vertex",
-                    VertexBufferIndex::LENGTH as _,
-                    "main_fragment",
-                    0,
+                    (&"main_vertex", VertexBufferIndex::LENGTH as _),
+                    Some(("main_fragment", 0)),
                 )
                 .pipeline_state
             },

@@ -38,6 +38,11 @@ struct World {
     float    plane_y;
 };
 
+struct LightArg {
+    float4x4 matrix_world_to_projection;
+    float4x4 matrix_screen_to_world;
+};
+
 enum struct VertexBufferIndex: unsigned int
 {
     World = 0,

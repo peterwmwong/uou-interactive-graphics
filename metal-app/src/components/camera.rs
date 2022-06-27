@@ -16,6 +16,7 @@ pub struct CameraUpdate {
     pub camera_position: f32x4,
     pub matrix_screen_to_world: f32x4x4,
     pub matrix_world_to_projection: f32x4x4,
+    pub screen_size: f32x2,
 }
 
 pub struct Camera {
@@ -41,14 +42,8 @@ impl Camera {
         }
     }
 
-    // TODO: Consider changing this type of API (Ray, Light) to return an Option<CameraUpdate>
-    // It's more flexible for the caller to use...
-    //
-    //     if let Some(update) = camera.on_event(...) {}
-    //
-    // ... caller can more easily integrate with control flow.
     #[inline]
-    pub fn on_event(&mut self, event: UserEvent, on_update: impl FnMut(CameraUpdate)) {
+    pub fn on_event(&mut self, event: UserEvent) -> Option<CameraUpdate> {
         let ray_update = self.ray.on_event(event);
         let screen_update = match event {
             UserEvent::WindowFocusedOrResized { size, .. } => {
@@ -58,11 +53,13 @@ impl Camera {
             _ => false,
         };
         if ray_update || screen_update {
-            self.handle_update(on_update);
+            Some(self.create_update())
+        } else {
+            None
         }
     }
 
-    fn handle_update(&self, mut on_update: impl FnMut(CameraUpdate)) {
+    fn create_update(&self) -> CameraUpdate {
         let &[rotx, roty] = self.ray.rotation_xy.neg().as_array();
         let matrix_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
             * f32x4x4::rotate(rotx, roty, 0.);
@@ -80,11 +77,12 @@ impl Camera {
         let matrix_screen_to_world =
             matrix_world_to_projection.inverse() * matrix_screen_to_projection;
 
-        on_update(CameraUpdate {
+        CameraUpdate {
             camera_position,
             matrix_screen_to_world,
             matrix_world_to_projection,
-        });
+            screen_size: self.screen_size,
+        }
     }
 }
 

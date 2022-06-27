@@ -73,10 +73,8 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
             &mut base_pipeline_desc,
             "Model",
             Some(&function_constants),
-            &"main_vertex",
-            VertexBufferIndex::LENGTH as _,
-            &"main_fragment",
-            FragBufferIndex::LENGTH as _,
+            (&"main_vertex", VertexBufferIndex::LENGTH as _),
+            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
         ),
         light_pipeline: create_pipeline(
             &device,
@@ -84,10 +82,8 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
             &mut base_pipeline_desc,
             "Light",
             Some(&function_constants),
-            &"light_vertex",
-            LightVertexBufferIndex::LENGTH as _,
-            &"light_fragment",
-            0,
+            (&"light_vertex", LightVertexBufferIndex::LENGTH as _),
+            Some((&"light_fragment", 0)),
         ),
     }
 }
@@ -271,21 +267,20 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        self.camera.on_event(
-            event,
-            |camera::CameraUpdate {
-                 camera_position,
-                 matrix_screen_to_world,
-                 matrix_world_to_projection,
-             }| {
-                self.world_arg_ptr.camera_position = camera_position.into();
-                self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
-                self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
-                self.world_arg_ptr.matrix_model_to_projection =
-                    matrix_world_to_projection * self.matrix_model_to_world;
-                self.needs_render = true;
-            },
-        );
+        if let Some(camera::CameraUpdate {
+            camera_position,
+            matrix_screen_to_world,
+            matrix_world_to_projection,
+            ..
+        }) = self.camera.on_event(event)
+        {
+            self.world_arg_ptr.camera_position = camera_position.into();
+            self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+            self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+            self.world_arg_ptr.matrix_model_to_projection =
+                matrix_world_to_projection * self.matrix_model_to_world;
+            self.needs_render = true;
+        }
 
         self.light
             .on_event(event, |light::LightUpdate { position }| {

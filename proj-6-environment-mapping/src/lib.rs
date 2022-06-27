@@ -170,10 +170,8 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 &mut render_pipeline_desc,
                 "BG",
                 None,
-                &"bg_vertex",
-                0,
-                &"bg_fragment",
-                BGFragBufferIndex::LENGTH as _,
+                (&"bg_vertex", 0),
+                Some((&"bg_fragment", BGFragBufferIndex::LENGTH as _)),
             );
             debug_assert_argument_buffer_size::<{ BGFragBufferIndex::World as _ }, World>(
                 &p,
@@ -188,10 +186,8 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 &mut render_pipeline_desc,
                 "Model",
                 None,
-                &"main_vertex",
-                VertexBufferIndex::LENGTH as _,
-                &"main_fragment",
-                FragBufferIndex::LENGTH as _,
+                (&"main_vertex", VertexBufferIndex::LENGTH as _),
+                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
             );
             debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
                 &p,
@@ -214,10 +210,8 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 &mut render_pipeline_desc,
                 "Plane",
                 None,
-                &"plane_vertex",
-                VertexBufferIndex::LENGTH as _,
-                &"plane_fragment",
-                FragBufferIndex::LENGTH as _,
+                (&"plane_vertex", VertexBufferIndex::LENGTH as _),
+                Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
             );
             debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
                 &p,
@@ -391,21 +385,20 @@ impl<'a> RendererDelgate for Delegate<'a> {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        self.camera.on_event(
-            event,
-            |camera::CameraUpdate {
-                 matrix_world_to_projection,
-                 camera_position,
-                 matrix_screen_to_world,
-             }| {
-                self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
-                self.world_arg_ptr.matrix_model_to_projection =
-                    matrix_world_to_projection * self.matrix_model_to_world;
-                self.world_arg_ptr.camera_position = camera_position.into();
-                self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
-                self.needs_render = true;
-            },
-        );
+        if let Some(camera::CameraUpdate {
+            camera_position,
+            matrix_screen_to_world,
+            matrix_world_to_projection,
+            ..
+        }) = self.camera.on_event(event)
+        {
+            self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+            self.world_arg_ptr.matrix_model_to_projection =
+                matrix_world_to_projection * self.matrix_model_to_world;
+            self.world_arg_ptr.camera_position = camera_position.into();
+            self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+            self.needs_render = true;
+        }
 
         match event {
             UserEvent::WindowFocusedOrResized { size } => {

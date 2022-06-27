@@ -138,10 +138,8 @@ impl RendererDelgate for Delegate {
                 &mut base_pipeline_desc,
                 "Render Teapot Pipeline",
                 None,
-                &"main_vertex",
-                VertexBufferIndex::LENGTH as _,
-                &"main_fragment",
-                FragBufferIndex::LENGTH as _,
+                (&"main_vertex", VertexBufferIndex::LENGTH as _),
+                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
             )
             .pipeline_state,
             render_light_pipeline_state: create_pipeline(
@@ -150,10 +148,8 @@ impl RendererDelgate for Delegate {
                 &mut base_pipeline_desc,
                 "Render Light Pipeline",
                 None,
-                &"light_vertex",
-                LightVertexBufferIndex::LENGTH as _,
-                &"light_fragment",
-                0,
+                (&"light_vertex", LightVertexBufferIndex::LENGTH as _),
+                Some((&"light_fragment", 0)),
             )
             .pipeline_state,
             screen_size: f32x2::default(),
