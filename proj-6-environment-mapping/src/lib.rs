@@ -276,8 +276,15 @@ impl<'a> RendererDelgate for Delegate<'a> {
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // 1. Put the whole transformation into a matrix (model_to_world and translate-y)
+        // 2. Remove World::is_mirror
+        world_arg_ptr.matrix_model_to_world = matrix_model_to_world.into();
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
         world_arg_ptr.plane_y = -0.5 * scale * size[2];
+        world_arg_ptr.is_mirror = true;
 
         Self {
             bg_depth_state: {
@@ -332,7 +339,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
         {
             encoder.push_debug_group("Model");
             self.model.encode_use_resources(encoder);
-
             encoder.set_render_pipeline_state(&self.model_pipeline_state);
             encoder.set_depth_stencil_state(&self.model_depth_state);
             encoder.set_vertex_buffer(
@@ -409,6 +415,10 @@ impl<'a> RendererDelgate for Delegate<'a> {
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
                 self.update_textures_size(size);
+                self.needs_render = true;
+            }
+            UserEvent::KeyDown { key_code: 49, .. } => {
+                self.world_arg_ptr.is_mirror = !self.world_arg_ptr.is_mirror;
                 self.needs_render = true;
             }
             _ => {}
