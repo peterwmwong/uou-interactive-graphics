@@ -1,3 +1,5 @@
+# Project 5: Render Buffers
+
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=5
 
 ![Project 5 Checkerboard](./p5-checkerboard.gif)
@@ -6,7 +8,7 @@ https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=5
 # Usage
 
 ```sh
-cargo run --bin proj-4-textures [OPTIONAL: Path to Wavefront OBJ file]
+cargo run --bin proj-5-render-buffers [OPTIONAL: Path to Wavefront OBJ file]
 ```
 
 ## Examples
@@ -24,13 +26,13 @@ cargo run --bin proj-5-render-buffers
 ### Teapot model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures/assets/teapot.obj
+cargo run --bin proj-5-render-buffers proj-4-textures/assets/teapot.obj
 ```
 
 ### Yoda model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures proj-4-textures/assets/yoda/yoda.obj
+cargo run --bin proj-5-render-buffers proj-4-textures/assets/yoda/yoda.obj
 ```
 
 # Controls

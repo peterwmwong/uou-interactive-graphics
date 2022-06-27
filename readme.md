@@ -95,7 +95,15 @@ Beyond meeting the project requirements, I want a better understanding of how I 
 ![Project 5 Checkerboard](./proj-5-render-buffers/p5-checkerboard.gif)
 ![Project 5 Yoda](./proj-5-render-buffers/p5-yoda.gif)
 
-# Project 6: Environment Mapping (coming soon)
+
+# [Project 6: Environment Mapping](./proj-6-environment-mapping/)
+
+- Render an environment (skybox) using a cube texture
+- Render model and plane with perfect, mirror-like material
+- Render model's reflection onto the plane
+
+![Project 6 Teapot](./proj-6-environment-mapping/p6-teapot.gif)
+
 
 # Project 7: Shadow Mapping (coming soon)
 

@@ -1,3 +1,5 @@
+# Project 3: Shading
+
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=3
 
 ![Project 3](./p3.gif)

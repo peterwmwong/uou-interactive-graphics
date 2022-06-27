@@ -1,7 +1,3 @@
-# proj-3-fresnel
-
-- Add Fresnel Effect
-
 # metal-shader-app
 
 - Consider creating a ShaderToy-esque crate that allows you to quickly create a metal-app with just
@@ -75,10 +71,26 @@
 - Look at Apple Developer Sample Code projects on how a scheme's executable is referenced in a non-absolute path way
     - Currently `/Users/pwong` shows for Run and Profile schemes.
 
-# All Projects
+# Projects
 
 - Move common assets to a root directory
     - Too many Teapots and Yodas
+
+## proj-3
+
+- Add Fresnel Effect
+
+## proj-6
+
+- Remove is_mirrored, include mirroring into matrix transformations for mirrored rendering.
+- Optimize
+    - Reduce environment cube texture loading the Metal 3 MTLIO
+    - Reduce render passes
+        - Can everything be done in a single render pass?
+            - Raster Order Groups
+            - Amplification / Viewports
+- Bring back a moveable light?
+
 
 # tasks.json
 
@@ -86,6 +98,11 @@
     - Would make fiddling shaders alot faster, but maybe it's not any faster than doing it in xcode shader debugger?
 
 # scripts
+
+- Make a script for generating the project gifs
+    ```sh
+    for i in $(ls *.mov); do ffmpeg -i $i -filter_complex "[0:v] fps=30,scale=512:-1,split [a][b];[a] palettegen [p];[b][p] paletteuse" $i.gif; done
+    ```
 
 ## asm-gen
 

@@ -16,15 +16,6 @@ const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Render mirror plane below the model
-
-// TODO: START HERE 2
-// TODO: START HERE 2
-// TODO: START HERE 2
-// Render reflection of model on the plane
 struct Delegate<'a> {
     bg_pipeline_state: RenderPipelineState,
     bg_depth_state: DepthStencilState,
@@ -38,7 +29,7 @@ struct Delegate<'a> {
     needs_render: bool,
     model_pipeline_state: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
-    model_texture: Option<Texture>,
+    mirrored_model_texture: Option<Texture>,
     plane_pipeline_state: RenderPipelineState,
     world_arg_buffer: Buffer,
     world_arg_ptr: &'a mut World,
@@ -167,20 +158,11 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
 
-        let mut render_pipeline_desc = {
-            let d = new_basic_render_pipeline_descriptor(
-                DEFAULT_PIXEL_FORMAT,
-                Some(DEPTH_TEXTURE_FORMAT),
-                false,
-            );
-            // let a = d
-            //     .color_attachments()
-            //     .object_at(MODEL_COLOR_TARGET as u64)
-            //     .expect("Failed to access color attachment on pipeline descriptor");
-            // a.set_blending_enabled(false);
-            // a.set_pixel_format(DEFAULT_PIXEL_FORMAT);
-            d
-        };
+        let mut render_pipeline_desc = new_basic_render_pipeline_descriptor(
+            DEFAULT_PIXEL_FORMAT,
+            Some(DEPTH_TEXTURE_FORMAT),
+            false,
+        );
         let bg_pipeline = {
             let p = create_pipeline(
                 &device,
@@ -276,10 +258,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // 1. Put the whole transformation into a matrix (model_to_world and translate-y)
         world_arg_ptr.matrix_model_to_world = matrix_model_to_world.into();
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
         world_arg_ptr.plane_y = -0.5 * scale * size[2];
@@ -304,7 +282,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
             depth_texture: None,
             matrix_model_to_world,
             model,
-            model_texture: None,
+            mirrored_model_texture: None,
             model_pipeline_state: model_pipeline.pipeline_state,
             plane_pipeline_state: plane_pipeline.pipeline_state,
             world_arg_buffer,
@@ -325,9 +303,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
         {
             let encoder =
                 command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-                    self.model_texture
+                    self.mirrored_model_texture
                         .as_deref()
-                        .expect("Model texture is not set"),
+                        .expect("Mirrored Model texture is not set"),
                     self.depth_texture.as_ref(),
                 ));
             {
@@ -350,7 +328,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                     Some(&self.cubemap_texture),
                 );
                 self.model
-                    .encode_draws_instances(encoder, 1, PLANE_INSTANCE_ID as _);
+                    .encode_draws_instances(encoder, 1, MIRRORED_INSTANCE_ID as _);
                 encoder.pop_debug_group();
             }
             encoder.end_encoding();
@@ -386,15 +364,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
             encoder.set_render_pipeline_state(&self.plane_pipeline_state);
             encoder.set_fragment_texture(
                 FragTextureIndex::ModelTexture as _,
-                self.model_texture.as_deref(),
+                self.mirrored_model_texture.as_deref(),
             );
-            encoder.draw_primitives_instanced_base_instance(
-                MTLPrimitiveType::TriangleStrip,
-                0,
-                4,
-                1,
-                PLANE_INSTANCE_ID as _,
-            );
+            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
             encoder.pop_debug_group();
         }
         {
@@ -469,11 +441,10 @@ impl<'a> Delegate<'a> {
         self.depth_texture = Some(texture);
 
         desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
-        desc.set_storage_mode(MTLStorageMode::Private);
-        desc.set_usage(MTLTextureUsage::ShaderWrite | MTLTextureUsage::ShaderRead);
+        desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         let texture = self.device.new_texture(&desc);
-        texture.set_label("Model (for reflection)");
-        self.model_texture = Some(texture);
+        texture.set_label("Model (mirrored)");
+        self.mirrored_model_texture = Some(texture);
     }
 }
 
