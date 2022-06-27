@@ -274,6 +274,20 @@
                 "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
             ],
             "label": "Run proj-6-environment-mapping yoda"
-        }
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-7-shadow-mapping",
+                "--",
+                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+            ],
+            "label": "Run proj-7-shadow-mapping teapot"
+        },
     ]
 }
