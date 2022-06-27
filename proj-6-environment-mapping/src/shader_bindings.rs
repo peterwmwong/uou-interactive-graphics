@@ -111,7 +111,6 @@ pub struct World {
     pub matrix_screen_to_world: float4x4,
     pub camera_position: float4,
     pub plane_y: f32,
-    pub is_mirror: bool,
 }
 #[test]
 fn bindgen_test_layout_World() {
@@ -244,23 +243,6 @@ fn bindgen_test_layout_World() {
         );
     }
     test_field_plane_y();
-    fn test_field_is_mirror() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<World>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).is_mirror) as usize - ptr as usize
-            },
-            324usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(World),
-                "::",
-                stringify!(is_mirror)
-            )
-        );
-    }
-    test_field_is_mirror();
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]

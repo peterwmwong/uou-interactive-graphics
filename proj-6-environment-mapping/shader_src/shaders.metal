@@ -46,13 +46,17 @@ main_vertex(         uint       vertex_id [[vertex_id]],
 {
     const uint idx = geometry.indices[vertex_id];
     float4 pos = float4(geometry.positions[idx], 1.0);
-    if (world.is_mirror) {
-        const float3 pos_world = (world.matrix_model_to_world * pos).xyz + float3(0, -(2. * world.plane_y), 0);
+    if (inst_id == PLANE_INSTANCE_ID) {
+        const float3 pos_world = (world.matrix_model_to_world * pos).xyz + float3(0, -(2.0 * world.plane_y), 0);
         const float3 refl = normalize(float3(pos_world.x, 0.0, pos_world.z));
         pos = world.matrix_world_to_projection * float4(reflect(-pos_world.xyz, refl), 1.0);
     } else {
         pos = world.matrix_model_to_projection * pos;
     }
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Not sure if we should transform that normals or not...
     return {
         .position = pos,
         .normal   = world.matrix_normal_to_world * float3(geometry.normals[idx])
@@ -75,10 +79,10 @@ plane_vertex(         uint      vertex_id [[vertex_id]],
 {
     // Vertices of Plane laying flat on the ground, along the x/z axis.
     constexpr const float2 verts_xz[4] = {
-        {-0.5, -0.5}, // Bottom Left
-        {-0.5,  0.5}, // Top    Left
-        { 0.5, -0.5}, // Bottom Rigt
-        { 0.5,  0.5}, // Top    Right
+        {-0.75, -0.75}, // Bottom Left
+        {-0.75,  0.75}, // Top    Left
+        { 0.75, -0.75}, // Bottom Rigt
+        { 0.75,  0.75}, // Top    Right
     };
     const float2 v = verts_xz[vertex_id];
     return {
@@ -88,12 +92,17 @@ plane_vertex(         uint      vertex_id [[vertex_id]],
 }
 
 fragment half4
-plane_fragment(         VertexOut          in         [[stage_in]],
-              constant World             & world      [[buffer(FragBufferIndex::World)]],
-                       texturecube<half>   bg_texture [[texture(FragTextureIndex::CubeMapTexture)]])
+plane_fragment(         VertexOut          in            [[stage_in]],
+              constant World             & world         [[buffer(FragBufferIndex::World)]],
+                       texturecube<half>   bg_texture    [[texture(FragTextureIndex::CubeMapTexture)]],
+                       texture2d<half>     model_texture [[texture(FragTextureIndex::ModelTexture)]])
 {
-    const half4 color = shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture);
-    return color;
+    half4 mirror_color = model_texture.read(uint2(in.position.xy), 0);
+    if (mirror_color.a > 0.h) {
+        return mirror_color;
+    } else {
+        return shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture);
+    }
 };
 
 
