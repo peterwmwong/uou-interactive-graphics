@@ -36,6 +36,7 @@ struct VertexOut
 {
     float4 position [[position]];
     float3 normal;
+    bool   is_mirrored;
 };
 
 vertex VertexOut
@@ -45,22 +46,18 @@ main_vertex(         uint       vertex_id [[vertex_id]],
             constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]])
 {
     const uint idx = geometry.indices[vertex_id];
+    const bool is_mirrored = inst_id == MIRRORED_INSTANCE_ID;
     float4 pos = float4(geometry.positions[idx], 1.0);
-    if (inst_id == PLANE_INSTANCE_ID) {
+    float3 normal = world.matrix_normal_to_world * float3(geometry.normals[idx]);
+    if (is_mirrored) {
         const float3 pos_world = (world.matrix_model_to_world * pos).xyz + float3(0, -(2.0 * world.plane_y), 0);
         const float3 refl = normalize(float3(pos_world.x, 0.0, pos_world.z));
         pos = world.matrix_world_to_projection * float4(reflect(-pos_world.xyz, refl), 1.0);
+        normal = reflect(-normal, refl);
     } else {
         pos = world.matrix_model_to_projection * pos;
     }
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // Not sure if we should transform that normals or not...
-    return {
-        .position = pos,
-        .normal   = world.matrix_normal_to_world * float3(geometry.normals[idx])
-    };
+    return { .position = pos, .normal = normal, is_mirrored };
 }
 
 fragment half4
@@ -68,23 +65,30 @@ main_fragment(         VertexOut           in         [[stage_in]],
               constant World             & world      [[buffer(FragBufferIndex::World)]],
                        texturecube<half>   bg_texture [[texture(FragTextureIndex::CubeMapTexture)]])
 {
-    const half4 color = shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture);
+    const half4 color = shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture, in.is_mirrored);
     return color;
 };
 
-vertex VertexOut
+struct PlaneVertexOut
+{
+    float4 position [[position]];
+    float3 normal;
+};
+
+vertex PlaneVertexOut
 plane_vertex(         uint      vertex_id [[vertex_id]],
                      uint       inst_id   [[instance_id]],
             constant World    & world     [[buffer(VertexBufferIndex::World)]])
 {
     // Vertices of Plane laying flat on the ground, along the x/z axis.
+    constexpr const float plane_size = 0.9;
     constexpr const float2 verts_xz[4] = {
-        {-0.75, -0.75}, // Bottom Left
-        {-0.75,  0.75}, // Top    Left
-        { 0.75, -0.75}, // Bottom Rigt
-        { 0.75,  0.75}, // Top    Right
+        {-1, -1}, // Bottom Left
+        {-1,  1}, // Top    Left
+        { 1, -1}, // Bottom Rigt
+        { 1,  1}, // Top    Right
     };
-    const float2 v = verts_xz[vertex_id];
+    const float2 v = verts_xz[vertex_id] * plane_size;
     return {
         .position = world.matrix_world_to_projection * float4(v[0], world.plane_y, v[1], 1.0),
         .normal   = float3(0, 1, 0),
@@ -92,16 +96,28 @@ plane_vertex(         uint      vertex_id [[vertex_id]],
 }
 
 fragment half4
-plane_fragment(         VertexOut          in            [[stage_in]],
-              constant World             & world         [[buffer(FragBufferIndex::World)]],
-                       texturecube<half>   bg_texture    [[texture(FragTextureIndex::CubeMapTexture)]],
-                       texture2d<half>     model_texture [[texture(FragTextureIndex::ModelTexture)]])
+plane_fragment(         PlaneVertexOut     in                     [[stage_in]],
+              constant World             & world                  [[buffer(FragBufferIndex::World)]],
+                       texturecube<half>   bg_texture             [[texture(FragTextureIndex::CubeMapTexture)]],
+                       texture2d<half>     mirrored_model_texture [[texture(FragTextureIndex::ModelTexture)]])
 {
-    half4 mirror_color = model_texture.read(uint2(in.position.xy), 0);
+    // To render the mirrored model (ex. teapot, sphere, yoda) on the plane, the
+    // `mirrored_model_texture` is the model-only contents of the mirror. If the texel doesn't have
+    // anything (empty/clear color), render the environment.
+    //
+    // Alternatively, when rendering the mirrored world (`mirrored_model_texture`), we could also
+    // render the environment/skybox and this fragment shader would ONLY read from
+    // `mirrored_model_texture`. I suspect in most cases (and this case) this would be slower and
+    // alot more work for the GPU. With the mirrored texture only containing the model, all the
+    // pixels outside of the model are saved from executing a fragment shader.
+    half4 mirror_color = mirrored_model_texture.read(uint2(in.position.xy), 0);
     if (mirror_color.a > 0.h) {
-        return mirror_color;
+        // Super arbitrary, "feels right, probably wrong", darkening the mirrored contents.
+        // Maybe what I really want is ambient occlusion on the mirrored plane close to the model...
+        const constexpr half4 darken = half4(half3(0.8), 1);
+        return mirror_color * darken;
     } else {
-        return shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture);
+        return shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture, false);
     }
 };
 

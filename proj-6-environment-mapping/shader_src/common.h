@@ -21,8 +21,7 @@ using namespace metal;
 
 #endif
 
-DEF_CONSTANT constexpr unsigned short PLANE_INSTANCE_ID = 1;
-DEF_CONSTANT constexpr unsigned short MODEL_COLOR_TARGET = 1;
+DEF_CONSTANT constexpr unsigned short MIRRORED_INSTANCE_ID = 1;
 
 struct Geometry {
     ARG_CONSTANT_PTR(uint)          indices;
@@ -49,8 +48,7 @@ enum struct BGFragBufferIndex: unsigned int
 
 enum struct BGFragTextureIndex: unsigned int
 {
-    CubeMapTexture = 0,
-    LENGTH
+    CubeMapTexture = 0
 };
 
 
@@ -70,8 +68,7 @@ enum struct FragBufferIndex: unsigned int
 enum struct FragTextureIndex: unsigned int
 {
     CubeMapTexture = 0,
-    ModelTexture,
-    LENGTH
+    ModelTexture
 };
 
 #endif
