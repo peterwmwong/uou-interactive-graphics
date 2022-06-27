@@ -108,7 +108,7 @@ impl RendererDelgate for Delegate {
             .expect("Failed to import shader metal lib.");
 
         // Setup Render Pipeline Descriptor used for rendering the teapot and light
-        let base_pipeline_desc =
+        let mut base_pipeline_desc =
             new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false);
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
@@ -135,7 +135,7 @@ impl RendererDelgate for Delegate {
             render_pipeline_state: create_pipeline(
                 &device,
                 &library,
-                &base_pipeline_desc,
+                &mut base_pipeline_desc,
                 "Render Teapot Pipeline",
                 None,
                 &"main_vertex",
@@ -147,7 +147,7 @@ impl RendererDelgate for Delegate {
             render_light_pipeline_state: create_pipeline(
                 &device,
                 &library,
-                &base_pipeline_desc,
+                &mut base_pipeline_desc,
                 "Render Light Pipeline",
                 None,
                 &"light_vertex",

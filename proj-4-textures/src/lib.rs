@@ -48,7 +48,7 @@ struct PipelineResults {
 }
 
 fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
-    let base_pipeline_desc = new_basic_render_pipeline_descriptor(
+    let mut base_pipeline_desc = new_basic_render_pipeline_descriptor(
         DEFAULT_PIXEL_FORMAT,
         Some(DEPTH_TEXTURE_FORMAT),
         false,
@@ -70,7 +70,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
         model_pipeline: create_pipeline(
             &device,
             &library,
-            &base_pipeline_desc,
+            &mut base_pipeline_desc,
             "Model",
             Some(&function_constants),
             &"main_vertex",
@@ -81,7 +81,7 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
         light_pipeline: create_pipeline(
             &device,
             &library,
-            &base_pipeline_desc,
+            &mut base_pipeline_desc,
             "Light",
             Some(&function_constants),
             &"light_vertex",
