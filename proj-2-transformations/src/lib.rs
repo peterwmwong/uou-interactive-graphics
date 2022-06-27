@@ -84,7 +84,7 @@ impl RendererDelgate for Delegate {
                 create_pipeline(
                     &device,
                     &library,
-                    &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
+                    &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                     "Render Pipeline",
                     None,
                     &"main_vertex",

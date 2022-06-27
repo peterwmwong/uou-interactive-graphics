@@ -9,21 +9,26 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#define CONSTANT_PTR(x) constant x*
-#define TEXTURE(x) x
+#define ARG_CONSTANT_PTR(x) constant x*
+#define ARG_TEXTURE(x) x
+#define DEF_CONSTANT constant
 
 #else
 
-#define CONSTANT_PTR(x) unsigned long
-#define TEXTURE(x) unsigned long
+#define ARG_CONSTANT_PTR(x) unsigned long
+#define ARG_TEXTURE(x) unsigned long
+#define DEF_CONSTANT
 
 #endif
 
+DEF_CONSTANT constexpr unsigned short PLANE_INSTANCE_ID = 1;
+DEF_CONSTANT constexpr unsigned short MODEL_COLOR_TARGET = 1;
+
 struct Geometry {
-    CONSTANT_PTR(uint)          indices;
-    CONSTANT_PTR(packed_float3) positions;
-    CONSTANT_PTR(packed_float3) normals;
-    CONSTANT_PTR(packed_float2) tx_coords;
+    ARG_CONSTANT_PTR(uint)          indices;
+    ARG_CONSTANT_PTR(packed_float3) positions;
+    ARG_CONSTANT_PTR(packed_float3) normals;
+    ARG_CONSTANT_PTR(packed_float2) tx_coords;
 };
 
 struct World {
@@ -32,6 +37,7 @@ struct World {
     float4x4 matrix_world_to_projection;
     float4x4 matrix_screen_to_world;
     float4   camera_position;
+    float    plane_y;
 };
 
 enum struct BGFragBufferIndex: unsigned int
@@ -49,8 +55,8 @@ enum struct BGFragTextureIndex: unsigned int
 
 enum struct VertexBufferIndex: unsigned int
 {
-    Geometry = 0,
-    World,
+    World = 0,
+    Geometry,
     LENGTH
 };
 
@@ -63,8 +69,8 @@ enum struct FragBufferIndex: unsigned int
 enum struct FragTextureIndex: unsigned int
 {
     CubeMapTexture = 0,
+    ModelTexture,
     LENGTH
 };
-
 
 #endif

@@ -28,7 +28,7 @@ impl RendererDelgate for CheckerboardDelegate {
                 &device
                     .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib."),
-                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
+                &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                 "Checkerboard",
                 None,
                 &"checkerboard_vertex",
@@ -96,7 +96,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             create_pipeline(
                 &device,
                 &library,
-                &new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
+                &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
                 "Plane",
                 None,
                 &"main_vertex",

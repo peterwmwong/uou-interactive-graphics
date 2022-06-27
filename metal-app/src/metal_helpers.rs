@@ -144,7 +144,7 @@ pub struct CreateRenderPipelineResults {
 pub fn create_pipeline(
     device: &Device,
     library: &Library,
-    pipeline_desc: &RenderPipelineDescriptor,
+    pipeline_desc: &mut RenderPipelineDescriptor,
     label: &str,
     func_constants: Option<&FunctionConstantValues>,
     vertex_func_name: &str,
@@ -220,7 +220,9 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
         a.set_store_action(MTLStoreAction::Store);
     }
     if let Some(depth_texture) = depth_texture {
-        let a = desc.depth_attachment().unwrap();
+        let a = desc
+            .depth_attachment()
+            .expect("Failed to access depth/stencil attachment on render pass descriptor");
         a.set_clear_depth(1.);
         a.set_load_action(MTLLoadAction::Clear);
         a.set_store_action(MTLStoreAction::DontCare);

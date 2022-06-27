@@ -38,6 +38,8 @@ struct Delegate<'a> {
     needs_render: bool,
     model_pipeline_state: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
+    model_texture: Option<Texture>,
+    plane_pipeline_state: RenderPipelineState,
     world_arg_buffer: Buffer,
     world_arg_ptr: &'a mut World,
 }
@@ -164,52 +166,87 @@ impl<'a> RendererDelgate for Delegate<'a> {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
-        let bg_pipeline = create_pipeline(
-            &device,
-            &library,
-            &new_basic_render_pipeline_descriptor(
+
+        let mut render_pipeline_desc = {
+            let d = new_basic_render_pipeline_descriptor(
                 DEFAULT_PIXEL_FORMAT,
                 Some(DEPTH_TEXTURE_FORMAT),
                 false,
-            ),
-            "BG",
-            None,
-            &"bg_vertex",
-            0,
-            &"bg_fragment",
-            BGFragBufferIndex::LENGTH as _,
-        );
-        debug_assert_argument_buffer_size::<{ BGFragBufferIndex::World as _ }, World>(
-            &bg_pipeline,
-            FunctionType::Fragment,
-        );
-        let model_pipeline = create_pipeline(
-            &device,
-            &library,
-            &new_basic_render_pipeline_descriptor(
-                DEFAULT_PIXEL_FORMAT,
-                Some(DEPTH_TEXTURE_FORMAT),
-                false,
-            ),
-            "Model",
-            None,
-            &"main_vertex",
-            VertexBufferIndex::LENGTH as _,
-            &"main_fragment",
-            FragBufferIndex::LENGTH as _,
-        );
-        debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-            &model_pipeline,
-            FunctionType::Vertex,
-        );
-        debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
-            &model_pipeline,
-            FunctionType::Vertex,
-        );
-        debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
-            &model_pipeline,
-            FunctionType::Fragment,
-        );
+            );
+            // let a = d
+            //     .color_attachments()
+            //     .object_at(MODEL_COLOR_TARGET as u64)
+            //     .expect("Failed to access color attachment on pipeline descriptor");
+            // a.set_blending_enabled(false);
+            // a.set_pixel_format(DEFAULT_PIXEL_FORMAT);
+            d
+        };
+        let bg_pipeline = {
+            let p = create_pipeline(
+                &device,
+                &library,
+                &mut render_pipeline_desc,
+                "BG",
+                None,
+                &"bg_vertex",
+                0,
+                &"bg_fragment",
+                BGFragBufferIndex::LENGTH as _,
+            );
+            debug_assert_argument_buffer_size::<{ BGFragBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Fragment,
+            );
+            p
+        };
+        let model_pipeline = {
+            let p = create_pipeline(
+                &device,
+                &library,
+                &mut render_pipeline_desc,
+                "Model",
+                None,
+                &"main_vertex",
+                VertexBufferIndex::LENGTH as _,
+                &"main_fragment",
+                FragBufferIndex::LENGTH as _,
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Fragment,
+            );
+            p
+        };
+        let plane_pipeline = {
+            let p = create_pipeline(
+                &device,
+                &library,
+                &mut render_pipeline_desc,
+                "Plane",
+                None,
+                &"plane_vertex",
+                VertexBufferIndex::LENGTH as _,
+                &"plane_fragment",
+                FragBufferIndex::LENGTH as _,
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Fragment,
+            );
+            p
+        };
         let world_arg_buffer = device.new_buffer(
             std::mem::size_of::<World>() as _,
             MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
@@ -240,6 +277,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
+        world_arg_ptr.plane_y = -0.5 * scale * size[2];
 
         Self {
             bg_depth_state: {
@@ -261,7 +299,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
             depth_texture: None,
             matrix_model_to_world,
             model,
+            model_texture: None,
             model_pipeline_state: model_pipeline.pipeline_state,
+            plane_pipeline_state: plane_pipeline.pipeline_state,
             world_arg_buffer,
             world_arg_ptr,
             needs_render: false,
@@ -277,10 +317,18 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-            render_target,
-            self.depth_texture.as_ref(),
-        ));
+        let encoder = command_buffer.new_render_command_encoder({
+            let desc = new_basic_render_pass_descriptor(render_target, self.depth_texture.as_ref());
+            // let a = desc
+            //     .color_attachments()
+            //     .object_at(MODEL_COLOR_TARGET as _)
+            //     .expect("Failed to access color attachment for (MODEL_COLOR_TARGET) on render pass descriptor");
+            // a.set_texture(self.model_texture.as_deref());
+            // a.set_load_action(MTLLoadAction::Clear);
+            // a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
+            // a.set_store_action(MTLStoreAction::Store);
+            desc
+        });
         {
             encoder.push_debug_group("Model");
             self.model.encode_use_resources(encoder);
@@ -301,7 +349,23 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 FragTextureIndex::CubeMapTexture as _,
                 Some(&self.cubemap_texture),
             );
+            // encoder.set_fragment_texture(
+            //     FragTextureIndex::ModelTexture as _,
+            //     self.model_texture.as_deref(),
+            // );
             self.model.encode_draws(encoder);
+            encoder.pop_debug_group();
+        }
+        {
+            encoder.push_debug_group("Plane");
+            encoder.set_render_pipeline_state(&self.plane_pipeline_state);
+            encoder.draw_primitives_instanced_base_instance(
+                MTLPrimitiveType::TriangleStrip,
+                0,
+                4,
+                1,
+                PLANE_INSTANCE_ID as _,
+            );
             encoder.pop_debug_group();
         }
         {
@@ -344,7 +408,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
 
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
-                self.update_depth_texture_size(size);
+                self.update_textures_size(size);
                 self.needs_render = true;
             }
             _ => {}
@@ -363,17 +427,24 @@ impl<'a> RendererDelgate for Delegate<'a> {
 
 impl<'a> Delegate<'a> {
     #[inline]
-    fn update_depth_texture_size(&mut self, size: f32x2) {
+    fn update_textures_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();
         let &[x, y] = size.as_array();
         desc.set_width(x as _);
         desc.set_height(y as _);
         desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
-        desc.set_storage_mode(MTLStorageMode::Memoryless);
+        desc.set_storage_mode(MTLStorageMode::Private);
         desc.set_usage(MTLTextureUsage::RenderTarget);
         let texture = self.device.new_texture(&desc);
         texture.set_label("Depth");
         self.depth_texture = Some(texture);
+
+        desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
+        desc.set_storage_mode(MTLStorageMode::Private);
+        desc.set_usage(MTLTextureUsage::ShaderWrite | MTLTextureUsage::ShaderRead);
+        let texture = self.device.new_texture(&desc);
+        texture.set_label("Model (for reflection)");
+        self.model_texture = Some(texture);
     }
 }
 
