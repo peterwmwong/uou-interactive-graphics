@@ -35,12 +35,11 @@ struct Delegate<'a> {
     matrix_model_to_world: f32x4x4,
     needs_render: bool,
     light: Light,
-    light_arg_buffer: Buffer,
-    light_arg_ptr: &'a mut LightArg,
     model_depth_state: DepthStencilState,
     model_pipeline_state: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
     plane_pipeline_state: RenderPipelineState,
+    plane_y_unorm: u32,
     shadow_map_depth_state: DepthStencilState,
     shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
@@ -182,6 +181,12 @@ impl<'a> RendererDelgate for Delegate<'a> {
         //      exhibit a weird triangal-ish pattern.
         let scale = 1. / size.reduce_max();
 
+        // Put the plane right below the model.
+        // Store the floating point value as a u32 normalized ([0,1] -> [0,u32::MAX]).
+        let plane_y = 0.5 * scale * size[2];
+        assert!(plane_y >= 0.0 && plane_y <= 1.0, "Calculated Y-coordinate of the Plane is invalid. Calculation is based on the bounding box size of model.");
+        let plane_y_unorm = (plane_y * (u32::MAX as f32)) as u32;
+
         // TODO: This generates an immense amount of code!
         // - It's the matrix multiplications we're unable to avoid with const evaluation (currently not supported in rust for floating point operations)
         // - We can create combo helpers, see f32x4x4::scale_translate()
@@ -193,26 +198,17 @@ impl<'a> RendererDelgate for Delegate<'a> {
             device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
         world_arg_buffer.set_label("World Argument Buffer");
         let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
-        world_arg_ptr.matrix_model_to_world = matrix_model_to_world.into();
         // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
-        world_arg_ptr.plane_y = -0.5 * scale * size[2];
 
         let shadow_map_world_arg_buffer =
             device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
         shadow_map_world_arg_buffer.set_label("Shadow Map World Argument Buffer");
         let shadow_map_world_arg_ptr =
             unsafe { &mut *(shadow_map_world_arg_buffer.contents() as *mut World) };
-
-        let light_arg_buffer = device.new_buffer(
-            std::mem::size_of::<LightArg>() as _,
-            DEFAULT_RESOURCE_OPTIONS,
-        );
-        light_arg_buffer.set_label("Light Argument Buffer");
-        let light_arg_ptr = unsafe { &mut *(light_arg_buffer.contents() as *mut LightArg) };
 
         Self {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
@@ -235,6 +231,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
             model,
             model_pipeline_state: model_pipeline.pipeline_state,
             plane_pipeline_state: plane_pipeline.pipeline_state,
+            plane_y_unorm,
             shadow_map_depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -247,8 +244,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
             shadow_map_world_arg_ptr,
             world_arg_buffer,
             world_arg_ptr,
-            light_arg_buffer: light_arg_buffer,
-            light_arg_ptr: light_arg_ptr,
             needs_render: false,
             device,
         }
@@ -325,7 +320,14 @@ impl<'a> RendererDelgate for Delegate<'a> {
         {
             encoder.push_debug_group("Plane");
             encoder.set_render_pipeline_state(&self.plane_pipeline_state);
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
+            encoder.draw_primitives_instanced_base_instance(
+                MTLPrimitiveType::TriangleStrip,
+                0,
+                4,
+                1,
+                // Misuse the instance_id to store the Plane's Y-coordinate!
+                self.plane_y_unorm as _,
+            );
             encoder.pop_debug_group();
         }
         encoder.end_encoding();

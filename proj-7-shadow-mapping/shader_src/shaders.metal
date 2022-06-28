@@ -4,6 +4,12 @@
 
 using namespace metal;
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Figure out why light is leaking through the bottom of the teapot
+// - Something with the rendered depth into shadow map for the small ring around the teapot cover
+
 struct VertexOut
 {
     float4 position [[position]];
@@ -33,7 +39,7 @@ main_fragment(         VertexOut         in        [[stage_in]],
     float4 pos_in_shadow_space = shadow.matrix_world_to_projection * pos;
            pos_in_shadow_space = pos_in_shadow_space / pos_in_shadow_space.w;
 
-    float2 shadow_tx_coord = (pos_in_shadow_space.xy * 0.5) + 0.5;
+    float2 shadow_tx_coord   = (pos_in_shadow_space.xy * 0.5) + 0.5;
            shadow_tx_coord.y = 1 - shadow_tx_coord.y;
 
     constexpr float BIAS = 0.004;
@@ -59,9 +65,12 @@ main_fragment(         VertexOut         in        [[stage_in]],
 };
 
 vertex VertexOut
-plane_vertex(        uint      vertex_id [[vertex_id]],
-            constant World    & world     [[buffer(VertexBufferIndex::World)]])
+plane_vertex(        uint      vertex_id     [[vertex_id]],
+                     uint      plane_y_unorm [[instance_id]],
+            constant World    & world        [[buffer(VertexBufferIndex::World)]])
 {
+    constexpr float MAXUINT = 4294967295;
+    const float plane_y = -(float(plane_y_unorm) / MAXUINT);
     // Vertices of Plane laying flat on the ground, along the x/z axis.
     constexpr const float s = 0.9;
     constexpr const float2 verts_xz[4] = {
@@ -72,7 +81,7 @@ plane_vertex(        uint      vertex_id [[vertex_id]],
     };
     const float2 v = verts_xz[vertex_id];
     return {
-        .position = world.matrix_world_to_projection * float4(v[0], world.plane_y, v[1], 1.0),
+        .position = world.matrix_world_to_projection * float4(v[0], plane_y, v[1], 1.0),
         .normal   = float3(0, 1, 0),
     };
 }

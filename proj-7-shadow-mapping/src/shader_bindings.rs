@@ -103,19 +103,17 @@ fn bindgen_test_layout_Geometry() {
 #[repr(align(16))]
 pub struct World {
     pub matrix_model_to_projection: float4x4,
-    pub matrix_model_to_world: float4x4,
     pub matrix_normal_to_world: float3x3,
     pub matrix_world_to_projection: float4x4,
     pub matrix_screen_to_world: float4x4,
     pub camera_position: float4,
     pub light_position: float4,
-    pub plane_y: f32,
 }
 #[test]
 fn bindgen_test_layout_World() {
     assert_eq!(
         ::std::mem::size_of::<World>(),
-        352usize,
+        272usize,
         concat!("Size of: ", stringify!(World))
     );
     assert_eq!(
@@ -140,23 +138,6 @@ fn bindgen_test_layout_World() {
         );
     }
     test_field_matrix_model_to_projection();
-    fn test_field_matrix_model_to_world() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<World>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_model_to_world) as usize - ptr as usize
-            },
-            64usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(World),
-                "::",
-                stringify!(matrix_model_to_world)
-            )
-        );
-    }
-    test_field_matrix_model_to_world();
     fn test_field_matrix_normal_to_world() {
         assert_eq!(
             unsafe {
@@ -164,7 +145,7 @@ fn bindgen_test_layout_World() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).matrix_normal_to_world) as usize - ptr as usize
             },
-            128usize,
+            64usize,
             concat!(
                 "Offset of field: ",
                 stringify!(World),
@@ -181,7 +162,7 @@ fn bindgen_test_layout_World() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).matrix_world_to_projection) as usize - ptr as usize
             },
-            176usize,
+            112usize,
             concat!(
                 "Offset of field: ",
                 stringify!(World),
@@ -198,7 +179,7 @@ fn bindgen_test_layout_World() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).matrix_screen_to_world) as usize - ptr as usize
             },
-            240usize,
+            176usize,
             concat!(
                 "Offset of field: ",
                 stringify!(World),
@@ -215,7 +196,7 @@ fn bindgen_test_layout_World() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).camera_position) as usize - ptr as usize
             },
-            304usize,
+            240usize,
             concat!(
                 "Offset of field: ",
                 stringify!(World),
@@ -232,7 +213,7 @@ fn bindgen_test_layout_World() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).light_position) as usize - ptr as usize
             },
-            320usize,
+            256usize,
             concat!(
                 "Offset of field: ",
                 stringify!(World),
@@ -242,76 +223,6 @@ fn bindgen_test_layout_World() {
         );
     }
     test_field_light_position();
-    fn test_field_plane_y() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<World>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).plane_y) as usize - ptr as usize
-            },
-            336usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(World),
-                "::",
-                stringify!(plane_y)
-            )
-        );
-    }
-    test_field_plane_y();
-}
-#[repr(C)]
-#[repr(align(16))]
-pub struct LightArg {
-    pub matrix_world_to_projection: float4x4,
-    pub matrix_screen_to_world: float4x4,
-}
-#[test]
-fn bindgen_test_layout_LightArg() {
-    assert_eq!(
-        ::std::mem::size_of::<LightArg>(),
-        128usize,
-        concat!("Size of: ", stringify!(LightArg))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<LightArg>(),
-        16usize,
-        concat!("Alignment of ", stringify!(LightArg))
-    );
-    fn test_field_matrix_world_to_projection() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<LightArg>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_world_to_projection) as usize - ptr as usize
-            },
-            0usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(LightArg),
-                "::",
-                stringify!(matrix_world_to_projection)
-            )
-        );
-    }
-    test_field_matrix_world_to_projection();
-    fn test_field_matrix_screen_to_world() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<LightArg>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_screen_to_world) as usize - ptr as usize
-            },
-            64usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(LightArg),
-                "::",
-                stringify!(matrix_screen_to_world)
-            )
-        );
-    }
-    test_field_matrix_screen_to_world();
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
