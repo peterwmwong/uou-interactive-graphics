@@ -158,6 +158,8 @@ impl<R: RendererDelgate> MetalRenderer<R> {
                 let command_buffer = self.delegate.render(drawable.texture());
                 command_buffer.present_drawable(drawable);
                 command_buffer.commit();
+                // TODO: Implement Triple Buffering
+                command_buffer.wait_until_completed();
             };
         });
     }

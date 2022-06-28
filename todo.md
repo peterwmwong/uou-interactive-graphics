@@ -1,35 +1,3 @@
-# metal-shader-app
-
-- Consider creating a ShaderToy-esque crate that allows you to quickly create a metal-app with just
-  a **Fragment** Shader
-- As such, assumes the following configuration...
-    - Application/Window setup
-    - Window Resize maintenance
-        - Resize depth attachment texture
-    - Single Render Pipeline
-        - Color Attachment
-        - Depth Attachment
-        - Fragment shader
-            - Function name of `main()`
-            - Bound buffers
-                - Mouse
-                    - Coordinate
-                    - Button states
-                - Time
-                - Viewport/Screen Size (pixels)
-    - Render
-        - One draw call (triangle strip that's a quad fits the screen exactly)
-- Question: Would it be better to allow specifying more than just a Fragment shader?
-    - Geometry (vertices)
-    - Vertex shader
-        - This should simplify...
-            - Applying Perspective Projection
-            - Remove the need to Ray Marching
-                - Which one is worse/harder?
-                    - Ray Marching and SDF
-                    - Vertices, Vertex Shader, Draw call
-                        - Maybe there's a Vertices/Draw call simplification? Just provide vertices and assume a draw call with triangle primitive and vertex count.
-
 # metal-app
 
 - Camera
@@ -39,6 +7,12 @@
         - Currently, I think I'm seeing Z-fighting on the Yoda model, zooming out slightly, and noting the flicker in Yoda's eye
         - Setup a z-fighting example rendering to verify the benefit
             - Ex. https://austin-eng.com/webgpu-samples/samples/reversedZ
+- Implement Triple Buffering
+    - Currently we're committing a Metal command buffer and **waiting** for completion.
+    - This preventing the main thread from doing other work or queueing another frame to render
+    - Most Apple Metal samples (from Apple) do triple buffering
+        - All Metal resources needed for each frame are duplicated/isolated
+        - Semaphore caps the number of simultaneous render encodings
 - Rethink RenderDelegate API
     - proj-5 exposed how awkward it is for one Delegate to use another
         - It's not easy to initialize
@@ -113,3 +87,35 @@
 ## asm-gen
 
 - Generate instruction type counts (ex. how many branch instructions?)
+
+# metal-shader-app
+
+- Consider creating a ShaderToy-esque crate that allows you to quickly create a metal-app with just
+  a **Fragment** Shader
+- As such, assumes the following configuration...
+    - Application/Window setup
+    - Window Resize maintenance
+        - Resize depth attachment texture
+    - Single Render Pipeline
+        - Color Attachment
+        - Depth Attachment
+        - Fragment shader
+            - Function name of `main()`
+            - Bound buffers
+                - Mouse
+                    - Coordinate
+                    - Button states
+                - Time
+                - Viewport/Screen Size (pixels)
+    - Render
+        - One draw call (triangle strip that's a quad fits the screen exactly)
+- Question: Would it be better to allow specifying more than just a Fragment shader?
+    - Geometry (vertices)
+    - Vertex shader
+        - This should simplify...
+            - Applying Perspective Projection
+            - Remove the need to Ray Marching
+                - Which one is worse/harder?
+                    - Ray Marching and SDF
+                    - Vertices, Vertex Shader, Draw call
+                        - Maybe there's a Vertices/Draw call simplification? Just provide vertices and assume a draw call with triangle primitive and vertex count.
