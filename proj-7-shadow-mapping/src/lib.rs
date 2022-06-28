@@ -16,9 +16,10 @@ use std::{
     f32::consts::PI,
     ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4},
+    simd::{f32x2, f32x4, u32x2},
 };
 
+const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
@@ -375,6 +376,36 @@ impl<'a> Delegate<'a> {
         texture.set_label("Depth");
         self.depth_texture = Some(texture);
 
+        // Make sure the shadow map texture is atleast 2x and no more than 4x, of the
+        // screen size. Round up to the nearest power of 2 of each dimension.
+        let xy = u32x2::from_array([size[0] as u32, size[1] as u32]);
+        if let Some(tx) = &self.shadow_map_texture {
+            #[inline(always)]
+            fn is_shadow_map_correctly_sized(cur: NSUInteger, target: u32) -> bool {
+                ((target << 1)..=(target << 2)).contains(&(cur as _))
+            }
+            if is_shadow_map_correctly_sized(tx.width(), xy[0])
+                && is_shadow_map_correctly_sized(tx.height(), xy[1])
+            {
+                return;
+            }
+        }
+
+        #[inline]
+        fn round_up_pow_of_2(mut v: u32x2) -> u32x2 {
+            v -= u32x2::splat(1);
+            v |= v >> u32x2::splat(1);
+            v |= v >> u32x2::splat(2);
+            v |= v >> u32x2::splat(4);
+            v |= v >> u32x2::splat(8);
+            v |= v >> u32x2::splat(16);
+            (v + u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _))
+        }
+        let new_xy = round_up_pow_of_2(xy << u32x2::splat(1));
+        println!("Allocating new Shadow Map {new_xy:?}");
+
+        desc.set_width(new_xy[0] as _);
+        desc.set_height(new_xy[1] as _);
         desc.set_storage_mode(MTLStorageMode::Private);
         desc.set_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
