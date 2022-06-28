@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "../../proj-6-environment-mapping/shader_src/shading.h"
 #include "./common.h"
 
 using namespace metal;
@@ -41,31 +42,35 @@ main_fragment(         VertexOut         in        [[stage_in]],
               constant World           & shadow    [[buffer(FragBufferIndex::ShadowMapWorld)]],
                        depth2d<float>    shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {
-    const float4 pos_w           = world.matrix_screen_to_world * float4(in.position.xyz, 1);
-    const float4 pos             = float4(pos_w.xyz / pos_w.w, 1.0);
-    const float4 shadow_pos_w    = shadow.matrix_world_to_projection * pos;
-          float2 shadow_tx_coord = (shadow_pos_w.xy / shadow_pos_w.w * 0.5) + 0.5;
-    shadow_tx_coord.y = 1 - shadow_tx_coord.y;
+    float4 pos = world.matrix_screen_to_world * float4(in.position.xyz, 1);
+           pos = pos / pos.w;
 
-    const float2  pos_from_shadow_w = (shadow.matrix_world_to_projection * pos).zw;
-    const float   frag_depth = pos_from_shadow_w.x / pos_from_shadow_w.y;
+    float4 pos_in_shadow_space = shadow.matrix_world_to_projection * pos;
+           pos_in_shadow_space = pos_in_shadow_space / pos_in_shadow_space.w;
 
-    // constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    // const float depth = shadow_tx.sample(tx_sampler, float2(shadow_tx_coord.x, 1.0 - shadow_tx_coord.y));
+    float2 shadow_tx_coord = (pos_in_shadow_space.xy * 0.5) + 0.5;
+           shadow_tx_coord.y = 1 - shadow_tx_coord.y;
+
     constexpr float BIAS = 0.004;
-    constexpr sampler tx_sampler(coord::normalized,
-                                 address::clamp_to_edge,
-                                 filter::linear,
-                                 compare_func::greater_equal);
-    const float is_shadow = shadow_tx.sample_compare(tx_sampler,
+    constexpr sampler sampler(coord::normalized,
+                              address::clamp_to_edge,
+                              filter::linear,
+                              compare_func::greater_equal);
+    const float is_shadow = shadow_tx.sample_compare(sampler,
                                                      shadow_tx_coord,
-                                                     frag_depth - BIAS);
+                                                     pos_in_shadow_space.z - BIAS);
+    const half4 color = half4(is_shadow > 0 ? 0 : 1);
 
-    if (is_shadow > 0.0) {
-        return half4(0,0,1,1);
-    } else {
-        return half4(0,1,0,1);
-    }
+    // TODO: Investigate shadow AA methods. This is smooths... a little teensy bit.
+    // const float shadow_amt = 1.0 - length_squared(shadow_tx.gather_compare(sampler,
+    //                                                  shadow_tx_coord,
+    //                                                  pos_in_shadow_space.z - BIAS)) * 0.25;
+    // const half4 color = half4(half3(shadow_amt), 1.);
+    return shade_phong_blinn(half3(pos.xyz),
+                             half3(shadow.light_position.xyz),
+                             half3(shadow.camera_position.xyz),
+                             half3(normalize(in.normal)),
+                             Material(half4(0.5), color, color, 50));
 };
 
 struct PlaneVertexOut

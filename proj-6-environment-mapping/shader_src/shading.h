@@ -5,6 +5,22 @@
 
 using namespace metal;
 
+struct Material {
+    const half4 ambient;
+    const half4 diffuse;
+    const half4 specular;
+    const half shineness;
+    inline Material(half4 ambient, half4 diffuse, half4 specular, half shineness):
+        ambient(ambient),
+        diffuse(diffuse),
+        specular(specular),
+        shineness(shineness) {}
+    inline half4 ambient_color() { return ambient; }
+    inline half4 diffuse_color() { return diffuse; }
+    inline half4 specular_color() { return specular; }
+    inline half  specular_shineness() { return shineness; }
+};
+
 // TODO: Extract this out into a metal-shader-common crate or something.
 // Instead of just a folder at the project, a crate opens the door for automated testing and
 // benchmarking. The idea is the crate (rust) could provide all the boilerplate (Metal setup,
@@ -114,19 +130,10 @@ inline half4 shade_mirror(const float4            screen_pos,
     const half3  ref        = reflect(camera_dir, normal) * world_transform;
 
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-
-    struct Material {
-        const half4 color;
-        inline Material(half4 c): color(c) {}
-        inline half4 ambient_color() { return half4(half3(1), 1); }
-        inline half4 diffuse_color() { return color; }
-        inline half4 specular_color() { return color; }
-        inline half specular_shineness() { return 50; }
-    };
+    const half4 bg_color = bg_texture.sample(tx_sampler, float3(ref));
     // TODO: Bring back the Light component (moveable, rendered light) to proj-6.
     const half3 light_position = half3(0, 1, -1) * world_transform;
-    const half4 bg_color       = bg_texture.sample(tx_sampler, float3(ref));
-    return shade_phong_blinn(pos, light_position, camera_pos, normal, Material(bg_color));
+    return shade_phong_blinn(pos, light_position, camera_pos, normal, Material(half4(1), bg_color, bg_color, 50));
 }
 
 #endif
