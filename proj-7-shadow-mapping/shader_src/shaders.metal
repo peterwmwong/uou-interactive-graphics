@@ -4,21 +4,6 @@
 
 using namespace metal;
 
-struct ShadowVertexOut
-{
-    float4 position [[position]];
-};
-
-vertex ShadowVertexOut
-shadow_map_vertex(         uint       vertex_id [[vertex_id]],
-                  constant World    & shadow    [[buffer(VertexBufferIndex::World)]],
-                  constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]])
-{
-    const uint   idx    = geometry.indices[vertex_id];
-    const float4 pos    = shadow.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
-    return { .position = pos };
-}
-
 struct VertexOut
 {
     float4 position [[position]];
@@ -70,40 +55,24 @@ main_fragment(         VertexOut         in        [[stage_in]],
                              half3(shadow.light_position.xyz),
                              half3(shadow.camera_position.xyz),
                              half3(normalize(in.normal)),
-                             Material(half4(0.5), color, color, 50));
+                             Material(half4(0.75), color, color, 50));
 };
 
-struct PlaneVertexOut
-{
-    float4 position [[position]];
-    float3 normal;
-};
-
-vertex PlaneVertexOut
-plane_vertex(         uint      vertex_id [[vertex_id]],
-                     uint       inst_id   [[instance_id]],
+vertex VertexOut
+plane_vertex(        uint      vertex_id [[vertex_id]],
             constant World    & world     [[buffer(VertexBufferIndex::World)]])
 {
     // Vertices of Plane laying flat on the ground, along the x/z axis.
-    constexpr const float plane_size = 0.9;
+    constexpr const float s = 0.9;
     constexpr const float2 verts_xz[4] = {
-        {-1, -1}, // Bottom Left
-        {-1,  1}, // Top    Left
-        { 1, -1}, // Bottom Rigt
-        { 1,  1}, // Top    Right
+        {-s, -s}, // Bottom Left
+        {-s,  s}, // Top    Left
+        { s, -s}, // Bottom Rigt
+        { s,  s}, // Top    Right
     };
-    const float2 v = verts_xz[vertex_id] * plane_size;
+    const float2 v = verts_xz[vertex_id];
     return {
         .position = world.matrix_world_to_projection * float4(v[0], world.plane_y, v[1], 1.0),
         .normal   = float3(0, 1, 0),
     };
 }
-
-fragment half4
-plane_fragment(        PlaneVertexOut    in        [[stage_in]],
-              constant World           & world     [[buffer(FragBufferIndex::World)]],
-              constant World           & shadow    [[buffer(FragBufferIndex::ShadowMapWorld)]],
-                       texture2d<half>   shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
-{
-    return half4(0,1,0,1);
-};

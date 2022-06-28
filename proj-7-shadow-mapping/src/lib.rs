@@ -81,6 +81,20 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
 
+        // TODO: Change create_pipline to take a Function objects and create helper for getting many
+        // function in one shot.
+        // - There's alot of reusing of vertex and fragment functions
+        //    - `main_vertex` x 2
+        //    - `main_fragment` x 2
+        // - Alternatively (maybe even better), we extract the descriptor and allow callers to mutate
+        //   and reuse the descriptor.
+        //    1. Create descriptor
+        //    2. Create Pipeline 1
+        //    3. Change fragment function
+        //    4. Create Pipeline 2
+        //    5. etc.
+
+        // Depth-Only Shadow Map Render Pipeline
         let shadow_map_pipeline = {
             let mut depth_only_desc = RenderPipelineDescriptor::new();
             depth_only_desc.set_depth_attachment_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
@@ -90,7 +104,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 &mut depth_only_desc,
                 "Shadow Map",
                 None,
-                (&"shadow_map_vertex", VertexBufferIndex::LENGTH as _),
+                (&"main_vertex", VertexBufferIndex::LENGTH as _),
                 None,
             );
             debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
@@ -141,13 +155,17 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 "Plane",
                 None,
                 (&"plane_vertex", VertexBufferIndex::LENGTH as _),
-                Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
+                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
             );
             debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
                 &p,
                 FunctionType::Vertex,
             );
             debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Fragment,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::ShadowMapWorld as _ }, World>(
                 &p,
                 FunctionType::Fragment,
             );
@@ -304,12 +322,12 @@ impl<'a> RendererDelgate for Delegate<'a> {
             self.model.encode_draws(encoder);
             encoder.pop_debug_group();
         }
-        // {
-        //     encoder.push_debug_group("Plane");
-        //     encoder.set_render_pipeline_state(&self.plane_pipeline_state);
-        //     encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
-        //     encoder.pop_debug_group();
-        // }
+        {
+            encoder.push_debug_group("Plane");
+            encoder.set_render_pipeline_state(&self.plane_pipeline_state);
+            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
+            encoder.pop_debug_group();
+        }
         encoder.end_encoding();
         command_buffer
     }
