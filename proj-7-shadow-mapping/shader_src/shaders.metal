@@ -31,26 +31,25 @@ fragment half4
 main_fragment(         VertexOut         in        [[stage_in]],
               constant Space           & camera    [[buffer(FragBufferIndex::CameraSpace)]],
               constant Space           & light     [[buffer(FragBufferIndex::LightSpace)]],
-                       depth2d<float>    shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
+                       depth2d<float, access::sample> shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {
     float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
 
-    float4 pos_in_shadow_space = light.matrix_world_to_projection * pos;
-           pos_in_shadow_space = pos_in_shadow_space / pos_in_shadow_space.w;
+    float4 pos_light = light.matrix_world_to_projection * pos;
+           pos_light = pos_light / pos_light.w;
 
-    float2 shadow_tx_coord   = (pos_in_shadow_space.xy * 0.5) + 0.5;
-           shadow_tx_coord.y = 1 - shadow_tx_coord.y;
-
-    constexpr float BIAS = 0.004;
-    constexpr sampler sampler(coord::normalized,
-                              address::clamp_to_edge,
+    constexpr sampler sampler(address::clamp_to_zero,
                               filter::linear,
-                              compare_func::greater_equal);
-    const float is_shadow = shadow_tx.sample_compare(sampler,
-                                                     shadow_tx_coord,
-                                                     pos_in_shadow_space.z - BIAS);
-    const half4 color = half4(is_shadow > 0 ? 0 : 1);
+                              compare_func::less_equal);
+    const half not_shadow = half(shadow_tx.sample_compare(sampler, pos_light.xy, pos_light.z));
+    const half4 color = half4(
+        select(
+            1.h,
+            not_shadow,
+            all(pos_light.xy >= 0.0) && all(pos_light.xy <= 1.0)
+        )
+    );
 
     // TODO: Investigate shadow AA methods. This is smooths... a little teensy bit.
     // const float shadow_amt = 1.0 - length_squared(shadow_tx.gather_compare(sampler,

@@ -11,6 +11,7 @@ use std::{
     simd::{f32x2, u32x2},
 };
 
+const DEPTH_COMPARISON_BIAS: f32 = 0.004;
 const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
@@ -347,11 +348,52 @@ impl<'a> RendererDelgate for Delegate<'a> {
             matrix_screen_to_world,
         }) = self.light.on_event(event)
         {
-            self.light_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
             self.light_arg_ptr.matrix_model_to_projection =
                 matrix_world_to_projection * self.matrix_model_to_world;
             self.light_arg_ptr.position_world = camera_position.into();
             self.light_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+
+            // IMPORTANT: "to_projection" has a different meaning here!
+            // The target coordinate space is **NOT** actually the normal Metal Normalized Device
+            // Coordinate space (NDC).
+            // This is used to sample Shadow Map Depth Texture, it differs in the following ways:
+            // - XY dimension range: [0,1] (not [-1,1])
+            // - Y dimension is inverted: +Y -> -Y
+            // - Z includes a bias for better depth comparison
+            self.light_arg_ptr.matrix_world_to_projection = {
+                // Performance: Bake all the transform as a constant.
+                // - Currently Rust does not allow floating-point operations in constant
+                //   expressions.
+                // - Reduces the amount of code generated/executed, >150 bytes of instructions saved.
+                const PROJECTION_TO_TEXTURE_COORDINATE_SPACE: f32x4x4 = f32x4x4::new(
+                    [0.5, 0.0, 0.0, 0.5],
+                    [0.0, -0.5, 0.0, 0.5],
+                    [0.0, 0.0, 1.0, -DEPTH_COMPARISON_BIAS],
+                    [0.0, 0.0, 0.0, 1.0],
+                );
+                #[cfg(debug_assertions)]
+                {
+                    // Invert Y
+                    let projection_to_texture_coordinate_space_derived =
+                        f32x4x4::scale_translate(1., -1., 1., 0., 1., 0.)
+                            * f32x4x4::scale_translate(
+                                // Convert from [-1, 1] -> [0, 1] for XY dimensions
+                                0.5,
+                                0.5,
+                                1.0,
+                                0.5,
+                                0.5,
+                                // Add Depth Comparison Bias
+                                -DEPTH_COMPARISON_BIAS,
+                            );
+                    assert_eq!(
+                        projection_to_texture_coordinate_space_derived.columns,
+                        PROJECTION_TO_TEXTURE_COORDINATE_SPACE.columns
+                    );
+                }
+                PROJECTION_TO_TEXTURE_COORDINATE_SPACE
+            } * matrix_world_to_projection;
+
             self.needs_render = true;
         }
 
@@ -418,8 +460,8 @@ impl<'a> Delegate<'a> {
 
         desc.set_width(new_xy[0] as _);
         desc.set_height(new_xy[1] as _);
-        desc.set_storage_mode(MTLStorageMode::Private);
         desc.set_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
+        desc.set_storage_mode(MTLStorageMode::Private);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         let texture = self.device.new_texture(&desc);
         texture.set_label("Shadow Map Depth");
