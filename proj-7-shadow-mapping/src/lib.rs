@@ -2,28 +2,19 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{
-    components::{
-        camera::{self, calc_matrix_camera_to_projection},
-        light::Light,
-    },
-    metal::*,
-    metal_types::*,
-    *,
-};
+use metal_app::{components::camera, metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
     ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4, u32x2},
+    simd::{f32x2, u32x2},
 };
 
 const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
-const INITIAL_LIGHT_DISTANCE: f32 = 1.0;
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., -PI / 2.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
@@ -34,7 +25,7 @@ struct Delegate<'a> {
     device: Device,
     matrix_model_to_world: f32x4x4,
     needs_render: bool,
-    light: Light,
+    light: camera::Camera,
     model_depth_state: DepthStencilState,
     model_pipeline_state: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
@@ -43,10 +34,11 @@ struct Delegate<'a> {
     shadow_map_depth_state: DepthStencilState,
     shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
-    shadow_map_world_arg_buffer: Buffer,
-    shadow_map_world_arg_ptr: &'a mut World,
-    world_arg_buffer: Buffer,
-    world_arg_ptr: &'a mut World,
+    // TODO: Create a new metal-app TypedBuffer<T> abstraction for Argument Buffers with a Type.
+    light_arg_buffer: Buffer,
+    light_arg_ptr: &'a mut Space,
+    camera_arg_buffer: Buffer,
+    camera_arg_ptr: &'a mut Space,
 }
 
 impl<'a> RendererDelgate for Delegate<'a> {
@@ -106,7 +98,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 (&"main_vertex", VertexBufferIndex::LENGTH as _),
                 None,
             );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Space as _ }, Space>(
                 &p,
                 FunctionType::Vertex,
             );
@@ -132,7 +124,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 (&"main_vertex", VertexBufferIndex::LENGTH as _),
                 Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
             );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Space as _ }, Space>(
                 &p,
                 FunctionType::Vertex,
             );
@@ -140,7 +132,11 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 &p,
                 FunctionType::Vertex,
             );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, Space>(
+                &p,
+                FunctionType::Fragment,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, Space>(
                 &p,
                 FunctionType::Fragment,
             );
@@ -156,15 +152,15 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 (&"plane_vertex", VertexBufferIndex::LENGTH as _),
                 Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
             );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Space as _ }, Space>(
                 &p,
                 FunctionType::Vertex,
             );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, Space>(
                 &p,
                 FunctionType::Fragment,
             );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::ShadowMapWorld as _ }, World>(
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, Space>(
                 &p,
                 FunctionType::Fragment,
             );
@@ -194,21 +190,21 @@ impl<'a> RendererDelgate for Delegate<'a> {
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
             * f32x4x4::translate(cx, cy, cz);
 
-        let world_arg_buffer =
-            device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
-        world_arg_buffer.set_label("World Argument Buffer");
-        let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
+        let camera_arg_buffer =
+            device.new_buffer(std::mem::size_of::<Space>() as _, DEFAULT_RESOURCE_OPTIONS);
+        camera_arg_buffer.set_label("Camera Space Argument Buffer");
+        let camera_arg_ptr = unsafe { &mut *(camera_arg_buffer.contents() as *mut Space) };
         // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
         // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
         // (no translation). Since normals are directions (not positions, relative to a
         // point on a surface), translations are meaningless.
-        world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
+        camera_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
-        let shadow_map_world_arg_buffer =
-            device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
-        shadow_map_world_arg_buffer.set_label("Shadow Map World Argument Buffer");
-        let shadow_map_world_arg_ptr =
-            unsafe { &mut *(shadow_map_world_arg_buffer.contents() as *mut World) };
+        let light_arg_buffer =
+            device.new_buffer(std::mem::size_of::<Space>() as _, DEFAULT_RESOURCE_OPTIONS);
+        light_arg_buffer.set_label("Light Space Argument Buffer");
+        let light_arg_ptr = unsafe { &mut *(light_arg_buffer.contents() as *mut Space) };
+        light_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         Self {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
@@ -222,12 +218,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
             },
             depth_texture: None,
             matrix_model_to_world,
-            light: Light::new(
-                INITIAL_LIGHT_DISTANCE,
-                INITIAL_LIGHT_ROTATION,
-                ModifierKeys::CONTROL,
-                true,
-            ),
+            light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true),
             model,
             model_pipeline_state: model_pipeline.pipeline_state,
             plane_pipeline_state: plane_pipeline.pipeline_state,
@@ -240,10 +231,10 @@ impl<'a> RendererDelgate for Delegate<'a> {
             },
             shadow_map_pipeline: shadow_map_pipeline.pipeline_state,
             shadow_map_texture: None,
-            shadow_map_world_arg_buffer,
-            shadow_map_world_arg_ptr,
-            world_arg_buffer,
-            world_arg_ptr,
+            light_arg_buffer,
+            light_arg_ptr,
+            camera_arg_buffer,
+            camera_arg_ptr,
             needs_render: false,
             device,
         }
@@ -276,8 +267,8 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
                 encoder.set_depth_stencil_state(&self.shadow_map_depth_state);
                 encoder.set_vertex_buffer(
-                    VertexBufferIndex::World as _,
-                    Some(&self.shadow_map_world_arg_buffer),
+                    VertexBufferIndex::Space as _,
+                    Some(&self.light_arg_buffer),
                     0,
                 );
                 self.model.encode_draws(encoder);
@@ -296,18 +287,18 @@ impl<'a> RendererDelgate for Delegate<'a> {
             encoder.set_render_pipeline_state(&self.model_pipeline_state);
             encoder.set_depth_stencil_state(&self.model_depth_state);
             encoder.set_vertex_buffer(
-                VertexBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
+                VertexBufferIndex::Space as _,
+                Some(&self.camera_arg_buffer),
                 0,
             );
             encoder.set_fragment_buffer(
-                FragBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
+                FragBufferIndex::CameraSpace as _,
+                Some(&self.camera_arg_buffer),
                 0,
             );
             encoder.set_fragment_buffer(
-                FragBufferIndex::ShadowMapWorld as _,
-                Some(&self.shadow_map_world_arg_buffer),
+                FragBufferIndex::LightSpace as _,
+                Some(&self.light_arg_buffer),
                 0,
             );
             encoder.set_fragment_texture(
@@ -340,32 +331,33 @@ impl<'a> RendererDelgate for Delegate<'a> {
             matrix_world_to_projection,
             camera_position,
             matrix_screen_to_world,
-            screen_size,
         }) = self.camera.on_event(event)
         {
-            self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
-            self.world_arg_ptr.matrix_model_to_projection =
+            self.camera_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+            self.camera_arg_ptr.matrix_model_to_projection =
                 matrix_world_to_projection * self.matrix_model_to_world;
-            self.world_arg_ptr.camera_position = camera_position.into();
-            self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+            self.camera_arg_ptr.position_world = camera_position.into();
+            self.camera_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+            self.needs_render = true;
+        }
 
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    self.world_arg_ptr as _,
-                    self.shadow_map_world_arg_ptr as _,
-                    1,
-                );
-            };
-
-            // TODO: Only update light once (flag + control flow)
-            self.update_light(screen_size);
+        if let Some(camera::CameraUpdate {
+            matrix_world_to_projection,
+            camera_position,
+            matrix_screen_to_world,
+        }) = self.light.on_event(event)
+        {
+            self.light_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+            self.light_arg_ptr.matrix_model_to_projection =
+                matrix_world_to_projection * self.matrix_model_to_world;
+            self.light_arg_ptr.position_world = camera_position.into();
+            self.light_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
             self.needs_render = true;
         }
 
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
                 self.update_textures_size(size);
-                self.update_light(size);
                 self.needs_render = true;
             }
             _ => {}
@@ -432,29 +424,6 @@ impl<'a> Delegate<'a> {
         let texture = self.device.new_texture(&desc);
         texture.set_label("Shadow Map Depth");
         self.shadow_map_texture = Some(texture);
-    }
-
-    #[inline]
-    fn update_light(&mut self, screen_size: f32x2) {
-        let &[rotx, roty] = self.light.ray.rotation_xy.neg().as_array();
-        let matrix_world_to_light = f32x4x4::translate(0., 0., self.light.ray.distance_from_origin)
-            * f32x4x4::rotate(rotx, roty, 0.);
-
-        self.world_arg_ptr.light_position =
-            (matrix_world_to_light.inverse() * f32x4::from_array([0., 0., 0., 1.])).into();
-        self.shadow_map_world_arg_ptr.light_position = self.world_arg_ptr.light_position;
-
-        let aspect_ratio = screen_size[0] / screen_size[1];
-        let matrix_world_to_projection =
-            calc_matrix_camera_to_projection(aspect_ratio, 60_f32.to_radians())
-                * matrix_world_to_light;
-
-        self.shadow_map_world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
-        self.shadow_map_world_arg_ptr.matrix_model_to_projection =
-            matrix_world_to_projection * self.matrix_model_to_world;
-
-        // self.light_arg_ptr.matrix_screen_to_world;
-        // self.light_arg_ptr.matrix_world_to_projection;
     }
 }
 

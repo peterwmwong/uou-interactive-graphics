@@ -17,26 +17,26 @@ struct VertexOut
 };
 
 vertex VertexOut
-main_vertex(         uint       vertex_id [[vertex_id]],
-            constant World    & world     [[buffer(VertexBufferIndex::World)]],
-            constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]])
+main_vertex(         uint       vertex_id              [[vertex_id]],
+            constant Space    & camera                 [[buffer(VertexBufferIndex::Space)]],
+            constant Geometry & geometry               [[buffer(VertexBufferIndex::Geometry)]])
 {
     const uint   idx    = geometry.indices[vertex_id];
-    const float4 pos    = world.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
-    const float3 normal = world.matrix_normal_to_world * float3(geometry.normals[idx]);
+    const float4 pos    = camera.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
+    const float3 normal = camera.matrix_normal_to_world * float3(geometry.normals[idx]);
     return { .position = pos, .normal = normal };
 }
 
 fragment half4
 main_fragment(         VertexOut         in        [[stage_in]],
-              constant World           & world     [[buffer(FragBufferIndex::World)]],
-              constant World           & shadow    [[buffer(FragBufferIndex::ShadowMapWorld)]],
+              constant Space           & camera    [[buffer(FragBufferIndex::CameraSpace)]],
+              constant Space           & light     [[buffer(FragBufferIndex::LightSpace)]],
                        depth2d<float>    shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {
-    float4 pos = world.matrix_screen_to_world * float4(in.position.xyz, 1);
+    float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
 
-    float4 pos_in_shadow_space = shadow.matrix_world_to_projection * pos;
+    float4 pos_in_shadow_space = light.matrix_world_to_projection * pos;
            pos_in_shadow_space = pos_in_shadow_space / pos_in_shadow_space.w;
 
     float2 shadow_tx_coord   = (pos_in_shadow_space.xy * 0.5) + 0.5;
@@ -58,16 +58,16 @@ main_fragment(         VertexOut         in        [[stage_in]],
     //                                                  pos_in_shadow_space.z - BIAS)) * 0.25;
     // const half4 color = half4(half3(shadow_amt), 1.);
     return shade_phong_blinn(half3(pos.xyz),
-                             half3(shadow.light_position.xyz),
-                             half3(shadow.camera_position.xyz),
+                             half3(light.position_world.xyz),
+                             half3(camera.position_world.xyz),
                              half3(normalize(in.normal)),
                              Material(half4(0.75), color, color, 50));
 };
 
 vertex VertexOut
-plane_vertex(        uint      vertex_id     [[vertex_id]],
-                     uint      plane_y_unorm [[instance_id]],
-            constant World    & world        [[buffer(VertexBufferIndex::World)]])
+plane_vertex(        uint       vertex_id     [[vertex_id]],
+                     uint       plane_y_unorm [[instance_id]],
+            constant Space    & camera        [[buffer(VertexBufferIndex::Space)]])
 {
     constexpr float MAXUINT = 4294967295;
     const float plane_y = -(float(plane_y_unorm) / MAXUINT);
@@ -81,7 +81,7 @@ plane_vertex(        uint      vertex_id     [[vertex_id]],
     };
     const float2 v = verts_xz[vertex_id];
     return {
-        .position = world.matrix_world_to_projection * float4(v[0], plane_y, v[1], 1.0),
+        .position = camera.matrix_world_to_projection * float4(v[0], plane_y, v[1], 1.0),
         .normal   = float3(0, 1, 0),
     };
 }

@@ -28,26 +28,25 @@ struct Geometry {
     ARG_CONSTANT_PTR(packed_float2) tx_coords;
 };
 
-struct World {
+struct Space {
     float4x4 matrix_model_to_projection;
     float3x3 matrix_normal_to_world;
     float4x4 matrix_world_to_projection;
     float4x4 matrix_screen_to_world;
-    float4   camera_position;
-    float4   light_position;
+    float4   position_world;
 };
 
 enum struct VertexBufferIndex: unsigned int
 {
-    World = 0,
+    Space = 0,
     Geometry,
     LENGTH
 };
 
 enum struct FragBufferIndex: unsigned int
 {
-    World = 0,
-    ShadowMapWorld,
+    CameraSpace = 0,
+    LightSpace,
     LENGTH
 };
 

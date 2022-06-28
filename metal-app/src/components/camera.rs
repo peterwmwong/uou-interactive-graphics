@@ -16,7 +16,6 @@ pub struct CameraUpdate {
     pub camera_position: f32x4,
     pub matrix_screen_to_world: f32x4x4,
     pub matrix_world_to_projection: f32x4x4,
-    pub screen_size: f32x2,
 }
 
 pub struct Camera {
@@ -82,7 +81,6 @@ impl Camera {
             camera_position,
             matrix_screen_to_world,
             matrix_world_to_projection,
-            screen_size: self.screen_size,
         }
     }
 }
