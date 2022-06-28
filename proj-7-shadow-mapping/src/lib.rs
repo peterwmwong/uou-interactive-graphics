@@ -11,10 +11,10 @@ use std::{
     simd::{f32x2, u32x2},
 };
 
-const DEPTH_COMPARISON_BIAS: f32 = 0.004;
+const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
 const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
-const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
+const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., -PI / 2.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -302,6 +302,13 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 Some(&self.light_arg_buffer),
                 0,
             );
+            encode_fragment_bytes::<float4>(
+                encoder,
+                FragBufferIndex::DiffuseColor as _,
+                &float4 {
+                    xyzw: [1., 0.5, 0.5, 1.],
+                },
+            );
             encoder.set_fragment_texture(
                 FragTextureIndex::ShadowMap as _,
                 self.shadow_map_texture.as_deref(),
@@ -312,6 +319,13 @@ impl<'a> RendererDelgate for Delegate<'a> {
         {
             encoder.push_debug_group("Plane");
             encoder.set_render_pipeline_state(&self.plane_pipeline_state);
+            encode_fragment_bytes::<float4>(
+                encoder,
+                FragBufferIndex::DiffuseColor as _,
+                &float4 {
+                    xyzw: [1., 1., 1., 1.],
+                },
+            );
             encoder.draw_primitives_instanced_base_instance(
                 MTLPrimitiveType::TriangleStrip,
                 0,
@@ -456,6 +470,8 @@ impl<'a> Delegate<'a> {
             (v + u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _))
         }
         let new_xy = round_up_pow_of_2(xy << u32x2::splat(1));
+
+        #[cfg(debug_assertions)]
         println!("Allocating new Shadow Map {new_xy:?}");
 
         desc.set_width(new_xy[0] as _);

@@ -218,7 +218,8 @@ pub enum VertexBufferIndex {
 pub enum FragBufferIndex {
     CameraSpace = 0,
     LightSpace = 1,
-    LENGTH = 2,
+    DiffuseColor = 2,
+    LENGTH = 3,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]

@@ -47,6 +47,7 @@ enum struct FragBufferIndex: unsigned int
 {
     CameraSpace = 0,
     LightSpace,
+    DiffuseColor,
     LENGTH
 };
 

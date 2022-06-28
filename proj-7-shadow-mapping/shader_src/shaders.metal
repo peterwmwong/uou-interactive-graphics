@@ -7,8 +7,7 @@ using namespace metal;
 // TODO: START HERE
 // TODO: START HERE
 // TODO: START HERE
-// Figure out why light is leaking through the bottom of the teapot
-// - Something with the rendered depth into shadow map for the small ring around the teapot cover
+// Render Light Camera
 
 struct VertexOut
 {
@@ -31,6 +30,7 @@ fragment half4
 main_fragment(         VertexOut         in        [[stage_in]],
               constant Space           & camera    [[buffer(FragBufferIndex::CameraSpace)]],
               constant Space           & light     [[buffer(FragBufferIndex::LightSpace)]],
+              constant float4          & diffuse   [[buffer(FragBufferIndex::DiffuseColor)]],
                        depth2d<float, access::sample> shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {
     float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
@@ -42,13 +42,10 @@ main_fragment(         VertexOut         in        [[stage_in]],
     constexpr sampler sampler(address::clamp_to_zero,
                               filter::linear,
                               compare_func::less_equal);
-    const half not_shadow = half(shadow_tx.sample_compare(sampler, pos_light.xy, pos_light.z));
-    const half4 color = half4(
-        select(
-            1.h,
-            not_shadow,
-            all(pos_light.xy >= 0.0) && all(pos_light.xy <= 1.0)
-        )
+    const half not_shadow = select(
+        1.h,
+        half(shadow_tx.sample_compare(sampler, pos_light.xy, pos_light.z)),
+        all(pos_light.xy >= 0.0) && all(pos_light.xy <= 1.0)
     );
 
     // TODO: Investigate shadow AA methods. This is smooths... a little teensy bit.
@@ -56,11 +53,13 @@ main_fragment(         VertexOut         in        [[stage_in]],
     //                                                  shadow_tx_coord,
     //                                                  pos_in_shadow_space.z - BIAS)) * 0.25;
     // const half4 color = half4(half3(shadow_amt), 1.);
+    const half4 diffuse_color = half4(diffuse) * not_shadow;
+    const half4 specular_color = half4(1 * not_shadow);
     return shade_phong_blinn(half3(pos.xyz),
                              half3(light.position_world.xyz),
                              half3(camera.position_world.xyz),
                              half3(normalize(in.normal)),
-                             Material(half4(0.75), color, color, 50));
+                             Material(half4(0.75), diffuse_color, specular_color, 50));
 };
 
 vertex VertexOut
