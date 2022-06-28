@@ -72,6 +72,13 @@
     - Let's find out.
 - Bring back a moveable light?
 
+## proj-7
+
+- Look into methods of more realistically blurring the shadows based on distance
+- Review [Real-Time Polygonal-Light Shading with Linearly Transformed Cosines](https://eheitzresearch.wordpress.com/415-2/)
+- Review [Combining Analytic Direct Illumination and Stochastic Shadows](https://eheitzresearch.wordpress.com/705-2/)
+- Review [GPU Gems 2, Chapter 14. Perspective Shadow Maps: Care and Feeding](https://developer.nvidia.com/gpugems/gpugems/part-ii-lighting-and-shadows/chapter-14-perspective-shadow-maps-care-and-feeding)
+
 # tasks.json
 
 - Could saving a metal file, auto restart a running application (based on the crate directory)?
