@@ -14,7 +14,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures AFTER",
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-7-shadow-mapping AFTER",
             "problemMatcher": []
         },
         {
@@ -28,7 +28,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures BEFORE",
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-7-shadow-mapping BEFORE",
             "problemMatcher": []
         },
         {
@@ -42,7 +42,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-4-textures BEFORE AFTER",
+            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-7-shadow-mapping BEFORE AFTER",
             "problemMatcher": []
         },
         {
@@ -94,9 +94,10 @@
                 "echo": true,
                 "reveal": "silent",
                 "focus": false,
-                "panel": "shared",
+                "panel": "dedicated",
                 "showReuseMessage": true,
-                "clear": true
+                "clear": true,
+                "close": false
             },
             "problemMatcher": [],
             "command": "xcrun -sdk macosx metal -std=metal3.0 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
