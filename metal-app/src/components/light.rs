@@ -9,7 +9,7 @@ pub struct LightUpdate {
 }
 
 pub struct Light {
-    ray: UIRay,
+    pub ray: UIRay,
 }
 
 impl Light {

@@ -3,19 +3,27 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{camera, light::Light},
+    components::{
+        camera::{self, calc_matrix_camera_to_projection},
+        light::Light,
+    },
     metal::*,
     metal_types::*,
     *,
 };
 use shader_bindings::*;
-use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
+use std::{
+    f32::consts::PI,
+    ops::Neg,
+    path::PathBuf,
+    simd::{f32x2, f32x4},
+};
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
-const INITIAL_LIGHT_DISTANCE: f32 = 0.5;
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
+const INITIAL_LIGHT_DISTANCE: f32 = 1.0;
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., -PI / 2.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 struct Delegate<'a> {
@@ -72,6 +80,29 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
 
+        let shadow_map_pipeline = {
+            let mut depth_only_desc = RenderPipelineDescriptor::new();
+            depth_only_desc.set_depth_attachment_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
+            let p = create_pipeline(
+                &device,
+                &library,
+                &mut depth_only_desc,
+                "Shadow Map",
+                None,
+                (&"shadow_map_vertex", VertexBufferIndex::LENGTH as _),
+                None,
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+                &p,
+                FunctionType::Vertex,
+            );
+            p
+        };
+
         let mut render_pipeline_desc = new_basic_render_pipeline_descriptor(
             DEFAULT_PIXEL_FORMAT,
             Some(DEPTH_TEXTURE_FORMAT),
@@ -121,28 +152,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
             );
             p
         };
-        let shadow_map_pipeline = {
-            let mut depth_only_desc = RenderPipelineDescriptor::new();
-            depth_only_desc.set_depth_attachment_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
-            let p = create_pipeline(
-                &device,
-                &library,
-                &mut depth_only_desc,
-                "Shadow Map",
-                None,
-                (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                None,
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-                &p,
-                FunctionType::Vertex,
-            );
-            p
-        };
         let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
 
@@ -189,6 +198,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         Self {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
             command_queue: device.new_command_queue(),
+            // TODO: If model_depth_state and shadow_map_depth_state are the same, just keep one.
             model_depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -281,15 +291,24 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 Some(&self.world_arg_buffer),
                 0,
             );
+            encoder.set_fragment_buffer(
+                FragBufferIndex::ShadowMapWorld as _,
+                Some(&self.shadow_map_world_arg_buffer),
+                0,
+            );
+            encoder.set_fragment_texture(
+                FragTextureIndex::ShadowMap as _,
+                self.shadow_map_texture.as_deref(),
+            );
             self.model.encode_draws(encoder);
             encoder.pop_debug_group();
         }
-        {
-            encoder.push_debug_group("Plane");
-            encoder.set_render_pipeline_state(&self.plane_pipeline_state);
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
-            encoder.pop_debug_group();
-        }
+        // {
+        //     encoder.push_debug_group("Plane");
+        //     encoder.set_render_pipeline_state(&self.plane_pipeline_state);
+        //     encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
+        //     encoder.pop_debug_group();
+        // }
         encoder.end_encoding();
         command_buffer
     }
@@ -317,13 +336,15 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 );
             };
 
-            self.update_light_arg(screen_size);
+            // TODO: Only update light once (flag + control flow)
+            self.update_light(screen_size);
             self.needs_render = true;
         }
 
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
                 self.update_textures_size(size);
+                self.update_light(size);
                 self.needs_render = true;
             }
             _ => {}
@@ -356,13 +377,31 @@ impl<'a> Delegate<'a> {
 
         desc.set_storage_mode(MTLStorageMode::Private);
         desc.set_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
+        desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         let texture = self.device.new_texture(&desc);
         texture.set_label("Shadow Map Depth");
         self.shadow_map_texture = Some(texture);
     }
 
     #[inline]
-    fn update_light_arg(&mut self, screen_size: f32x2) {
+    fn update_light(&mut self, screen_size: f32x2) {
+        let &[rotx, roty] = self.light.ray.rotation_xy.neg().as_array();
+        let matrix_world_to_light = f32x4x4::translate(0., 0., self.light.ray.distance_from_origin)
+            * f32x4x4::rotate(rotx, roty, 0.);
+
+        self.world_arg_ptr.light_position =
+            (matrix_world_to_light.inverse() * f32x4::from_array([0., 0., 0., 1.])).into();
+        self.shadow_map_world_arg_ptr.light_position = self.world_arg_ptr.light_position;
+
+        let aspect_ratio = screen_size[0] / screen_size[1];
+        let matrix_world_to_projection =
+            calc_matrix_camera_to_projection(aspect_ratio, 60_f32.to_radians())
+                * matrix_world_to_light;
+
+        self.shadow_map_world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+        self.shadow_map_world_arg_ptr.matrix_model_to_projection =
+            matrix_world_to_projection * self.matrix_model_to_world;
+
         // self.light_arg_ptr.matrix_screen_to_world;
         // self.light_arg_ptr.matrix_world_to_projection;
     }

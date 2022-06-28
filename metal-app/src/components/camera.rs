@@ -20,7 +20,7 @@ pub struct CameraUpdate {
 }
 
 pub struct Camera {
-    ray: UIRay,
+    pub ray: UIRay,
     screen_size: f32x2,
 }
 
@@ -68,7 +68,8 @@ impl Camera {
 
         let aspect_ratio = self.screen_size[0] / self.screen_size[1];
         let matrix_world_to_projection =
-            calc_matrix_camera_to_projection(aspect_ratio) * matrix_world_to_camera;
+            calc_matrix_camera_to_projection(aspect_ratio, 60_f32.to_radians())
+                * matrix_world_to_camera;
 
         let matrix_world_to_projection = matrix_world_to_projection;
         let scale_xy = f32x2::splat(2.) / self.screen_size;
@@ -130,8 +131,7 @@ impl Camera {
 /// matrix_orthographic * matrix_perspective;
 /// ```
 #[inline]
-fn calc_matrix_camera_to_projection(aspect_ratio: f32) -> f32x4x4 {
-    let fov = 60_f32.to_radians();
+pub fn calc_matrix_camera_to_projection(aspect_ratio: f32, fov: f32) -> f32x4x4 {
     let sy = 1. / (fov / 2.).tan();
     let sx = sy / aspect_ratio;
     f32x4x4::new(

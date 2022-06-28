@@ -35,6 +35,7 @@ struct World {
     float4x4 matrix_world_to_projection;
     float4x4 matrix_screen_to_world;
     float4   camera_position;
+    float4   light_position;
     float    plane_y;
 };
 
@@ -53,12 +54,14 @@ enum struct VertexBufferIndex: unsigned int
 enum struct FragBufferIndex: unsigned int
 {
     World = 0,
+    ShadowMapWorld,
     LENGTH
 };
 
 enum struct FragTextureIndex: unsigned int
 {
-    LENGTH = 0
+    ShadowMap = 0,
+    LENGTH
 };
 
 #endif

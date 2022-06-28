@@ -108,13 +108,14 @@ pub struct World {
     pub matrix_world_to_projection: float4x4,
     pub matrix_screen_to_world: float4x4,
     pub camera_position: float4,
+    pub light_position: float4,
     pub plane_y: f32,
 }
 #[test]
 fn bindgen_test_layout_World() {
     assert_eq!(
         ::std::mem::size_of::<World>(),
-        336usize,
+        352usize,
         concat!("Size of: ", stringify!(World))
     );
     assert_eq!(
@@ -224,6 +225,23 @@ fn bindgen_test_layout_World() {
         );
     }
     test_field_camera_position();
+    fn test_field_light_position() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<World>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).light_position) as usize - ptr as usize
+            },
+            320usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(World),
+                "::",
+                stringify!(light_position)
+            )
+        );
+    }
+    test_field_light_position();
     fn test_field_plane_y() {
         assert_eq!(
             unsafe {
@@ -231,7 +249,7 @@ fn bindgen_test_layout_World() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).plane_y) as usize - ptr as usize
             },
-            320usize,
+            336usize,
             concat!(
                 "Offset of field: ",
                 stringify!(World),
@@ -306,10 +324,12 @@ pub enum VertexBufferIndex {
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragBufferIndex {
     World = 0,
-    LENGTH = 1,
+    ShadowMapWorld = 1,
+    LENGTH = 2,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragTextureIndex {
-    LENGTH = 0,
+    ShadowMap = 0,
+    LENGTH = 1,
 }
