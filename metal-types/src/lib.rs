@@ -319,7 +319,15 @@ mod test {
 
     mod test_f32x4_extras {
         use super::*;
-        const TOLERANCE: f32x4 = f32x4::splat(1e-6);
+
+        fn assert_eq_f32x4(actual: f32x4, expected: f32x4) {
+            const TOLERANCE: f32x4 = f32x4::splat(1e-6);
+            let pass = (actual - expected).abs().lanes_lt(TOLERANCE).all();
+            if !pass {
+                dbg!(expected, actual);
+            }
+            assert!(pass);
+        }
 
         #[test]
         fn test_length() {
@@ -334,7 +342,7 @@ mod test {
             let v = f32x4::from_array([1., 2., 3., 4.]);
             let actual = v.normalize();
             let expected = v / f32x4::splat(v.length());
-            assert_eq!(actual, expected);
+            assert_eq_f32x4(actual, expected);
         }
 
         #[test]
@@ -345,11 +353,7 @@ mod test {
                 let expected: f32x4 = expected.into();
                 let actual = v.reflect(i);
 
-                let pass = (actual - expected).abs().lanes_lt(TOLERANCE).all();
-                if !pass {
-                    dbg!(expected, actual);
-                }
-                assert!(pass);
+                assert_eq_f32x4(actual, expected);
             }
             t([1., 0., 0., 0.], [1., 1., 0., 0.], [-1., 1., 0., 0.]);
             t([1., 1., 0., 0.], [1., 0., 0., 0.], [0., -1., 0., 0.]);
