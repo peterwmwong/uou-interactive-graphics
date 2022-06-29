@@ -2,7 +2,7 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::camera, metal::*, metal_types::*, *};
+use metal_app::{components::camera, math_helpers::round_up_pow_of_2, metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -15,7 +15,7 @@ const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
 const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., -PI / 2.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
@@ -76,7 +76,7 @@ impl RenderableModelObject {
 
     #[inline]
     fn encode_render(
-        &self,
+        &mut self,
         encoder: &RenderCommandEncoderRef,
         matrix_world_to_projection: f32x4x4,
     ) {
@@ -95,31 +95,27 @@ impl RenderableModelObject {
     }
 }
 
-// TODO: Kill this. Part of the greater theme of "Don't calculate all the matrices and render/encode time"
-// - Migrate back to calculating all these matrices when they change (`on_event`).
-impl From<camera::CameraUpdate> for Space {
-    fn from(
-        camera::CameraUpdate {
-            camera_position,
-            matrix_screen_to_world,
-            matrix_world_to_projection,
-        }: camera::CameraUpdate,
-    ) -> Self {
+impl Default for Space {
+    #[inline]
+    fn default() -> Self {
         Self {
-            matrix_world_to_projection,
-            matrix_screen_to_world,
-            position_world: camera_position.into(),
+            matrix_world_to_projection: f32x4x4::identity(),
+            matrix_screen_to_world: f32x4x4::identity(),
+            position_world: float4 { xyzw: [0.; 4] },
         }
     }
 }
 
 struct Delegate {
     camera: camera::Camera,
+    camera_space: Space,
     command_queue: CommandQueue,
     depth_texture: Option<Texture>,
     device: Device,
     needs_render: bool,
     light: camera::Camera,
+    light_matrix_world_to_projection: f32x4x4,
+    light_space: Space,
     model_depth_state: DepthStencilState,
     model_pipeline_state: RenderPipelineState,
     model: RenderableModelObject,
@@ -193,6 +189,7 @@ impl RendererDelgate for Delegate {
 
         Self {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera_space: Default::default(),
             command_queue: device.new_command_queue(),
             // TODO: If model_depth_state and shadow_map_depth_state are the same, just keep one.
             model_depth_state: {
@@ -203,6 +200,8 @@ impl RendererDelgate for Delegate {
             },
             depth_texture: None,
             light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true),
+            light_matrix_world_to_projection: f32x4x4::identity(),
+            light_space: Default::default(),
             model,
             model_plane,
             model_pipeline_state: {
@@ -300,11 +299,8 @@ impl RendererDelgate for Delegate {
             self.model.encode_use_resources(encoder);
             encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
             encoder.set_depth_stencil_state(&self.shadow_map_depth_state);
-            self.model.encode_render(
-                encoder,
-                // TODO: Avoid calling `create_update`, it's super heavy
-                self.light.create_update().matrix_world_to_projection,
-            );
+            self.model
+                .encode_render(encoder, self.light_matrix_world_to_projection);
             encoder.pop_debug_group();
             encoder.end_encoding();
         }
@@ -322,68 +318,18 @@ impl RendererDelgate for Delegate {
             encode_fragment_bytes::<Space>(
                 encoder,
                 FragBufferIndex::CameraSpace as _,
-                // TODO: Avoid calling `create_update`, it's super heavy
-                &self.camera.create_update().into(),
+                &self.camera_space,
             );
-            {
-                // TODO: Avoid calling `create_update`, it's super heavy
-                let light_camera_space = self.light.create_update();
-                let light_space = Space {
-                    // IMPORTANT: "to_projection" has a different meaning here!
-                    // The target coordinate space is **NOT** actually the normal Metal Normalized Device
-                    // Coordinate space (NDC).
-                    // This is used to sample Shadow Map Depth Texture, it differs in the following ways:
-                    // - XY dimension range: [0,1] (not [-1,1])
-                    // - Y dimension is inverted: +Y -> -Y
-                    // - Z includes a bias for better depth comparison
-                    matrix_world_to_projection: {
-                        // Performance: Bake all the transform as a constant.
-                        // - Currently Rust does not allow floating-point operations in constant
-                        //   expressions.
-                        // - Reduces the amount of code generated/executed, >150 bytes of instructions saved.
-                        const PROJECTION_TO_TEXTURE_COORDINATE_SPACE: f32x4x4 = f32x4x4::new(
-                            [0.5, 0.0, 0.0, 0.5],
-                            [0.0, -0.5, 0.0, 0.5],
-                            [0.0, 0.0, 1.0, -DEPTH_COMPARISON_BIAS],
-                            [0.0, 0.0, 0.0, 1.0],
-                        );
-                        #[cfg(debug_assertions)]
-                        {
-                            // Invert Y
-                            let projection_to_texture_coordinate_space_derived =
-                                f32x4x4::scale_translate(1., -1., 1., 0., 1., 0.)
-                                    * f32x4x4::scale_translate(
-                                        // Convert from [-1, 1] -> [0, 1] for XY dimensions
-                                        0.5,
-                                        0.5,
-                                        1.0,
-                                        0.5,
-                                        0.5,
-                                        // Add Depth Comparison Bias
-                                        -DEPTH_COMPARISON_BIAS,
-                                    );
-                            assert_eq!(
-                                projection_to_texture_coordinate_space_derived.columns,
-                                PROJECTION_TO_TEXTURE_COORDINATE_SPACE.columns
-                            );
-                        }
-                        PROJECTION_TO_TEXTURE_COORDINATE_SPACE
-                    } * light_camera_space.matrix_world_to_projection,
-                    matrix_screen_to_world: light_camera_space.matrix_screen_to_world,
-                    position_world: light_camera_space.camera_position.into(),
-                };
-                encode_fragment_bytes::<Space>(
-                    encoder,
-                    FragBufferIndex::LightSpace as _,
-                    &light_space,
-                );
-            }
+            encode_fragment_bytes::<Space>(
+                encoder,
+                FragBufferIndex::LightSpace as _,
+                &self.light_space,
+            );
             encoder.set_fragment_texture(
                 FragTextureIndex::ShadowMap as _,
                 self.shadow_map_texture.as_deref(),
             );
-            // TODO: Avoid calling `create_update`, it's super heavy
-            let matrix_world_to_projection = self.camera.create_update().matrix_world_to_projection;
+            let matrix_world_to_projection = self.camera_space.matrix_world_to_projection;
             self.model
                 .encode_render(encoder, matrix_world_to_projection);
             self.model_plane
@@ -395,8 +341,66 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        self.needs_render =
-            self.camera.on_event(event).is_some() || self.light.on_event(event).is_some();
+        if let Some(update) = self.camera.on_event(event) {
+            self.camera_space = Space {
+                matrix_world_to_projection: update.matrix_world_to_projection,
+                matrix_screen_to_world: update.matrix_screen_to_world,
+                position_world: update.position_world.into(),
+            };
+            self.needs_render = true;
+        }
+        if let Some(update) = self.light.on_event(event) {
+            self.light_matrix_world_to_projection = update.matrix_world_to_projection;
+            self.light_space = Space {
+                //
+                // IMPORTANT: Projecting to a Texture, NOT to the screen.
+                // Used to sample Shadow Map Depth Texture during shading to produce shadows.
+                //
+                // This projected coordinate space differs from the screen coordinate space (Metal
+                // Normalized Device Coordinates), in the following ways:
+                // - XY dimension range:      [-1,1] -> [0,1]
+                // - Y dimension is inverted: +Y     -> -Y
+                // - Z includes a bias for better depth comparison
+                //
+                matrix_world_to_projection: {
+                    // Performance: Bake all the transform at compile time.
+                    // - Currently Rust does not allow floating-point operations in constant
+                    //   expressions.
+                    // - Reduces the amount of code generated/executed, >150 bytes of instructions
+                    //   saved.
+                    const PROJECTION_TO_TEXTURE_COORDINATE_SPACE: f32x4x4 = f32x4x4::new(
+                        [0.5, 0.0, 0.0, 0.5],
+                        [0.0, -0.5, 0.0, 0.5],
+                        [0.0, 0.0, 1.0, -DEPTH_COMPARISON_BIAS],
+                        [0.0, 0.0, 0.0, 1.0],
+                    );
+                    #[cfg(debug_assertions)]
+                    {
+                        // Invert Y
+                        let projection_to_texture_coordinate_space_derived =
+                            f32x4x4::scale_translate(1., -1., 1., 0., 1., 0.)
+                                * f32x4x4::scale_translate(
+                                    // Convert from [-1, 1] -> [0, 1] for XY dimensions
+                                    0.5,
+                                    0.5,
+                                    1.0,
+                                    0.5,
+                                    0.5,
+                                    // Add Depth Comparison Bias
+                                    -DEPTH_COMPARISON_BIAS,
+                                );
+                        assert_eq!(
+                            projection_to_texture_coordinate_space_derived.columns,
+                            PROJECTION_TO_TEXTURE_COORDINATE_SPACE.columns
+                        );
+                    }
+                    PROJECTION_TO_TEXTURE_COORDINATE_SPACE
+                } * update.matrix_world_to_projection,
+                matrix_screen_to_world: update.matrix_screen_to_world,
+                position_world: update.position_world.into(),
+            };
+            self.needs_render = true;
+        }
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
                 self.update_textures_size(size);
@@ -444,18 +448,8 @@ impl Delegate {
                 return;
             }
         }
-
-        #[inline]
-        fn round_up_pow_of_2(mut v: u32x2) -> u32x2 {
-            v -= u32x2::splat(1);
-            v |= v >> u32x2::splat(1);
-            v |= v >> u32x2::splat(2);
-            v |= v >> u32x2::splat(4);
-            v |= v >> u32x2::splat(8);
-            v |= v >> u32x2::splat(16);
-            (v + u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _))
-        }
-        let new_xy = round_up_pow_of_2(xy << u32x2::splat(1));
+        let new_xy =
+            round_up_pow_of_2(xy << u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _));
 
         #[cfg(debug_assertions)]
         println!("Allocating new Shadow Map {new_xy:?}");

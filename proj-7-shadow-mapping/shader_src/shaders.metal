@@ -21,11 +21,12 @@ main_vertex(         uint         vertex_id [[vertex_id]],
             constant ModelSpace & model     [[buffer(VertexBufferIndex::ModelSpace)]],
             constant Geometry   & geometry  [[buffer(VertexBufferIndex::Geometry)]])
 {
-    const uint   idx      = geometry.indices[vertex_id];
-    const float4 pos      = model.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
-    const float3 normal   = model.matrix_normal_to_world * float3(geometry.normals[idx]);
-    const float2 tx_coord = geometry.tx_coords[idx];
-    return { .position = pos, .normal = normal, .tx_coord = float2(tx_coord.x, 1. - tx_coord.y) };
+    const uint idx = geometry.indices[vertex_id];
+    return {
+        .position = model.matrix_model_to_projection * float4(geometry.positions[idx], 1.0),
+        .normal   = model.matrix_normal_to_world     * float3(geometry.normals[idx]),
+        .tx_coord = geometry.tx_coords[idx]          * float2(1,-1) + float2(0,1)
+    };
 }
 
 fragment half4

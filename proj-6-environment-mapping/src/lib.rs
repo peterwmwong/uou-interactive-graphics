@@ -386,7 +386,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
         if let Some(camera::CameraUpdate {
-            camera_position,
+            position_world,
             matrix_screen_to_world,
             matrix_world_to_projection,
             ..
@@ -395,7 +395,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
             self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
             self.world_arg_ptr.matrix_model_to_projection =
                 matrix_world_to_projection * self.matrix_model_to_world;
-            self.world_arg_ptr.camera_position = camera_position.into();
+            self.world_arg_ptr.camera_position = position_world.into();
             self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
             self.needs_render = true;
         }

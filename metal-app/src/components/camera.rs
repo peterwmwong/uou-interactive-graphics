@@ -13,7 +13,7 @@ const F: f32 = 100000.0;
 const Z_RANGE: f32 = F - N;
 
 pub struct CameraUpdate {
-    pub camera_position: f32x4,
+    pub position_world: f32x4,
     pub matrix_screen_to_world: f32x4x4,
     pub matrix_world_to_projection: f32x4x4,
 }
@@ -58,8 +58,7 @@ impl Camera {
         }
     }
 
-    // TODO: Reduce visibility once we remove proj-7's need for this.
-    pub fn create_update(&self) -> CameraUpdate {
+    fn create_update(&self) -> CameraUpdate {
         let &[rotx, roty] = self.ray.rotation_xy.neg().as_array();
         let matrix_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
             * f32x4x4::rotate(rotx, roty, 0.);
@@ -79,7 +78,7 @@ impl Camera {
             matrix_world_to_projection.inverse() * matrix_screen_to_projection;
 
         CameraUpdate {
-            camera_position,
+            position_world: camera_position,
             matrix_screen_to_world,
             matrix_world_to_projection,
         }
