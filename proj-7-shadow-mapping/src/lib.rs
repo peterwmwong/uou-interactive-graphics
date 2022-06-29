@@ -17,7 +17,7 @@ const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., -PI / 2.]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 struct RenderableModelObject {
@@ -113,18 +113,17 @@ struct Delegate {
     camera: camera::Camera,
     camera_space: Space,
     command_queue: CommandQueue,
+    depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
     needs_render: bool,
     light: camera::Camera,
     light_matrix_world_to_projection: f32x4x4,
     light_space: Space,
-    model_depth_state: DepthStencilState,
     model_pipeline_state: RenderPipelineState,
     model: RenderableModelObject,
     model_plane: RenderableModelObject,
     model_light: RenderableModelObject,
-    shadow_map_depth_state: DepthStencilState,
     shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
 }
@@ -207,8 +206,7 @@ impl RendererDelgate for Delegate {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             camera_space: Default::default(),
             command_queue: device.new_command_queue(),
-            // TODO: If model_depth_state and shadow_map_depth_state are the same, just keep one.
-            model_depth_state: {
+            depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 desc.set_depth_write_enabled(true);
@@ -252,12 +250,6 @@ impl RendererDelgate for Delegate {
                     FunctionType::Fragment,
                 );
                 p.pipeline_state
-            },
-            shadow_map_depth_state: {
-                let desc = DepthStencilDescriptor::new();
-                desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                desc.set_depth_write_enabled(true);
-                device.new_depth_stencil_state(&desc)
             },
             // TODO: How much instruction reduction do we get if we reorder/group like things together.
             // - Pipeline Creation
@@ -315,7 +307,7 @@ impl RendererDelgate for Delegate {
             encoder.push_debug_group("Shadow Map (Light 1)");
             self.model.encode_use_resources(encoder);
             encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
-            encoder.set_depth_stencil_state(&self.shadow_map_depth_state);
+            encoder.set_depth_stencil_state(&self.depth_state);
             self.model
                 .encode_render(encoder, self.light_matrix_world_to_projection);
             encoder.pop_debug_group();
@@ -328,10 +320,14 @@ impl RendererDelgate for Delegate {
             self.depth_texture.as_ref(),
         ));
         {
-            self.model.encode_use_resources(encoder);
-            self.model_plane.encode_use_resources(encoder);
+            let mut models = [
+                &mut self.model,
+                &mut self.model_light,
+                &mut self.model_plane,
+            ];
+            models.iter().for_each(|m| m.encode_use_resources(encoder));
             encoder.set_render_pipeline_state(&self.model_pipeline_state);
-            encoder.set_depth_stencil_state(&self.model_depth_state);
+            encoder.set_depth_stencil_state(&self.depth_state);
             encode_fragment_bytes::<Space>(
                 encoder,
                 FragBufferIndex::CameraSpace as _,
@@ -347,12 +343,9 @@ impl RendererDelgate for Delegate {
                 self.shadow_map_texture.as_deref(),
             );
             let matrix_world_to_projection = self.camera_space.matrix_world_to_projection;
-            self.model
-                .encode_render(encoder, matrix_world_to_projection);
-            self.model_plane
-                .encode_render(encoder, matrix_world_to_projection);
-            self.model_light
-                .encode_render(encoder, matrix_world_to_projection);
+            models
+                .iter_mut()
+                .for_each(|m| m.encode_render(encoder, matrix_world_to_projection));
         }
         encoder.end_encoding();
         command_buffer

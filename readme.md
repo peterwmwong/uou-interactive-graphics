@@ -105,6 +105,12 @@ Beyond meeting the project requirements, I want a better understanding of how I 
 ![Project 6 Teapot](./proj-6-environment-mapping/p6-teapot.gif)
 
 
-# Project 7: Shadow Mapping (coming soon)
+# [Project 7: Shadow Mapping](./proj-7-shadow-mapping/)
+
+- Render shadows of a model onto itself and a plane below it
+- Use a Shadow Map (Depth texture)
+
+![Project 7 Yoda](./proj-7-shadow-mapping/p7-yoda.gif)
+
 
 # Project 8: Tesselation (coming soon)

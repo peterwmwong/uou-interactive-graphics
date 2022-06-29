@@ -286,9 +286,7 @@
                 "--bin",
                 "proj-7-shadow-mapping",
                 "--",
-                // "${workspaceFolder}/proj-7-shadow-mapping/assets/plane/plane.obj"
                 "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
-                // "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
             ],
             "label": "Run proj-7-shadow-mapping teapot"
         },

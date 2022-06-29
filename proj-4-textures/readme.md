@@ -33,7 +33,8 @@ cargo run --bin proj-4-textures proj-4-textures/assets/yoda/yoda.obj
 |--------------------------------|----------------------------------------------|
 | Right button drag              | Camera zoom in/out                           |
 | Left button drag               | Camera orbits                                |
-| Ctrl + Right button drag       | Light orbits                                 |
+| Ctrl + Right button drag       | Light distance                               |
+| Ctrl + left button drag        | Light orbits                                 |
 
 | Key | Action                                 |
 |-----|----------------------------------------|

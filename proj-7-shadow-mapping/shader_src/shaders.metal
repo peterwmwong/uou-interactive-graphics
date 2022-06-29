@@ -4,11 +4,6 @@
 
 using namespace metal;
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Render Light Camera
-
 struct VertexOut
 {
     float4 position [[position]];

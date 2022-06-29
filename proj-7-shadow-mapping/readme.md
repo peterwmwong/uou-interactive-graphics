@@ -2,7 +2,7 @@
 
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=7
 
-![Project 7 Teapot](./p7-teapot.gif)
+![Project 7 Yoda](./p7-yoda.gif)
 
 # Usage
 
@@ -26,15 +26,11 @@ cargo run --bin proj-7-shadow-mapping proj-4-textures/assets/teapot.obj
 cargo run --bin proj-7-shadow-mapping proj-4-textures/assets/yoda/yoda.obj
 ```
 
-### Sphere model
-
-```sh
-cargo run --bin proj-7-shadow-mapping proj-6-environment-mapping/assets/sphere.obj
-```
-
 # Controls
 
 | Mouse                          | Action                                       |
 |--------------------------------|----------------------------------------------|
-| Right button drag              | Camera zoom in/out                           |
+| Right button drag              | Camera distance                              |
 | Left button drag               | Camera orbits                                |
+| Ctrl + Right button drag       | Light orbits                                 |
+| Ctrl + Left button drag        | Light distance                               |
