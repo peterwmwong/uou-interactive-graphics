@@ -7,7 +7,7 @@ CRATE_NAME_NORMALIZED=$(echo "$CRATE_NAME" | tr "-" "_")
 TMP_OUTPUT_PATH="/tmp/$CRATE_NAME-$OUTPUT_POSTFIX-TMP.js"
 OUTPUT_PATH="/tmp/$CRATE_NAME-$OUTPUT_POSTFIX.js"
 
-ADDITIONAL_CRATES="|metal"
+ADDITIONAL_CRATES="|metal|dispatch"
 DEFAULT_CARGO_ASM_ARGS="asm --release --lib --full-name -p $CRATE_NAME"
 
 get_function_list() {
