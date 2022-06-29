@@ -107,7 +107,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
         let command_queue = device.new_command_queue();
 
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             command_queue,
             matrix_model_to_projection: f32x4x4::identity(),
             matrix_model_to_world,

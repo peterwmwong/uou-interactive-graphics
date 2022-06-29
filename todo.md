@@ -7,6 +7,9 @@
         - Currently, I think I'm seeing Z-fighting on the Yoda model, zooming out slightly, and noting the flicker in Yoda's eye
         - Setup a z-fighting example rendering to verify the benefit
             - Ex. https://austin-eng.com/webgpu-samples/samples/reversedZ
+- UIRay
+    - Orbiting drag doesn't quite feel right
+        - It doesn't seem to scale exactly to the amount dragged.
 - Implement Triple Buffering
     - Currently we're committing a Metal command buffer and **waiting** for completion.
     - This preventing the main thread from doing other work or queueing another frame to render

@@ -33,6 +33,7 @@ struct Material {
     ARG_TEXTURE(texture2d<half>) diffuse_texture;
     ARG_TEXTURE(texture2d<half>) specular_texture;
     float                        specular_shineness;
+    float                        ambient_amount;
 };
 
 struct Space {

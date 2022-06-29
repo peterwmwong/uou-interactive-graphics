@@ -70,6 +70,7 @@ main_fragment(         VertexOut         in       [[stage_in]],
         inline half4 diffuse_color()      { return not_shadow > 0.h ? m.diffuse_texture.sample(s(), tx_coord)  : 0; }
         inline half4 specular_color()     { return not_shadow > 0.h ? m.specular_texture.sample(s(), tx_coord) : 0; }
         inline half  specular_shineness() { return m.specular_shineness; }
+        inline half  ambient_amount()     { return m.ambient_amount; }
     };
     return shade_phong_blinn(half3(pos.xyz),
                              half3(light.position_world.xyz),

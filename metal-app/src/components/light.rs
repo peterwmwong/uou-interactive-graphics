@@ -22,6 +22,7 @@ impl Light {
     ) -> Self {
         Self {
             ray: UIRay {
+                min_distance: 0.,
                 distance_from_origin: init_distance,
                 rotation_xy: init_rotation,
                 on_mouse_drag_modifier_keys,

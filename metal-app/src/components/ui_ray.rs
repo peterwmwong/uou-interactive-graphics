@@ -6,9 +6,10 @@ pub const DISTANCE_MOUSE_BUTTON: MouseButton = MouseButton::Right;
 
 pub struct UIRay {
     pub distance_from_origin: f32,
-    pub rotation_xy: f32x2,
-    pub on_mouse_drag_modifier_keys: ModifierKeys,
     pub invert_drag: bool,
+    pub min_distance: f32,
+    pub on_mouse_drag_modifier_keys: ModifierKeys,
+    pub rotation_xy: f32x2,
 }
 
 impl UIRay {
@@ -17,12 +18,14 @@ impl UIRay {
         distance_from_origin: f32,
         rotation_xy: f32x2,
         invert_drag: bool,
+        min_distance: f32,
     ) -> Self {
         Self {
             distance_from_origin,
-            rotation_xy,
-            on_mouse_drag_modifier_keys,
             invert_drag,
+            min_distance,
+            on_mouse_drag_modifier_keys,
+            rotation_xy,
         }
     }
 
@@ -58,7 +61,7 @@ impl UIRay {
     }
 
     #[inline]
-    pub fn drag_rotate(&mut self, drag_amount: f32x2) {
+    fn drag_rotate(&mut self, drag_amount: f32x2) {
         self.update(
             self.distance_from_origin,
             self.rotation_xy + {
@@ -74,9 +77,9 @@ impl UIRay {
     }
 
     #[inline]
-    pub fn drag_distance(&mut self, drag_amount: f32x2) {
+    fn drag_distance(&mut self, drag_amount: f32x2) {
         self.update(
-            self.distance_from_origin - drag_amount[1] / 250.,
+            (self.distance_from_origin - drag_amount[1] / 250.).max(self.min_distance),
             self.rotation_xy,
         );
     }

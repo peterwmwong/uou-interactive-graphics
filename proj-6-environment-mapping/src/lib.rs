@@ -264,7 +264,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 device.new_depth_stencil_state(&desc)
             },
             bg_pipeline_state: bg_pipeline.pipeline_state,
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             command_queue: device.new_command_queue(),
             cubemap_texture,
             model_depth_state: {

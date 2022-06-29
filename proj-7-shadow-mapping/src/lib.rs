@@ -11,6 +11,7 @@ use std::{
     simd::{f32x2, u32x2},
 };
 
+const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;
 const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
 const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
@@ -32,6 +33,7 @@ impl RenderableModelObject {
         device: &Device,
         model_file: T,
         init_matrix_model_to_world: impl FnOnce(&MaxBounds) -> f32x4x4,
+        ambient_amount: f32,
     ) -> Self {
         let model = Model::from_file(
             model_file,
@@ -60,6 +62,7 @@ impl RenderableModelObject {
                 arg.diffuse_texture = diffuse_texture;
                 arg.specular_texture = specular_texture;
                 arg.specular_shineness = specular_shineness;
+                arg.ambient_amount = ambient_amount;
             },
         );
         Self {
@@ -120,6 +123,7 @@ struct Delegate {
     model_pipeline_state: RenderPipelineState,
     model: RenderableModelObject,
     model_plane: RenderableModelObject,
+    model_light: RenderableModelObject,
     shadow_map_depth_state: DepthStencilState,
     shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
@@ -159,6 +163,7 @@ impl RendererDelgate for Delegate {
                     * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
                     * f32x4x4::translate(cx, cy, cz)
             },
+            DEFAULT_AMBIENT_AMOUNT,
         );
         let model_plane = RenderableModelObject::new(
             "Model",
@@ -168,6 +173,17 @@ impl RendererDelgate for Delegate {
                 .join("plane")
                 .join("plane.obj"),
             |_| f32x4x4::translate(0., -plane_y, 0.),
+            DEFAULT_AMBIENT_AMOUNT,
+        );
+        let model_light = RenderableModelObject::new(
+            "Model",
+            &device,
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("assets")
+                .join("light")
+                .join("light.obj"),
+            |_| f32x4x4::translate(0., 0., 0.),
+            0.8,
         );
 
         // TODO: Change create_pipline to take a Function objects and create helper for getting many
@@ -188,7 +204,7 @@ impl RendererDelgate for Delegate {
             .expect("Failed to import shader metal lib.");
 
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             camera_space: Default::default(),
             command_queue: device.new_command_queue(),
             // TODO: If model_depth_state and shadow_map_depth_state are the same, just keep one.
@@ -199,10 +215,11 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
-            light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true),
+            light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true, 1.),
             light_matrix_world_to_projection: f32x4x4::identity(),
             light_space: Default::default(),
             model,
+            model_light,
             model_plane,
             model_pipeline_state: {
                 let p = create_pipeline(
@@ -334,6 +351,8 @@ impl RendererDelgate for Delegate {
                 .encode_render(encoder, matrix_world_to_projection);
             self.model_plane
                 .encode_render(encoder, matrix_world_to_projection);
+            self.model_light
+                .encode_render(encoder, matrix_world_to_projection);
         }
         encoder.end_encoding();
         command_buffer
@@ -350,6 +369,9 @@ impl RendererDelgate for Delegate {
             self.needs_render = true;
         }
         if let Some(update) = self.light.on_event(event) {
+            self.model_light.matrix_model_to_world = update.matrix_camera_to_world
+                * f32x4x4::y_rotate(PI)
+                * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
             self.light_matrix_world_to_projection = update.matrix_world_to_projection;
             self.light_space = Space {
                 //

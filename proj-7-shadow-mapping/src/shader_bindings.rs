@@ -106,6 +106,7 @@ pub struct Material {
     pub diffuse_texture: ::std::os::raw::c_ulong,
     pub specular_texture: ::std::os::raw::c_ulong,
     pub specular_shineness: f32,
+    pub ambient_amount: f32,
 }
 #[test]
 fn bindgen_test_layout_Material() {
@@ -187,6 +188,23 @@ fn bindgen_test_layout_Material() {
         );
     }
     test_field_specular_shineness();
+    fn test_field_ambient_amount() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<Material>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).ambient_amount) as usize - ptr as usize
+            },
+            28usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(Material),
+                "::",
+                stringify!(ambient_amount)
+            )
+        );
+    }
+    test_field_ambient_amount();
 }
 #[repr(C)]
 #[repr(align(16))]

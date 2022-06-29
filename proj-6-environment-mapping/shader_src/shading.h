@@ -19,6 +19,7 @@ struct ConstantMaterial {
     inline half4 diffuse_color() { return diffuse; }
     inline half4 specular_color() { return specular; }
     inline half  specular_shineness() { return shineness; }
+    inline constexpr half ambient_amount() { return 0.15; }
 };
 
 // TODO: Extract this out into a metal-shader-common crate or something.
@@ -65,7 +66,7 @@ inline half4 shade_phong_blinn(const half3 frag_pos, const half3 light_pos, cons
     const half ln = max(dot(l, n), 0.h);
 
     // TODO: Parameterize ambient light intensity.
-    const half Ia = 0.15;
+    const half Ia = material.ambient_amount();
     // Diffuse/Specular Light Intensity of 1.0 for camera facing surfaces, otherwise 0.0.
     // - Use Cosine angle between Camera and Normal (positive <90d, negative >90d)
     // - Using the XCode Shader Profiler, this performed the best compared to...

@@ -15,6 +15,7 @@ const Z_RANGE: f32 = F - N;
 pub struct CameraUpdate {
     pub position_world: f32x4,
     pub matrix_screen_to_world: f32x4x4,
+    pub matrix_camera_to_world: f32x4x4,
     pub matrix_world_to_projection: f32x4x4,
 }
 
@@ -29,6 +30,7 @@ impl Camera {
         init_rotation: f32x2,
         on_mouse_drag_modifier_keys: ModifierKeys,
         invert_drag: bool,
+        min_distance: f32,
     ) -> Self {
         Self {
             ray: UIRay {
@@ -36,6 +38,7 @@ impl Camera {
                 rotation_xy: init_rotation,
                 on_mouse_drag_modifier_keys,
                 invert_drag,
+                min_distance,
             },
             screen_size: f32x2::splat(1.),
         }
@@ -62,8 +65,8 @@ impl Camera {
         let &[rotx, roty] = self.ray.rotation_xy.neg().as_array();
         let matrix_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
             * f32x4x4::rotate(rotx, roty, 0.);
-        let camera_position =
-            matrix_world_to_camera.inverse() * f32x4::from_array([0., 0., 0., 1.]);
+        let matrix_camera_to_world = matrix_world_to_camera.inverse();
+        let position_world = matrix_camera_to_world * f32x4::from_array([0., 0., 0., 1.]);
 
         let aspect_ratio = self.screen_size[0] / self.screen_size[1];
         let matrix_world_to_projection =
@@ -78,7 +81,8 @@ impl Camera {
             matrix_world_to_projection.inverse() * matrix_screen_to_projection;
 
         CameraUpdate {
-            position_world: camera_position,
+            position_world,
+            matrix_camera_to_world,
             matrix_screen_to_world,
             matrix_world_to_projection,
         }

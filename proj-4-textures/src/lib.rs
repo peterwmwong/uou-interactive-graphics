@@ -181,7 +181,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false),
+            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
