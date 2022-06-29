@@ -58,7 +58,8 @@ impl Camera {
         }
     }
 
-    fn create_update(&self) -> CameraUpdate {
+    // TODO: Reduce visibility once we remove proj-7's need for this.
+    pub fn create_update(&self) -> CameraUpdate {
         let &[rotx, roty] = self.ray.rotation_xy.neg().as_array();
         let matrix_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
             * f32x4x4::rotate(rotx, roty, 0.);

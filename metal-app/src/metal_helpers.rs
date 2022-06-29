@@ -86,11 +86,7 @@ pub fn allocate_new_buffer_with_data<T: Sized>(
 }
 
 #[inline]
-pub fn encode_vertex_bytes<T: Sized + Copy + Clone>(
-    encoder: &RenderCommandEncoderRef,
-    buffer_index: u64,
-    v: &T,
-) {
+pub fn encode_vertex_bytes<T: Sized>(encoder: &RenderCommandEncoderRef, buffer_index: u64, v: &T) {
     let ptr: *const T = v;
     encoder.set_vertex_bytes(
         buffer_index,
@@ -100,7 +96,7 @@ pub fn encode_vertex_bytes<T: Sized + Copy + Clone>(
 }
 
 #[inline]
-pub fn encode_fragment_bytes<T: Sized + Copy + Clone>(
+pub fn encode_fragment_bytes<T: Sized>(
     encoder: &RenderCommandEncoderRef,
     buffer_index: u64,
     v: &T,

@@ -100,10 +100,97 @@ fn bindgen_test_layout_Geometry() {
     test_field_tx_coords();
 }
 #[repr(C)]
+#[derive(Copy, Clone, PartialEq)]
+pub struct Material {
+    pub ambient_texture: ::std::os::raw::c_ulong,
+    pub diffuse_texture: ::std::os::raw::c_ulong,
+    pub specular_texture: ::std::os::raw::c_ulong,
+    pub specular_shineness: f32,
+}
+#[test]
+fn bindgen_test_layout_Material() {
+    assert_eq!(
+        ::std::mem::size_of::<Material>(),
+        32usize,
+        concat!("Size of: ", stringify!(Material))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<Material>(),
+        8usize,
+        concat!("Alignment of ", stringify!(Material))
+    );
+    fn test_field_ambient_texture() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<Material>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).ambient_texture) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(Material),
+                "::",
+                stringify!(ambient_texture)
+            )
+        );
+    }
+    test_field_ambient_texture();
+    fn test_field_diffuse_texture() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<Material>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).diffuse_texture) as usize - ptr as usize
+            },
+            8usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(Material),
+                "::",
+                stringify!(diffuse_texture)
+            )
+        );
+    }
+    test_field_diffuse_texture();
+    fn test_field_specular_texture() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<Material>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).specular_texture) as usize - ptr as usize
+            },
+            16usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(Material),
+                "::",
+                stringify!(specular_texture)
+            )
+        );
+    }
+    test_field_specular_texture();
+    fn test_field_specular_shineness() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<Material>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).specular_shineness) as usize - ptr as usize
+            },
+            24usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(Material),
+                "::",
+                stringify!(specular_shineness)
+            )
+        );
+    }
+    test_field_specular_shineness();
+}
+#[repr(C)]
 #[repr(align(16))]
 pub struct Space {
-    pub matrix_model_to_projection: float4x4,
-    pub matrix_normal_to_world: float3x3,
     pub matrix_world_to_projection: float4x4,
     pub matrix_screen_to_world: float4x4,
     pub position_world: float4,
@@ -112,7 +199,7 @@ pub struct Space {
 fn bindgen_test_layout_Space() {
     assert_eq!(
         ::std::mem::size_of::<Space>(),
-        256usize,
+        144usize,
         concat!("Size of: ", stringify!(Space))
     );
     assert_eq!(
@@ -120,40 +207,6 @@ fn bindgen_test_layout_Space() {
         16usize,
         concat!("Alignment of ", stringify!(Space))
     );
-    fn test_field_matrix_model_to_projection() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Space>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_model_to_projection) as usize - ptr as usize
-            },
-            0usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(Space),
-                "::",
-                stringify!(matrix_model_to_projection)
-            )
-        );
-    }
-    test_field_matrix_model_to_projection();
-    fn test_field_matrix_normal_to_world() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Space>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_normal_to_world) as usize - ptr as usize
-            },
-            64usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(Space),
-                "::",
-                stringify!(matrix_normal_to_world)
-            )
-        );
-    }
-    test_field_matrix_normal_to_world();
     fn test_field_matrix_world_to_projection() {
         assert_eq!(
             unsafe {
@@ -161,7 +214,7 @@ fn bindgen_test_layout_Space() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).matrix_world_to_projection) as usize - ptr as usize
             },
-            112usize,
+            0usize,
             concat!(
                 "Offset of field: ",
                 stringify!(Space),
@@ -178,7 +231,7 @@ fn bindgen_test_layout_Space() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).matrix_screen_to_world) as usize - ptr as usize
             },
-            176usize,
+            64usize,
             concat!(
                 "Offset of field: ",
                 stringify!(Space),
@@ -195,7 +248,7 @@ fn bindgen_test_layout_Space() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).position_world) as usize - ptr as usize
             },
-            240usize,
+            128usize,
             concat!(
                 "Offset of field: ",
                 stringify!(Space),
@@ -206,10 +259,63 @@ fn bindgen_test_layout_Space() {
     }
     test_field_position_world();
 }
+#[repr(C)]
+#[repr(align(16))]
+pub struct ModelSpace {
+    pub matrix_model_to_projection: float4x4,
+    pub matrix_normal_to_world: float3x3,
+}
+#[test]
+fn bindgen_test_layout_ModelSpace() {
+    assert_eq!(
+        ::std::mem::size_of::<ModelSpace>(),
+        112usize,
+        concat!("Size of: ", stringify!(ModelSpace))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<ModelSpace>(),
+        16usize,
+        concat!("Alignment of ", stringify!(ModelSpace))
+    );
+    fn test_field_matrix_model_to_projection() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).matrix_model_to_projection) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(ModelSpace),
+                "::",
+                stringify!(matrix_model_to_projection)
+            )
+        );
+    }
+    test_field_matrix_model_to_projection();
+    fn test_field_matrix_normal_to_world() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).matrix_normal_to_world) as usize - ptr as usize
+            },
+            64usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(ModelSpace),
+                "::",
+                stringify!(matrix_normal_to_world)
+            )
+        );
+    }
+    test_field_matrix_normal_to_world();
+}
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {
-    Space = 0,
+    ModelSpace = 0,
     Geometry = 1,
     LENGTH = 2,
 }
@@ -218,12 +324,11 @@ pub enum VertexBufferIndex {
 pub enum FragBufferIndex {
     CameraSpace = 0,
     LightSpace = 1,
-    DiffuseColor = 2,
+    Material = 2,
     LENGTH = 3,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragTextureIndex {
     ShadowMap = 0,
-    LENGTH = 1,
 }

@@ -28,17 +28,27 @@ struct Geometry {
     ARG_CONSTANT_PTR(packed_float2) tx_coords;
 };
 
+struct Material {
+    ARG_TEXTURE(texture2d<half>) ambient_texture;
+    ARG_TEXTURE(texture2d<half>) diffuse_texture;
+    ARG_TEXTURE(texture2d<half>) specular_texture;
+    float                        specular_shineness;
+};
+
 struct Space {
-    float4x4 matrix_model_to_projection;
-    float3x3 matrix_normal_to_world;
     float4x4 matrix_world_to_projection;
     float4x4 matrix_screen_to_world;
     float4   position_world;
 };
 
+struct ModelSpace {
+    float4x4 matrix_model_to_projection;
+    float3x3 matrix_normal_to_world;
+};
+
 enum struct VertexBufferIndex: unsigned int
 {
-    Space = 0,
+    ModelSpace = 0,
     Geometry,
     LENGTH
 };
@@ -47,14 +57,13 @@ enum struct FragBufferIndex: unsigned int
 {
     CameraSpace = 0,
     LightSpace,
-    DiffuseColor,
+    Material,
     LENGTH
 };
 
 enum struct FragTextureIndex: unsigned int
 {
-    ShadowMap = 0,
-    LENGTH
+    ShadowMap = 0
 };
 
 #endif

@@ -5,12 +5,12 @@
 
 using namespace metal;
 
-struct Material {
+struct ConstantMaterial {
     const half4 ambient;
     const half4 diffuse;
     const half4 specular;
     const half shineness;
-    inline Material(half4 ambient, half4 diffuse, half4 specular, half shineness):
+    inline ConstantMaterial(half4 ambient, half4 diffuse, half4 specular, half shineness):
         ambient(ambient),
         diffuse(diffuse),
         specular(specular),
@@ -133,7 +133,7 @@ inline half4 shade_mirror(const float4            screen_pos,
     const half4 bg_color = bg_texture.sample(tx_sampler, float3(ref));
     // TODO: Bring back the Light component (moveable, rendered light) to proj-6.
     const half3 light_position = half3(0, 1, -1) * world_transform;
-    return shade_phong_blinn(pos, light_position, camera_pos, normal, Material(half4(1), bg_color, bg_color, 50));
+    return shade_phong_blinn(pos, light_position, camera_pos, normal, ConstantMaterial(half4(1), bg_color, bg_color, 50));
 }
 
 #endif
