@@ -148,7 +148,7 @@
                 "--bin",
                 "proj-4-textures",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
+                "${workspaceFolder}/common-assets/yoda/yoda.obj"
             ],
             "label": "Run proj-4-textures yoda"
         },
@@ -162,7 +162,7 @@
                 "--bin",
                 "proj-4-textures",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+                "${workspaceFolder}/common-assets/teapot/teapot.obj"
             ],
             "label": "Run proj-4-textures teapot"
         },
@@ -174,23 +174,9 @@
             ],
             "args": [
                 "--bin",
-                "proj-4-textures",
-                "--",
-                "${workspaceFolder}/proj-6-environment-mapping/assets/sphere.obj"
-            ],
-            "label": "Run proj-4-textures sphere"
-        },
-        {
-            "type": "cargo",
-            "command": "run",
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "args": [
-                "--bin",
                 "proj-5-render-buffers",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+                "${workspaceFolder}/common-assets/teapot/teapot.obj"
             ],
             "label": "Run proj-5-render-buffers teapot"
         },
@@ -204,7 +190,7 @@
                 "--bin",
                 "proj-5-render-buffers",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
+                "${workspaceFolder}/common-assets/yoda/yoda.obj"
             ],
             "label": "Run proj-5-render-buffers yoda"
         },
@@ -230,7 +216,7 @@
                 "--bin",
                 "proj-6-environment-mapping",
                 "--",
-                "${workspaceFolder}/proj-6-environment-mapping/assets/sphere.obj"
+                "${workspaceFolder}/common-assets/sphere.obj"
             ],
             "label": "Run proj-6-environment-mapping sphere"
         },
@@ -244,7 +230,7 @@
                 "--bin",
                 "proj-6-environment-mapping",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+                "${workspaceFolder}/common-assets/teapot/teapot.obj"
             ],
             "label": "Run proj-6-environment-mapping teapot"
         },
@@ -258,7 +244,7 @@
                 "--bin",
                 "proj-6-environment-mapping",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/yoda/yoda.obj"
+                "${workspaceFolder}/common-assets/yoda/yoda.obj"
             ],
             "label": "Run proj-6-environment-mapping yoda"
         },
@@ -272,7 +258,7 @@
                 "--bin",
                 "proj-7-shadow-mapping",
                 "--",
-                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+                "${workspaceFolder}/common-assets/teapot/teapot.obj"
             ],
             "label": "Run proj-7-shadow-mapping teapot"
         },

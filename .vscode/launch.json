@@ -19,7 +19,7 @@
                 }
             },
             "args": [
-                "${workspaceFolder}/proj-4-textures/assets/teapot.obj"
+                "${workspaceFolder}/common-assets/teapot/teapot.obj"
             ],
             "cwd": "${workspaceFolder}"
         }

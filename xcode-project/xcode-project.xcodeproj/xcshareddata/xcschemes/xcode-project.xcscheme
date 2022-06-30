@@ -57,7 +57,7 @@
       </MacroExpansion>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "$(SRCROOT)/../proj-4-textures/assets/teapot.obj"
+            argument = "$(SRCROOT)/../common-assets/teapot/teapot.obj"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

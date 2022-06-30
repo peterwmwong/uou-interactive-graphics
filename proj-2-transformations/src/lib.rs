@@ -30,7 +30,9 @@ struct Delegate {
 impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("assets")
+            .join("..")
+            .join("common-assets")
+            .join("teapot")
             .join("teapot.obj");
         let (mut models, ..) = tobj::load_obj(
             teapot_file,

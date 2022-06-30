@@ -18,13 +18,13 @@ cargo run --bin proj-4-textures [OPTIONAL: Path to Wavefront OBJ file]
 ### Teapot model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures/assets/teapot.obj
+cargo run --bin proj-4-textures common-assets/teapot/teapot.obj
 ```
 
 ### Yoda model
 
 ```sh
-cargo run --bin proj-4-textures proj-4-textures/assets/yoda/yoda.obj
+cargo run --bin proj-4-textures common-assets/yoda/yoda.obj
 ```
 
 # Controls

@@ -128,7 +128,9 @@ impl RendererDelgate for Delegate {
             .expect("Failed to import shader metal lib.");
 
         let mut plane_y = 0_f32;
-        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("common-assets");
         Self {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             camera_space: Default::default(),

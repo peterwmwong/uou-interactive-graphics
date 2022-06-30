@@ -17,13 +17,13 @@ cargo run --bin proj-6-environment-mapping [OPTIONAL: Path to Wavefront OBJ file
 ### Teapot model
 
 ```sh
-cargo run --bin proj-6-environment-mapping proj-4-textures/assets/teapot.obj
+cargo run --bin proj-6-environment-mapping common-assets/teapot/teapot.obj
 ```
 
 ### Yoda model
 
 ```sh
-cargo run --bin proj-6-environment-mapping proj-4-textures/assets/yoda/yoda.obj
+cargo run --bin proj-6-environment-mapping common-assets/yoda/yoda.obj
 ```
 
 ### Sphere model

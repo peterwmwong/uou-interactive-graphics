@@ -17,13 +17,13 @@ cargo run --bin proj-7-shadow-mapping [OPTIONAL: Path to Wavefront OBJ file]
 ### Teapot model
 
 ```sh
-cargo run --bin proj-7-shadow-mapping proj-4-textures/assets/teapot.obj
+cargo run --bin proj-7-shadow-mapping common-assets/teapot/teapot.obj
 ```
 
 ### Yoda model
 
 ```sh
-cargo run --bin proj-7-shadow-mapping proj-4-textures/assets/yoda/yoda.obj
+cargo run --bin proj-7-shadow-mapping common-assets/yoda/yoda.obj
 ```
 
 # Controls
