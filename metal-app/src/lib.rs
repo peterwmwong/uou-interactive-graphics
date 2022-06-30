@@ -10,6 +10,7 @@ pub extern crate cocoa;
 
 mod application;
 pub mod components;
+pub mod image_helpers;
 pub mod math_helpers;
 mod metal_helpers;
 mod model;

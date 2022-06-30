@@ -1,7 +1,9 @@
 use cocoa::base::{nil, NO};
 use metal::*;
 use objc::runtime::Sel;
-use std::{ffi::c_void, ops::Deref};
+use std::{ffi::c_void, ops::Deref, path::Path};
+
+use crate::image_helpers::{self, BYTES_PER_PIXEL};
 
 pub const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
     MTLResourceOptions::StorageModeShared.bits()
@@ -283,6 +285,42 @@ pub fn debug_assert_argument_buffer_size<const BUFFER_INDEX: u64, T>(
     }
 }
 
+pub fn new_texture_from_png<P: AsRef<Path>>(
+    path_to_png: P,
+    device: &Device,
+    mut buffer: &mut Vec<u8>,
+) -> Texture {
+    let (bytes, (width, height)) =
+        image_helpers::read_png_pixel_bytes_into(path_to_png, &mut buffer);
+
+    let desc = TextureDescriptor::new();
+    desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
+    desc.set_compression_type(MTLTextureCompressionType::Lossless);
+    desc.set_resource_options(DEFAULT_RESOURCE_OPTIONS);
+    desc.set_usage(MTLTextureUsage::ShaderRead);
+    desc.set_width(width as _);
+    desc.set_height(height as _);
+    desc.set_depth(1);
+    let texture = device.new_texture(&desc);
+
+    texture.replace_region_in_slice(
+        MTLRegion {
+            origin: MTLOrigin { x: 0, y: 0, z: 0 },
+            size: MTLSize {
+                width: width as _,
+                height: height as _,
+                depth: 1,
+            },
+        },
+        0,
+        0,
+        buffer.as_ptr() as _,
+        (width * BYTES_PER_PIXEL) as _,
+        bytes as _,
+    );
+    texture
+}
+
 // TODO: Investigate when this improves performance.
 // - In quick performance profiling of proj-4, no performance improvements were observed
 //   - Methodology
@@ -335,11 +373,10 @@ pub fn set_tessellation_config(desc: &mut RenderPipelineDescriptor) {
         let _: () = msg_send![d, setTessellationOutputWindingOrder: winding];
 
         #[allow(non_upper_case_globals)]
-        const MTLTessellationPartitionModeFractionalEven: NSUInteger = 3;
-        // TODO: Could be MTLTessellationPartitionModeInteger = 1 or MTLTessellationPartitionModePow2 = 0
+        const MTLTessellationPartitionModePow2: NSUInteger = 0;
         let _: () = msg_send![
             d,
-            setTessellationPartitionMode: MTLTessellationPartitionModeFractionalEven
+            setTessellationPartitionMode: MTLTessellationPartitionModePow2
         ];
 
         const MAX_TESSELLATION_FACTOR: NSUInteger = 64;

@@ -45,3 +45,9 @@ enum struct FragBufferIndex: unsigned int
     LightSpace,
     LENGTH
 };
+
+enum struct FragTextureIndex: unsigned int
+{
+    Normal = 0,
+    LENGTH
+};

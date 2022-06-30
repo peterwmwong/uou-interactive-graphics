@@ -4,10 +4,10 @@ mod shader_bindings;
 
 use metal_app::{components::camera, metal::*, metal_types::*, *};
 use shader_bindings::*;
-use std::{f32::consts::PI, simd::f32x2};
+use std::{f32::consts::PI, path::PathBuf, simd::f32x2};
 
 const INITIAL_TESSELATION_FACTOR: f32 = 64.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([PI / 6., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
@@ -40,6 +40,7 @@ struct Delegate {
     light_space: Space,
     light: camera::Camera,
     needs_render: bool,
+    normal_texture: Texture,
     render_pipeline_state: RenderPipelineState,
     tessellation_compute_state: ComputePipelineState,
     tessellation_factor: f32,
@@ -51,6 +52,8 @@ impl RendererDelgate for Delegate {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let mut image_buffer = vec![];
         Self {
             camera_space: Default::default(),
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
@@ -58,6 +61,11 @@ impl RendererDelgate for Delegate {
             light_space: Default::default(),
             light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true, 1.),
             needs_render: false,
+            normal_texture: new_texture_from_png(
+                assets_dir.join("teapot_normal.png"),
+                &device,
+                &mut image_buffer,
+            ),
             render_pipeline_state: {
                 let mut desc = new_render_pipeline_descriptor(
                     "Plane",
@@ -159,7 +167,8 @@ impl RendererDelgate for Delegate {
                 FragBufferIndex::LightSpace as _,
                 &self.light_space,
             );
-            encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
+            encoder.set_fragment_texture(FragTextureIndex::Normal as _, Some(&self.normal_texture));
+            // encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
             draw_patches_with_tesselation_factor_buffer(
                 encoder,
                 &self.tessellation_factors_buffer,

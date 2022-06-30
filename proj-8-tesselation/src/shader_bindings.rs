@@ -100,3 +100,9 @@ pub enum FragBufferIndex {
     LightSpace = 1,
     LENGTH = 2,
 }
+#[repr(u32)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FragTextureIndex {
+    Normal = 0,
+    LENGTH = 1,
+}

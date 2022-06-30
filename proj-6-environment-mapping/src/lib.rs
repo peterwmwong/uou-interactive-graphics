@@ -2,15 +2,9 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::camera, metal::*, metal_types::*, *};
+use metal_app::{components::camera, image_helpers, metal::*, metal_types::*, *};
 use shader_bindings::*;
-use std::{
-    f32::consts::PI,
-    fs,
-    ops::Neg,
-    path::{Path, PathBuf},
-    simd::f32x2,
-};
+use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
@@ -40,39 +34,6 @@ const CUBEMAP_TEXTURE_WIDTH: u32 = 2048;
 const CUBEMAP_TEXTURE_HEIGHT: u32 = CUBEMAP_TEXTURE_WIDTH;
 const CUBEMAP_TEXTURE_BYTES_PER_ROW: u32 = CUBEMAP_TEXTURE_WIDTH * CUBEMAP_TEXTURE_BYTES_PER_PIXEL;
 const CUBEMAP_TEXTURE_BYTES_PER_FACE: u32 = CUBEMAP_TEXTURE_HEIGHT * CUBEMAP_TEXTURE_BYTES_PER_ROW;
-
-fn read_png_pixel_bytes_into<P: AsRef<Path>>(path_to_png: P, mut buffer: &mut Vec<u8>) -> usize {
-    let mut decoder =
-        png::Decoder::new(fs::File::open(&path_to_png).expect("Could not open input PNG file."));
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
-
-    let mut reader = decoder.read_info().expect("Could not read input PNG file.");
-    let info = reader.info();
-    assert!(
-        info.trns.is_none(),
-        "input PNG file contains unsupported tRNS"
-    );
-    let &png::Info {
-        width,
-        height,
-        color_type,
-        ..
-    } = info;
-
-    assert_eq!(width, CUBEMAP_TEXTURE_WIDTH);
-    assert_eq!(height, CUBEMAP_TEXTURE_HEIGHT);
-    assert!(
-        (color_type == png::ColorType::Rgba),
-        "Unexpected input PNG file color format, expected RGB or RGBA"
-    );
-
-    let size = reader.output_buffer_size();
-    buffer.resize(size, 0);
-    reader
-        .next_frame(&mut buffer)
-        .expect("Could not read image data from input PNG file.");
-    size
-}
 
 impl<'a> RendererDelgate for Delegate<'a> {
     fn new(device: Device) -> Self {
@@ -112,7 +73,13 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .iter()
             .enumerate()
             {
-                let bytes = read_png_pixel_bytes_into(cubemap_path.join(filename), &mut buffer);
+                let (bytes, (width, height)) = image_helpers::read_png_pixel_bytes_into(
+                    cubemap_path.join(filename),
+                    &mut buffer,
+                );
+
+                assert_eq!(width, CUBEMAP_TEXTURE_WIDTH);
+                assert_eq!(height, CUBEMAP_TEXTURE_HEIGHT);
                 assert_eq!(
                     bytes, CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
                     "Unexpected number of bytes read for cube map texture"
