@@ -38,30 +38,17 @@ impl RenderableModelObject {
         let model = Model::from_file(
             model_file,
             device,
-            // TODO: Does #[inline] do anything for these lambdas?
-            |arg: &mut Geometry,
-             GeometryToEncode {
-                 indices_buffer,
-                 positions_buffer,
-                 normals_buffer,
-                 tx_coords_buffer,
-             }| {
-                arg.indices = indices_buffer;
-                arg.positions = positions_buffer;
-                arg.normals = normals_buffer;
-                arg.tx_coords = tx_coords_buffer;
+            |arg: &mut Geometry, geo| {
+                arg.indices = geo.indices_buffer;
+                arg.positions = geo.positions_buffer;
+                arg.normals = geo.normals_buffer;
+                arg.tx_coords = geo.tx_coords_buffer;
             },
-            |arg: &mut Material,
-             MaterialToEncode {
-                 ambient_texture,
-                 diffuse_texture,
-                 specular_texture,
-                 specular_shineness,
-             }| {
-                arg.ambient_texture = ambient_texture;
-                arg.diffuse_texture = diffuse_texture;
-                arg.specular_texture = specular_texture;
-                arg.specular_shineness = specular_shineness;
+            |arg: &mut Material, mat| {
+                arg.ambient_texture = mat.ambient_texture;
+                arg.diffuse_texture = mat.diffuse_texture;
+                arg.specular_texture = mat.specular_texture;
+                arg.specular_shineness = mat.specular_shineness;
                 arg.ambient_amount = ambient_amount;
             },
         );
@@ -110,20 +97,20 @@ impl Default for Space {
 }
 
 struct Delegate {
-    camera: camera::Camera,
     camera_space: Space,
+    camera: camera::Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
-    needs_render: bool,
-    light: camera::Camera,
     light_matrix_world_to_projection: f32x4x4,
     light_space: Space,
-    model_pipeline_state: RenderPipelineState,
-    model: RenderableModelObject,
-    model_plane: RenderableModelObject,
+    light: camera::Camera,
     model_light: RenderableModelObject,
+    model_pipeline_state: RenderPipelineState,
+    model_plane: RenderableModelObject,
+    model: RenderableModelObject,
+    needs_render: bool,
     shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
 }
@@ -136,89 +123,78 @@ impl RendererDelgate for Delegate {
         let model_file_path = std::env::args().nth(1).expect(&format!(
             "Usage: {executable_name} [Path to Wavefront OBJ file]"
         ));
-
-        let mut plane_y = 0_f32;
-        let model = RenderableModelObject::new(
-            "Model",
-            &device,
-            PathBuf::from(model_file_path),
-            |&MaxBounds { center, size }| {
-                let &[cx, cy, cz, _] = center.neg().as_array();
-
-                // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
-                // 1. Camera distance is invariant of the model's coordinate range
-                // 2. Dramatically reduces precision errors (compared to ranges >1000, like in Yoda model)
-                //    - In the Vertex Shader, z-fighting in the depth buffer, even with Depth32Float.
-                //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
-                //      exhibit a weird triangal-ish pattern.
-                let scale = 1. / size.reduce_max();
-
-                // Put the plane (subsequent RenderableModelObject) right below the model.
-                // Store the floating point value as a u32 normalized ([0,1] -> [0,u32::MAX]).
-                plane_y = 0.5 * scale * size[2];
-                assert!(plane_y >= 0.0 && plane_y <= 1.0, "Calculated Y-coordinate of the Plane is invalid. Calculation is based on the bounding box size of model.");
-
-                (f32x4x4::scale(scale, scale, scale, 1.)
-                    * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
-                    * f32x4x4::translate(cx, cy, cz)
-            },
-            DEFAULT_AMBIENT_AMOUNT,
-        );
-        let model_plane = RenderableModelObject::new(
-            "Model",
-            &device,
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("assets")
-                .join("plane")
-                .join("plane.obj"),
-            |_| f32x4x4::translate(0., -plane_y, 0.),
-            DEFAULT_AMBIENT_AMOUNT,
-        );
-        let model_light = RenderableModelObject::new(
-            "Model",
-            &device,
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("assets")
-                .join("light")
-                .join("light.obj"),
-            |_| f32x4x4::translate(0., 0., 0.),
-            0.8,
-        );
-
-        // TODO: Change create_pipline to take a Function objects and create helper for getting many
-        // function in one shot.
-        // - There's alot of reusing of vertex and fragment functions
-        //    - `main_vertex` x 2
-        //    - `main_fragment` x 2
-        // - Alternatively (maybe even better), we extract the descriptor and allow callers to mutate
-        //   and reuse the descriptor.
-        //    1. Create descriptor
-        //    2. Create Pipeline 1
-        //    3. Change fragment function
-        //    4. Create Pipeline 2
-        //    5. etc.
-
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
 
+        let mut plane_y = 0_f32;
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
         Self {
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             camera_space: Default::default(),
             command_queue: device.new_command_queue(),
+            depth_texture: None,
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            depth_texture: None,
             light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true, 1.),
             light_matrix_world_to_projection: f32x4x4::identity(),
             light_space: Default::default(),
-            model,
-            model_light,
-            model_plane,
+            model: RenderableModelObject::new(
+                "Model",
+                &device,
+                model_file_path,
+                #[inline]
+                |&MaxBounds { center, size }| {
+                    let &[cx, cy, cz, _] = center.neg().as_array();
+
+                    // IMPORTANT: Normalize the world coordinates to a reasonable range ~[0, 1].
+                    // 1. Camera distance is invariant of the model's coordinate range
+                    // 2. Dramatically reduces precision errors (compared to ranges >1000, like in Yoda model)
+                    //    - In the Vertex Shader, z-fighting in the depth buffer, even with Depth32Float.
+                    //    - In the Fragment Shader, diffuse and specular lighting is no longer smooth and
+                    //      exhibit a weird triangal-ish pattern.
+                    let scale = 1. / size.reduce_max();
+
+                    // Put the plane (subsequent RenderableModelObject) right below the model.
+                    // Store the floating point value as a u32 normalized ([0,1] -> [0,u32::MAX]).
+                    plane_y = 0.5 * scale * size[2];
+                    assert!(plane_y >= 0.0 && plane_y <= 1.0, "Calculated Y-coordinate of the Plane is invalid. Calculation is based on the bounding box size of model.");
+
+                    (f32x4x4::scale(scale, scale, scale, 1.)
+                        * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
+                        * f32x4x4::translate(cx, cy, cz)
+                },
+                DEFAULT_AMBIENT_AMOUNT,
+            ),
+            model_light: RenderableModelObject::new(
+                "Model",
+                &device,
+                assets_dir.join("light").join("light.obj"),
+                |_| f32x4x4::translate(0., 0., 0.),
+                0.8,
+            ),
+            model_plane: RenderableModelObject::new(
+                "Model",
+                &device,
+                assets_dir.join("plane").join("plane.obj"),
+                |_| f32x4x4::translate(0., -plane_y, 0.),
+                DEFAULT_AMBIENT_AMOUNT,
+            ),
+            // TODO: Change create_pipline to take a Function objects and create helper for getting many
+            // function in one shot.
+            // - There's alot of reusing of vertex and fragment functions
+            //    - `main_vertex` x 2
+            // - Alternatively (maybe even better), we extract the descriptor and allow callers to mutate
+            //   and reuse the descriptor.
+            //    1. Create descriptor
+            //    2. Create Pipeline 1
+            //    3. Change fragment function
+            //    4. Create Pipeline 2
+            //    5. etc.
             model_pipeline_state: {
                 let p = create_pipeline(
                     &device,
@@ -315,11 +291,10 @@ impl RendererDelgate for Delegate {
         }
 
         // Render Models
-        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-            render_target,
-            self.depth_texture.as_ref(),
-        ));
         {
+            let encoder = command_buffer.new_render_command_encoder(
+                new_basic_render_pass_descriptor(render_target, self.depth_texture.as_ref()),
+            );
             let mut models = [
                 &mut self.model,
                 &mut self.model_light,
@@ -346,8 +321,8 @@ impl RendererDelgate for Delegate {
             models
                 .iter_mut()
                 .for_each(|m| m.encode_render(encoder, matrix_world_to_projection));
+            encoder.end_encoding();
         }
-        encoder.end_encoding();
         command_buffer
     }
 
