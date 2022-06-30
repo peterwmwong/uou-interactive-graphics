@@ -1,8 +1,7 @@
 // Header containing types and enum struct constants shared between Metal shaders and Rust source code
 //
 // These are used to generate Rust types in the `build.rs` build script.
-#ifndef common_h
-#define common_h
+#pragma once
 
 #ifdef __METAL_VERSION__
 
@@ -70,5 +69,3 @@ enum struct FragTextureIndex: unsigned int
     CubeMapTexture = 0,
     ModelTexture
 };
-
-#endif

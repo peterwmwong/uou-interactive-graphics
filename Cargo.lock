@@ -442,6 +442,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "metal-shaders"
+version = "0.1.0"
+
+[[package]]
 name = "metal-types"
 version = "0.1.0"
 dependencies = [

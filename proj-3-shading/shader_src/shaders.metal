@@ -1,5 +1,5 @@
 #include <metal_stdlib>
-#include "./common.h"
+#include "./shader_bindings.h"
 
 using namespace metal;
 

@@ -2,6 +2,7 @@
 members = [
     "metal-app",
     "metal-build",
+    "metal-shaders",
     "metal-types",
     "png-add-alpha",
     "proj-*/"

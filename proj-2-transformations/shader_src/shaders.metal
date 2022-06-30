@@ -1,5 +1,5 @@
 #include <metal_stdlib>
-#include "./common.h"
+#include "./shader_bindings.h"
 
 using namespace metal;
 
@@ -154,7 +154,7 @@ main_vertex(         uint            vertex_id        [[instance_id]],
         .position = projection_position,
 
         // OPTIONAL: Slight differentiation between points close to the camera from those far away.
-        // TODO: Replace 1024.0 with a common.h "INITIAL_SCREEN_SIZE"
+        // TODO: Replace 1024.0 with a shader_bindings.h "INITIAL_SCREEN_SIZE"
         .size = (200.0 * screen_size.y / 1024.0)
                     / (use_perspective ? projection_position.w : view_position.z),
 

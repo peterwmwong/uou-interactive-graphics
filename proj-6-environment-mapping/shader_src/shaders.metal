@@ -1,8 +1,58 @@
 #include <metal_stdlib>
-#include "./shading.h"
-#include "./common.h"
+#include "../../metal-shaders/shader_src/shading.h"
+#include "./shader_bindings.h"
 
 using namespace metal;
+
+inline half4 shade_mirror(const float4            screen_pos,
+                          const float4            camera_pos_f,
+                          const float3            normal_f,
+                          const float4x4          matrix_screen_to_world,
+                          const texturecube<half> bg_texture,
+                          const bool              is_mirrored) {
+    // TODO: API-wise `is_mirrored` is not great, find a better way to transform the world
+    // (ex. Mirroring). And ponder... (huge bong hit) why?
+    // - For geometry, we've acccomplished this in the main_vertex shader...
+    //   - Hardcoded (but could be generalized) the plane (XZ-plane) the mirror resides on
+    //   - Calculate the reflected coordinate for each vertex/normal
+    // - BUT, 2 other worldly objects are missing in this transform: Light and Environment/Skybox
+    //   - That's what this `is_mirrored` seeks to resolve, last minute transform Light Position and
+    //     Environment Mapping.
+    // - There must be a more maintainable/complete/general way representing a world transformations
+    //   and all the things affecting by it.
+    //   - Is it simply using/updating the matrix_*_to_world transform matrices?
+    //   - Is it introducing a new transform matrix (world_to_world2) that's usually the identity
+    //     matrix.
+    //   - Figure out what does a generalized mirror matrix transform look like (negative scaling?)
+    // - Stepping back for a moment, how common are world transforms?
+    //   - Other than mirror-ing for rendering perfect-ish mirrors, where else are you
+    //     moving/scaling/translating the whole world?
+    //   - Is it mostly camera effects (ex. viewports) and thinking of it in terms of transforming
+    //     the world (although equivalent) is practically harder?
+    const half3 world_transform = half3(1, (is_mirrored ? -1. : 1.), 1);
+
+    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
+    const float4 pos_w      = matrix_screen_to_world * float4(screen_pos.xyz, 1);
+    const half3  pos        = half3(pos_w.xyz / pos_w.w);
+    const half3  camera_pos = half3(camera_pos_f.xyz);
+    const half3  camera_dir = normalize(pos - camera_pos.xyz);
+    const half3  normal     = half3(normalize(normal_f));
+    const half3  ref        = reflect(camera_dir, normal) * world_transform;
+
+    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
+    const half4 bg_color = bg_texture.sample(tx_sampler, float3(ref));
+    // TODO: Bring back the Light component (moveable, rendered light) to proj-6.
+    const half3 light_pos = half3(0, 1, -1) * world_transform;
+    return shade_phong_blinn(
+        {
+            .frag_pos   = pos,
+            .light_pos  = light_pos,
+            .camera_pos = camera_pos,
+            .normal     = normal
+        },
+        ConstantMaterial(half4(1), bg_color, bg_color, 50)
+    );
+}
 
 struct BGVertexOut {
     float4 position [[position]];

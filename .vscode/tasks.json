@@ -88,7 +88,7 @@
             "problemMatcher": []
         },
         {
-            "label": "compile-and-emit-shader-asm",
+            "label": "metal-compile-and-emit-asm",
             "type": "shell",
             "presentation": {
                 "echo": true,
@@ -101,20 +101,6 @@
             },
             "problemMatcher": [],
             "command": "xcrun -sdk macosx metal -std=metal3.0 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
-        },
-        {
-            "label": "diff-release-asm",
-            "type": "shell",
-            "presentation": {
-                "echo": false,
-                "reveal": "silent",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
-            },
-            "command": "touch /tmp/void-renderer-BEFORE.s && touch /tmp/void-renderer-AFTER.s && /usr/local/bin/code-insiders --diff /tmp/void-renderer-BEFORE.s /tmp/void-renderer-AFTER.s",
-            "problemMatcher": []
         },
         {
             "type": "cargo",
