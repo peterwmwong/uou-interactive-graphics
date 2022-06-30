@@ -205,6 +205,23 @@ pub fn create_pipeline(
 }
 
 #[inline]
+pub fn new_depth_only_render_pass_descriptor<'a, 'b, 'c>(
+    depth_texture: Option<&'b Texture>,
+) -> &'c RenderPassDescriptorRef {
+    let desc = RenderPassDescriptor::new();
+    if let Some(depth_texture) = depth_texture {
+        let a = desc
+            .depth_attachment()
+            .expect("Failed to access depth/stencil attachment on render pass descriptor");
+        a.set_clear_depth(1.);
+        a.set_load_action(MTLLoadAction::Clear);
+        a.set_store_action(MTLStoreAction::Store);
+        a.set_texture(Some(depth_texture));
+    }
+    desc
+}
+
+#[inline]
 pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
     render_target: &'a TextureRef,
     depth_texture: Option<&'b Texture>,
@@ -215,10 +232,10 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
             .color_attachments()
             .object_at(0)
             .expect("Failed to access color attachment on render pass descriptor");
-        a.set_texture(Some(render_target));
-        a.set_load_action(MTLLoadAction::Clear);
         a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
+        a.set_load_action(MTLLoadAction::Clear);
         a.set_store_action(MTLStoreAction::Store);
+        a.set_texture(Some(render_target));
     }
     if let Some(depth_texture) = depth_texture {
         let a = desc

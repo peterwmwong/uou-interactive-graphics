@@ -270,16 +270,9 @@ impl RendererDelgate for Delegate {
 
         // Render Shadow Map
         {
-            let desc = RenderPassDescriptor::new();
-            let a = desc
-                .depth_attachment()
-                .expect("Failed to access depth/stencil attachment on render pass descriptor");
-            a.set_clear_depth(1.);
-            a.set_load_action(MTLLoadAction::Clear);
-            a.set_store_action(MTLStoreAction::Store);
-            a.set_texture(self.shadow_map_texture.as_deref());
-
-            let encoder = command_buffer.new_render_command_encoder(desc);
+            let encoder = command_buffer.new_render_command_encoder(
+                new_depth_only_render_pass_descriptor(self.shadow_map_texture.as_ref()),
+            );
             encoder.push_debug_group("Shadow Map (Light 1)");
             self.model.encode_use_resources(encoder);
             encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
