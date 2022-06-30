@@ -198,18 +198,17 @@ impl RendererDelgate for Delegate {
             //    4. Create Pipeline 2
             //    5. etc.
             model_pipeline_state: {
-                let p = create_pipeline(
+                let p = create_render_pipeline(
                     &device,
-                    &library,
-                    &mut new_basic_render_pipeline_descriptor(
-                        DEFAULT_PIXEL_FORMAT,
+                    &new_render_pipeline_descriptor(
+                        "Model",
+                        &library,
+                        Some((DEFAULT_PIXEL_FORMAT, false)),
                         Some(DEPTH_TEXTURE_FORMAT),
-                        false,
+                        None,
+                        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                        Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
                     ),
-                    "Model",
-                    None,
-                    (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
                 );
                 debug_assert_argument_buffer_size::<
                     { VertexBufferIndex::ModelSpace as _ },
@@ -234,16 +233,17 @@ impl RendererDelgate for Delegate {
             // - Depth State Creation
             // - Camera and Light Space Creation
             shadow_map_pipeline: {
-                let mut depth_only_desc = RenderPipelineDescriptor::new();
-                depth_only_desc.set_depth_attachment_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
-                let p = create_pipeline(
+                let p = create_render_pipeline(
                     &device,
-                    &library,
-                    &mut depth_only_desc,
-                    "Shadow Map",
-                    None,
-                    (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                    None,
+                    &new_render_pipeline_descriptor(
+                        "Shadow Map",
+                        &library,
+                        None,
+                        Some(DEPTH_TEXTURE_FORMAT),
+                        None,
+                        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                        None,
+                    ),
                 );
                 debug_assert_argument_buffer_size::<
                     { VertexBufferIndex::ModelSpace as _ },
@@ -272,9 +272,12 @@ impl RendererDelgate for Delegate {
 
         // Render Shadow Map
         {
-            let encoder = command_buffer.new_render_command_encoder(
-                new_depth_only_render_pass_descriptor(self.shadow_map_texture.as_ref()),
-            );
+            let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+                None,
+                self.shadow_map_texture
+                    .as_ref()
+                    .map(|s| (s, MTLStoreAction::Store)),
+            ));
             encoder.set_label("Render Shadow Map");
             encoder.push_debug_group("Shadow Map (Light 1)");
             self.model.encode_use_resources(encoder);
@@ -288,9 +291,12 @@ impl RendererDelgate for Delegate {
 
         // Render Models
         {
-            let encoder = command_buffer.new_render_command_encoder(
-                new_basic_render_pass_descriptor(render_target, self.depth_texture.as_ref()),
-            );
+            let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+                Some(render_target),
+                self.depth_texture
+                    .as_ref()
+                    .map(|d| (d, MTLStoreAction::DontCare)),
+            ));
             encoder.set_label("Render Models");
             let mut models = [
                 &mut self.model,

@@ -23,16 +23,19 @@ impl RendererDelgate for CheckerboardDelegate {
         Self {
             command_queue: device.new_command_queue(),
             needs_render: true,
-            render_pipeline_state: create_pipeline(
+            render_pipeline_state: create_render_pipeline(
                 &device,
-                &device
-                    .new_library_with_data(LIBRARY_BYTES)
-                    .expect("Failed to import shader metal lib."),
-                &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
-                "Checkerboard",
-                None,
-                (&"checkerboard_vertex", 0),
-                Some((&"checkerboard_fragment", 0)),
+                &new_render_pipeline_descriptor(
+                    "Checkerboard",
+                    &device
+                        .new_library_with_data(LIBRARY_BYTES)
+                        .expect("Failed to import shader metal lib."),
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    None,
+                    None,
+                    Some((&"checkerboard_vertex", 0)),
+                    Some((&"checkerboard_fragment", 0)),
+                ),
             )
             .pipeline_state,
             device,
@@ -46,7 +49,7 @@ impl RendererDelgate for CheckerboardDelegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         let encoder = command_buffer
-            .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
+            .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
         // Render Plane
         {
             encoder.push_debug_group("Checkerboard");
@@ -91,14 +94,17 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let render_pipeline_state = {
-            create_pipeline(
+            create_render_pipeline(
                 &device,
-                &library,
-                &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
-                "Plane",
-                None,
-                (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                &new_render_pipeline_descriptor(
+                    "Plane",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    None,
+                    None,
+                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                ),
             )
             .pipeline_state
         };
@@ -145,7 +151,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
         };
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer
-            .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
+            .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
         // Render Plane
         {
             encoder.push_debug_group("Plane");

@@ -4,27 +4,47 @@
 
 using namespace metal;
 
+typedef MTLQuadTessellationFactorsHalf QuadTessellFactors;
+
+kernel void tessell_compute(constant float              & factor  [[buffer(TesselComputeBufferIndex::TessellFactor)]],
+                            device   QuadTessellFactors * out     [[buffer(TesselComputeBufferIndex::OutputTessellFactors)]],
+                                     uint                 pid     [[thread_position_in_grid]])
+{
+    out[pid].edgeTessellationFactor[0] = factor;
+    out[pid].edgeTessellationFactor[1] = factor;
+    out[pid].edgeTessellationFactor[2] = factor;
+    out[pid].edgeTessellationFactor[3] = factor;
+    out[pid].insideTessellationFactor[0] = factor;
+    out[pid].insideTessellationFactor[1] = factor;
+}
+
 struct VertexOut
 {
     float4 position [[position]];
     float3 normal;
 };
 
-vertex VertexOut
-main_vertex(         uint    vertex_id [[vertex_id]],
-            constant Space & camera    [[buffer(FragBufferIndex::CameraSpace)]])
+[[patch(quad, 4)]]
+[[vertex]] VertexOut
+main_vertex(         float2  patch_coord [[position_in_patch]],
+            constant Space & camera      [[buffer(VertexBufferIndex::CameraSpace)]])
 {
-    // Vertices of Plane front and upright (like a wall), along the x/y axis.
-    constexpr const float plane_size = 0.9;
-    constexpr const float2 verts_xy[4] = {
-        {-1, -1}, // Bottom Left
-        {-1,  1}, // Top    Left
-        { 1, -1}, // Bottom Rigt
-        { 1,  1}, // Top    Right
-    };
-    const float2 v = verts_xy[vertex_id] * plane_size;
+    // Control Points
+    constexpr float  size = 0.5;
+    constexpr float2 tl = float2(-1, 1);  // top-left
+    constexpr float2 tr = float2(1, 1);   // top-right
+    constexpr float2 br = float2(1, -1);  // bottom-right
+    constexpr float2 bl = float2(-1, -1); // bottom-left
+
+    const float u = patch_coord.x;
+    const float v = patch_coord.y;
+
+    // Linear interpolation
+    const float2 upper_middle = mix(tl, tr, u);
+    const float2 lower_middle = mix(br, bl, 1-u);
+    const float4 position     = float4(mix(upper_middle, lower_middle, v) * size, 0.0, 1.0);
     return {
-        .position = camera.matrix_world_to_projection * float4(v[0], v[1], 0, 1),
+        .position = camera.matrix_world_to_projection * position,
         .normal   = float3(0, 0, -1),
     };
 }

@@ -1,7 +1,6 @@
 use crate::{
     objc_helpers::debug_assert_objc_class,
     renderer::{MetalRenderer, RendererDelgate},
-    unwrap_helpers::unwrap_option_dcheck,
     ModifierKeys, MouseButton, UserEvent,
 };
 use cocoa::{
@@ -88,10 +87,8 @@ fn init_and_attach_view<R: RendererDelgate + 'static>(
 ) {
     unsafe {
         use cocoa::appkit::NSView;
-        let mut decl = unwrap_option_dcheck(
-            ClassDecl::new("CustomNSView", class!(NSView)),
-            "Unable to create custom NSView (CustomNSView)",
-        );
+        let mut decl = ClassDecl::new("CustomNSView", class!(NSView))
+            .expect("Unable to create custom NSView (CustomNSView)");
         decl.add_method(sel!(acceptsFirstResponder), {
             extern "C" fn accepts_first_responder(_this: &Object, _sel: Sel) -> BOOL {
                 YES

@@ -48,11 +48,6 @@ struct PipelineResults {
 }
 
 fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
-    let mut base_pipeline_desc = new_basic_render_pipeline_descriptor(
-        DEFAULT_PIXEL_FORMAT,
-        Some(DEPTH_TEXTURE_FORMAT),
-        false,
-    );
     let function_constants = FunctionConstantValues::new();
     for index in [
         FC::HasAmbient as usize,
@@ -67,23 +62,29 @@ fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineR
         );
     }
     PipelineResults {
-        model_pipeline: create_pipeline(
+        model_pipeline: create_render_pipeline(
             &device,
-            &library,
-            &mut base_pipeline_desc,
-            "Model",
-            Some(&function_constants),
-            (&"main_vertex", VertexBufferIndex::LENGTH as _),
-            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+            &new_render_pipeline_descriptor(
+                "Plane",
+                &library,
+                Some((DEFAULT_PIXEL_FORMAT, false)),
+                None,
+                Some(&function_constants),
+                Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+            ),
         ),
-        light_pipeline: create_pipeline(
+        light_pipeline: create_render_pipeline(
             &device,
-            &library,
-            &mut base_pipeline_desc,
-            "Light",
-            Some(&function_constants),
-            (&"light_vertex", LightVertexBufferIndex::LENGTH as _),
-            Some((&"light_fragment", 0)),
+            &new_render_pipeline_descriptor(
+                "Light",
+                &library,
+                Some((DEFAULT_PIXEL_FORMAT, false)),
+                None,
+                Some(&function_constants),
+                Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
+                Some((&"light_fragment", 0)),
+            ),
         ),
     }
 }
@@ -216,9 +217,11 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-            render_target,
-            self.depth_texture.as_ref(),
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some(render_target),
+            self.depth_texture
+                .as_ref()
+                .map(|d| (d, MTLStoreAction::DontCare)),
         ));
         // Render Model
         {

@@ -28,10 +28,10 @@ impl RendererDelgate for Delegate {
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
             let desc = RenderPassDescriptor::new();
-            let attachment = unwrap_option_dcheck(
-                desc.color_attachments().object_at(0),
-                "Failed to access color attachment on render pass descriptor",
-            );
+            let attachment = desc
+                .color_attachments()
+                .object_at(0)
+                .expect("Failed to access color attachment on render pass descriptor");
             attachment.set_texture(Some(render_target));
             attachment.set_load_action(MTLLoadAction::Clear);
             let rads = self.now.elapsed().as_secs_f32() * std::f32::consts::PI;

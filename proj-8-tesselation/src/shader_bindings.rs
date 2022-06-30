@@ -83,6 +83,12 @@ fn bindgen_test_layout_Space() {
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub enum TesselComputeBufferIndex {
+    TessellFactor = 0,
+    OutputTessellFactors = 1,
+}
+#[repr(u32)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {
     CameraSpace = 0,
     LENGTH = 1,

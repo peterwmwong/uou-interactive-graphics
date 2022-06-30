@@ -1,7 +1,7 @@
-use crate::{unwrap_option_dcheck, unwrap_result_dcheck};
+use cocoa::base::{nil, NO};
 use metal::*;
 use objc::runtime::Sel;
-use std::ffi::c_void;
+use std::{ffi::c_void, ops::Deref};
 
 pub const DEFAULT_RESOURCE_OPTIONS: MTLResourceOptions = MTLResourceOptions::from_bits_truncate(
     MTLResourceOptions::StorageModeShared.bits()
@@ -112,22 +112,59 @@ pub fn encode_fragment_bytes<T: Sized>(
 pub const DEFAULT_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
 
 #[inline]
-pub fn new_basic_render_pipeline_descriptor(
-    pixel_format: MTLPixelFormat,
-    depth_pixel_format: Option<MTLPixelFormat>,
-    blending: bool,
+pub fn new_render_pipeline_descriptor(
+    label: &str,
+    library: &Library,
+    color_attachment_format_blending: Option<(MTLPixelFormat, bool)>,
+    depth_attachment_format: Option<MTLPixelFormat>,
+    func_constants: Option<&FunctionConstantValues>,
+    vertex_func_name_num_imm_buffers: Option<(&str, usize)>,
+    frag_func_name_num_imm_buffers: Option<(&str, usize)>,
 ) -> RenderPipelineDescriptor {
-    let base_pipeline_desc = RenderPipelineDescriptor::new();
-    let desc = base_pipeline_desc
-        .color_attachments()
-        .object_at(0 as u64)
-        .expect("Failed to access color attachment on pipeline descriptor");
-    desc.set_blending_enabled(blending);
-    desc.set_pixel_format(pixel_format);
-    if let Some(depth_pixel_format) = depth_pixel_format {
-        base_pipeline_desc.set_depth_attachment_pixel_format(depth_pixel_format);
+    let pipeline_desc = RenderPipelineDescriptor::new();
+    pipeline_desc.set_label(label);
+
+    if let Some((pixel_format, blending)) = color_attachment_format_blending {
+        let desc = pipeline_desc
+            .color_attachments()
+            .object_at(0 as u64)
+            .expect("Failed to access color attachment on pipeline descriptor");
+        desc.set_blending_enabled(blending);
+        desc.set_pixel_format(pixel_format);
     }
-    base_pipeline_desc
+
+    if let Some(depth_pixel_format) = depth_attachment_format {
+        pipeline_desc.set_depth_attachment_pixel_format(depth_pixel_format);
+    }
+
+    let set_buffers_immutable = |buffers: Option<&PipelineBufferDescriptorArrayRef>, num: usize| {
+        let buffers = buffers
+            .expect("Failed to access render pipeline descriptor buffers (vertex or fragment)");
+        for buffer_index in 0..num {
+            buffers
+                .object_at(buffer_index as _)
+                .expect("Failed to access fragment buffer")
+                .set_mutability(MTLMutability::Immutable);
+        }
+    };
+
+    if let Some((vertex_func_name, num_imm_buffers)) = vertex_func_name_num_imm_buffers {
+        let vertex_function = library
+            .get_function(vertex_func_name, func_constants.map(|f| f.to_owned()))
+            .expect("Failed to access vertex shader function from metal library");
+        pipeline_desc.set_vertex_function(Some(&vertex_function));
+        set_buffers_immutable(pipeline_desc.vertex_buffers(), num_imm_buffers);
+    }
+
+    if let Some((frag_func_name, num_imm_buffers)) = frag_func_name_num_imm_buffers {
+        let fragment_function = library
+            .get_function(frag_func_name, func_constants.map(|f| f.to_owned()))
+            .expect("Failed to access fragment shader function from metal library");
+        pipeline_desc.set_fragment_function(Some(&fragment_function));
+        set_buffers_immutable(pipeline_desc.fragment_buffers(), num_imm_buffers);
+    }
+
+    pipeline_desc
 }
 
 pub struct CreateRenderPipelineResults {
@@ -136,67 +173,18 @@ pub struct CreateRenderPipelineResults {
     pub pipeline_state_reflection: RenderPipelineReflection,
 }
 
-#[inline]
-pub fn create_pipeline(
+pub fn create_render_pipeline(
     device: &Device,
-    library: &Library,
-    pipeline_desc: &mut RenderPipelineDescriptor,
-    label: &str,
-    func_constants: Option<&FunctionConstantValues>,
-    vertex_func_name_num_imm_buffers: (&str, usize),
-    frag_func_name_num_imm_buffers: Option<(&str, usize)>,
+    pipeline_desc: &RenderPipelineDescriptor,
 ) -> CreateRenderPipelineResults {
-    pipeline_desc.set_label(label);
-
-    let (vertex_func_name, num_vertex_immutable_buffers) = vertex_func_name_num_imm_buffers;
-    let vertex_function = unwrap_result_dcheck(
-        library.get_function(vertex_func_name, func_constants.map(|f| f.to_owned())),
-        "Failed to access vertex shader function from metal library",
-    );
-    pipeline_desc.set_vertex_function(Some(&vertex_function));
-
-    if let Some((frag_func_name, ..)) = frag_func_name_num_imm_buffers {
-        let fragment_function = unwrap_result_dcheck(
-            library.get_function(frag_func_name, func_constants.map(|f| f.to_owned())),
-            "Failed to access fragment shader function from metal library",
-        );
-        pipeline_desc.set_fragment_function(Some(&fragment_function));
-    }
-    for r in [
-        Some((pipeline_desc.vertex_buffers(), num_vertex_immutable_buffers)),
-        frag_func_name_num_imm_buffers.map(|(_, num_immutable_buffers)| {
-            (pipeline_desc.fragment_buffers(), num_immutable_buffers)
-        }),
-    ] {
-        if let Some((buffers, num)) = r {
-            let buffers = unwrap_option_dcheck(
-                buffers,
-                "Failed to access render pipeline descriptor buffers (vertex or fragment)",
-            );
-            for buffer_index in 0..num {
-                unwrap_option_dcheck(
-                    buffers.object_at(buffer_index as _),
-                    "Failed to access fragment buffer",
-                )
-                .set_mutability(MTLMutability::Immutable);
-            }
-        }
-    }
-
     #[cfg(debug_assertions)]
-    let (pipeline_state, pipeline_state_reflection) = unwrap_result_dcheck(
-        device.new_render_pipeline_state_with_reflection(
-            &pipeline_desc,
-            MTLPipelineOption::ArgumentInfo,
-        ),
-        "Failed to create render pipeline",
-    );
+    let (pipeline_state, pipeline_state_reflection) = device
+        .new_render_pipeline_state_with_reflection(&pipeline_desc, MTLPipelineOption::ArgumentInfo)
+        .expect("Failed to create render pipeline");
     #[cfg(not(debug_assertions))]
-    let pipeline_state = unwrap_result_dcheck(
-        device.new_render_pipeline_state(&pipeline_desc),
-        "Failed to create render pipeline",
-    );
-
+    let pipeline_state = device
+        .new_render_pipeline_state(&pipeline_desc)
+        .expect("Failed to create render pipeline");
     CreateRenderPipelineResults {
         pipeline_state,
         #[cfg(debug_assertions)]
@@ -205,29 +193,12 @@ pub fn create_pipeline(
 }
 
 #[inline]
-pub fn new_depth_only_render_pass_descriptor<'a, 'b, 'c>(
-    depth_texture: Option<&'b Texture>,
+pub fn new_render_pass_descriptor<'a, 'b, 'c>(
+    render_target: Option<&'a TextureRef>,
+    depth_texture: Option<(&'b Texture, MTLStoreAction)>,
 ) -> &'c RenderPassDescriptorRef {
     let desc = RenderPassDescriptor::new();
-    if let Some(depth_texture) = depth_texture {
-        let a = desc
-            .depth_attachment()
-            .expect("Failed to access depth/stencil attachment on render pass descriptor");
-        a.set_clear_depth(1.);
-        a.set_load_action(MTLLoadAction::Clear);
-        a.set_store_action(MTLStoreAction::Store);
-        a.set_texture(Some(depth_texture));
-    }
-    desc
-}
-
-#[inline]
-pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
-    render_target: &'a TextureRef,
-    depth_texture: Option<&'b Texture>,
-) -> &'c RenderPassDescriptorRef {
-    let desc = RenderPassDescriptor::new();
-    {
+    if let Some(render_target) = render_target {
         let a = desc
             .color_attachments()
             .object_at(0)
@@ -237,13 +208,13 @@ pub fn new_basic_render_pass_descriptor<'a, 'b, 'c>(
         a.set_store_action(MTLStoreAction::Store);
         a.set_texture(Some(render_target));
     }
-    if let Some(depth_texture) = depth_texture {
+    if let Some((depth_texture, store_action)) = depth_texture {
         let a = desc
             .depth_attachment()
             .expect("Failed to access depth/stencil attachment on render pass descriptor");
         a.set_clear_depth(1.);
         a.set_load_action(MTLLoadAction::Clear);
-        a.set_store_action(MTLStoreAction::DontCare);
+        a.set_store_action(store_action);
         a.set_texture(Some(depth_texture));
     }
     desc
@@ -298,7 +269,7 @@ pub fn debug_assert_argument_buffer_size<const BUFFER_INDEX: u64, T>(
             FunctionType::Vertex => p.pipeline_state_reflection.vertex_bindings(),
             FunctionType::Fragment => p.pipeline_state_reflection.fragment_bindings(),
         };
-        let geometry_arg_size = bindings
+        let arg_size = bindings
             .object_at_as::<BufferBindingRef>(BUFFER_INDEX)
             .expect(&format!(
                 "Failed to access binding information at buffer index {BUFFER_INDEX}"
@@ -306,7 +277,7 @@ pub fn debug_assert_argument_buffer_size<const BUFFER_INDEX: u64, T>(
             .buffer_data_size();
         debug_assert_eq!(
             std::mem::size_of::<T>(),
-            geometry_arg_size as _,
+            arg_size as _,
             "Shader bindings generated a differently sized argument struct than what Metal expects for buffer index {BUFFER_INDEX}"
         );
     }
@@ -331,4 +302,67 @@ pub fn optimize_textures_for_gpu_access(textures: &[&Texture], command_queue: &C
     enc.end_encoding();
     command_buf.commit();
     command_buf.wait_until_completed();
+}
+
+pub fn set_tessellation_config(desc: &mut RenderPipelineDescriptor) {
+    unsafe {
+        let d: &RenderPipelineDescriptorRef = desc.deref();
+        let _: () = msg_send![d, setTessellationFactorScaleEnabled: NO];
+
+        #[allow(non_upper_case_globals)]
+        const MTLTessellationFactorFormatHalf: NSUInteger = 0;
+        let _: () = msg_send![
+            d,
+            setTessellationFactorFormat: MTLTessellationFactorFormatHalf
+        ];
+
+        #[allow(non_upper_case_globals)]
+        const MTLTessellationControlPointIndexTypeNone: NSUInteger = 0;
+        let _: () = msg_send![
+            d,
+            setTessellationControlPointIndexType: MTLTessellationControlPointIndexTypeNone
+        ];
+
+        #[allow(non_upper_case_globals)]
+        const MTLTessellationFactorStepFunctionConstant: NSUInteger = 0;
+        let _: () = msg_send![
+            d,
+            setTessellationFactorStepFunction: MTLTessellationFactorStepFunctionConstant
+        ];
+
+        #[allow(non_upper_case_globals)]
+        const winding: MTLWinding = MTLWinding::Clockwise;
+        let _: () = msg_send![d, setTessellationOutputWindingOrder: winding];
+
+        #[allow(non_upper_case_globals)]
+        const MTLTessellationPartitionModeFractionalEven: NSUInteger = 3;
+        // TODO: Could be MTLTessellationPartitionModeInteger = 1 or MTLTessellationPartitionModePow2 = 0
+        let _: () = msg_send![
+            d,
+            setTessellationPartitionMode: MTLTessellationPartitionModeFractionalEven
+        ];
+
+        const MAX_TESSELLATION_FACTOR: NSUInteger = 64;
+        let _: () = msg_send![d, setMaxTessellationFactor: MAX_TESSELLATION_FACTOR];
+    };
+}
+
+#[inline]
+pub fn draw_patches_with_tesselation_factor_buffer<'a, 'b>(
+    encoder: &'a RenderCommandEncoderRef,
+    buf: &'b BufferRef,
+    patch_control_points: NSUInteger,
+) {
+    unsafe {
+        let _: () = msg_send![encoder, setTessellationFactorBuffer:buf
+                                       offset: 0
+                                       instanceStride: 0];
+        let _: () = msg_send![encoder, drawPatches:patch_control_points
+                                       patchStart:0
+                                       patchCount:1
+                                       patchIndexBuffer:nil
+                                       patchIndexBufferOffset:0
+                                       instanceCount:1
+                                       baseInstance:0];
+    };
 }

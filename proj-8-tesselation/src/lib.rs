@@ -6,7 +6,8 @@ use metal_app::{components::camera, metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{f32::consts::PI, simd::f32x2};
 
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
+const INITIAL_TESSELATION_FACTOR: f32 = 64.;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
@@ -21,6 +22,16 @@ impl Default for Space {
     }
 }
 
+impl From<camera::CameraUpdate> for Space {
+    fn from(update: camera::CameraUpdate) -> Self {
+        Space {
+            matrix_world_to_projection: update.matrix_world_to_projection,
+            matrix_screen_to_world: update.matrix_screen_to_world,
+            position_world: update.position_world.into(),
+        }
+    }
+}
+
 struct Delegate {
     camera_space: Space,
     camera: camera::Camera,
@@ -29,7 +40,10 @@ struct Delegate {
     light_space: Space,
     light: camera::Camera,
     needs_render: bool,
-    pipeline_state: RenderPipelineState,
+    render_pipeline_state: RenderPipelineState,
+    tessellation_compute_state: ComputePipelineState,
+    tessellation_factor: f32,
+    tessellation_factors_buffer: Buffer,
 }
 
 impl RendererDelgate for Delegate {
@@ -44,15 +58,21 @@ impl RendererDelgate for Delegate {
             light_space: Default::default(),
             light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true, 1.),
             needs_render: false,
-            pipeline_state: {
-                let p = create_pipeline(
-                    &device,
-                    &library,
-                    &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
+            render_pipeline_state: {
+                let mut desc = new_render_pipeline_descriptor(
                     "Plane",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
                     None,
-                    (&"main_vertex", VertexBufferIndex::LENGTH as _),
+                    None,
+                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
                     Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                );
+                set_tessellation_config(&mut desc);
+                let p = create_render_pipeline(&device, &desc);
+                debug_assert_argument_buffer_size::<{ VertexBufferIndex::CameraSpace as _ }, Space>(
+                    &p,
+                    FunctionType::Vertex,
                 );
                 debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, Space>(
                     &p,
@@ -64,6 +84,22 @@ impl RendererDelgate for Delegate {
                 );
                 p.pipeline_state
             },
+            tessellation_compute_state: {
+                let fun = library
+                    .get_function(&"tessell_compute", None)
+                    .expect("Failed to get tessellation compute function");
+                device
+                    .new_compute_pipeline_state_with_function(&fun)
+                    .expect("Failed to create tessellation compute pipeline")
+            },
+            tessellation_factor: INITIAL_TESSELATION_FACTOR,
+            tessellation_factors_buffer: {
+                // TODO: What is the exact size?
+                // - 256 was copied from Apple Metal Sample Code: https://developer.apple.com/library/archive/samplecode/MetalBasicTessellation/Introduction/Intro.html
+                let buf = device.new_buffer(256, MTLResourceOptions::StorageModePrivate);
+                buf.set_label("Tessellation Factors");
+                buf
+            },
             device,
         }
     }
@@ -72,18 +108,43 @@ impl RendererDelgate for Delegate {
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.needs_render = false;
 
-        let command_buffer = self
-            .command_queue
-            .new_command_buffer_with_unretained_references();
-        command_buffer.set_label("Renderer Command Buffer");
+        let command_buffer = self.command_queue.new_command_buffer();
+        command_buffer.set_label("Command Buffer");
 
+        // Compute Tesselation Factors
+        {
+            let encoder = command_buffer.new_compute_command_encoder();
+            encoder.set_label("Compute Tesselation");
+            encoder.push_debug_group("Compute Tesselation Factors");
+
+            encoder.set_compute_pipeline_state(&self.tessellation_compute_state);
+            encoder.set_bytes(
+                TesselComputeBufferIndex::TessellFactor as _,
+                std::mem::size_of_val(&self.tessellation_factor) as _,
+                (&self.tessellation_factor as *const f32) as _,
+            );
+            encoder.set_buffer(
+                TesselComputeBufferIndex::OutputTessellFactors as _,
+                Some(&self.tessellation_factors_buffer),
+                0,
+            );
+            let size_one = MTLSize {
+                width: 1,
+                height: 1,
+                depth: 1,
+            };
+            encoder.dispatch_thread_groups(size_one, size_one);
+            encoder.pop_debug_group();
+            encoder.end_encoding();
+        }
         // Render Plane
         {
             let encoder = command_buffer
-                .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
+                .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
             encoder.set_label("Render Plane");
-            encoder.set_render_pipeline_state(&self.pipeline_state);
-            encode_vertex_bytes::<Space>(
+            encoder.push_debug_group("Plane");
+            encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            encode_vertex_bytes(
                 encoder,
                 VertexBufferIndex::CameraSpace as _,
                 &self.camera_space,
@@ -98,26 +159,27 @@ impl RendererDelgate for Delegate {
                 FragBufferIndex::LightSpace as _,
                 &self.light_space,
             );
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
+            encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
+            draw_patches_with_tesselation_factor_buffer(
+                encoder,
+                &self.tessellation_factors_buffer,
+                4,
+            );
+            encoder.pop_debug_group();
             encoder.end_encoding();
-        }
+        };
         command_buffer
     }
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        for (space, obj) in [
-            (&mut self.camera_space, &mut self.camera),
-            (&mut self.light_space, &mut self.light),
-        ] {
-            if let Some(update) = obj.on_event(event) {
-                *space = Space {
-                    matrix_world_to_projection: update.matrix_world_to_projection,
-                    matrix_screen_to_world: update.matrix_screen_to_world,
-                    position_world: update.position_world.into(),
-                };
-                self.needs_render = true;
-            }
+        if let Some(update) = self.camera.on_event(event) {
+            self.camera_space = update.into();
+            self.needs_render = true;
+        }
+        if let Some(update) = self.light.on_event(event) {
+            self.light_space = update.into();
+            self.needs_render = true;
         }
     }
 

@@ -110,8 +110,6 @@ impl RendererDelgate for Delegate {
             .expect("Failed to import shader metal lib.");
 
         // Setup Render Pipeline Descriptor used for rendering the teapot and light
-        let mut base_pipeline_desc =
-            new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false);
         let mut delegate = Self {
             camera_distance: INITIAL_CAMERA_DISTANCE,
             camera_rotation: INITIAL_CAMERA_ROTATION,
@@ -134,24 +132,30 @@ impl RendererDelgate for Delegate {
             max_bound,
             mode: INITIAL_MODE,
             num_triangles: indices.len() / 3,
-            render_pipeline_state: create_pipeline(
+            render_pipeline_state: create_render_pipeline(
                 &device,
-                &library,
-                &mut base_pipeline_desc,
-                "Render Teapot Pipeline",
-                None,
-                (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                &new_render_pipeline_descriptor(
+                    "Render Teapot Pipeline",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    None,
+                    None,
+                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                ),
             )
             .pipeline_state,
-            render_light_pipeline_state: create_pipeline(
+            render_light_pipeline_state: create_render_pipeline(
                 &device,
-                &library,
-                &mut base_pipeline_desc,
-                "Render Light Pipeline",
-                None,
-                (&"light_vertex", LightVertexBufferIndex::LENGTH as _),
-                Some((&"light_fragment", 0)),
+                &new_render_pipeline_descriptor(
+                    "Render Light Pipeline",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    None,
+                    None,
+                    Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
+                    Some((&"light_fragment", 0)),
+                ),
             )
             .pipeline_state,
             screen_size: f32x2::default(),
@@ -187,9 +191,11 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-            render_target,
-            self.depth_texture.as_ref(),
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some(render_target),
+            self.depth_texture
+                .as_ref()
+                .map(|d| (d, MTLStoreAction::DontCare)),
         ));
         encoder.set_render_pipeline_state(&self.render_pipeline_state);
         encoder.set_depth_stencil_state(&self.depth_state);

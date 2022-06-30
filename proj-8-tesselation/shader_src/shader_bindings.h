@@ -27,6 +27,12 @@ struct Space {
     float4   position_world;
 };
 
+enum struct TesselComputeBufferIndex: unsigned int
+{
+    TessellFactor = 0,
+    OutputTessellFactors
+};
+
 enum struct VertexBufferIndex: unsigned int
 {
     CameraSpace = 0,

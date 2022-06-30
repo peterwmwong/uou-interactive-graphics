@@ -21,6 +21,7 @@ fn generate_rust_shader_bindings() {
         .join("src")
         .join("rust_bindgen_only_metal_types.h");
 
+    // TODO: Rename to shader_bindings_h_hash
     let cached_hash_path = shader_src_dir.join("common_h_hash");
     let current_hash = hash_shader_src([
         &shader_common_header_file,

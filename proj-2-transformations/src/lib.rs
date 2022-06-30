@@ -83,14 +83,17 @@ impl RendererDelgate for Delegate {
                         "/shaders.metallib"
                     )))
                     .expect("Failed to import shader metal lib.");
-                create_pipeline(
+                create_render_pipeline(
                     &device,
-                    &library,
-                    &mut new_basic_render_pipeline_descriptor(DEFAULT_PIXEL_FORMAT, None, false),
-                    "Render Pipeline",
-                    None,
-                    (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                    Some(("main_fragment", 0)),
+                    &new_render_pipeline_descriptor(
+                        "Render Pipeline",
+                        &library,
+                        Some((DEFAULT_PIXEL_FORMAT, false)),
+                        None,
+                        None,
+                        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                        Some((&"main_fragment", 0)),
+                    ),
                 )
                 .pipeline_state
             },
@@ -112,7 +115,7 @@ impl RendererDelgate for Delegate {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer
-            .new_render_command_encoder(new_basic_render_pass_descriptor(render_target, None));
+            .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
         encode_vertex_bytes(
             &encoder,
             VertexBufferIndex::MaxPositionValue as _,

@@ -158,20 +158,18 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
 
-        let mut render_pipeline_desc = new_basic_render_pipeline_descriptor(
-            DEFAULT_PIXEL_FORMAT,
-            Some(DEPTH_TEXTURE_FORMAT),
-            false,
-        );
         let bg_pipeline = {
-            let p = create_pipeline(
+            let p = create_render_pipeline(
                 &device,
-                &library,
-                &mut render_pipeline_desc,
-                "BG",
-                None,
-                (&"bg_vertex", 0),
-                Some((&"bg_fragment", BGFragBufferIndex::LENGTH as _)),
+                &new_render_pipeline_descriptor(
+                    "BG",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    Some(DEPTH_TEXTURE_FORMAT),
+                    None,
+                    Some((&"bg_vertex", 0)),
+                    Some((&"bg_fragment", BGFragBufferIndex::LENGTH as _)),
+                ),
             );
             debug_assert_argument_buffer_size::<{ BGFragBufferIndex::World as _ }, World>(
                 &p,
@@ -180,14 +178,17 @@ impl<'a> RendererDelgate for Delegate<'a> {
             p
         };
         let model_pipeline = {
-            let p = create_pipeline(
+            let p = create_render_pipeline(
                 &device,
-                &library,
-                &mut render_pipeline_desc,
-                "Model",
-                None,
-                (&"main_vertex", VertexBufferIndex::LENGTH as _),
-                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                &new_render_pipeline_descriptor(
+                    "Model",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    Some(DEPTH_TEXTURE_FORMAT),
+                    None,
+                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                ),
             );
             debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
                 &p,
@@ -204,14 +205,17 @@ impl<'a> RendererDelgate for Delegate<'a> {
             p
         };
         let plane_pipeline = {
-            let p = create_pipeline(
+            let p = create_render_pipeline(
                 &device,
-                &library,
-                &mut render_pipeline_desc,
-                "Plane",
-                None,
-                (&"plane_vertex", VertexBufferIndex::LENGTH as _),
-                Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
+                &new_render_pipeline_descriptor(
+                    "Plane",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    Some(DEPTH_TEXTURE_FORMAT),
+                    None,
+                    Some((&"plane_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
+                ),
             );
             debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
                 &p,
@@ -295,13 +299,12 @@ impl<'a> RendererDelgate for Delegate<'a> {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         {
-            let encoder =
-                command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-                    self.mirrored_model_texture
-                        .as_deref()
-                        .expect("Mirrored Model texture is not set"),
-                    self.depth_texture.as_ref(),
-                ));
+            let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+                self.mirrored_model_texture.as_deref(),
+                self.depth_texture
+                    .as_ref()
+                    .map(|d| (d, MTLStoreAction::DontCare)),
+            ));
             {
                 encoder.push_debug_group("Model (mirrored)");
                 self.model.encode_use_resources(encoder);
@@ -327,9 +330,11 @@ impl<'a> RendererDelgate for Delegate<'a> {
             }
             encoder.end_encoding();
         }
-        let encoder = command_buffer.new_render_command_encoder(new_basic_render_pass_descriptor(
-            render_target,
-            self.depth_texture.as_ref(),
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some(render_target),
+            self.depth_texture
+                .as_ref()
+                .map(|d| (d, MTLStoreAction::DontCare)),
         ));
         {
             encoder.push_debug_group("Model");

@@ -1,4 +1,3 @@
-use crate::unwrap_helpers::unwrap_option_dcheck;
 use cocoa::appkit::CGFloat;
 use core_graphics::display::CGSize;
 use metal::*;
@@ -120,7 +119,7 @@ unsafe impl<R: RendererDelgate> Send for MetalRenderer<R> {}
 impl<R: RendererDelgate> MetalRenderer<R> {
     #[inline]
     pub(crate) fn new(backing_scale_factor: f32) -> MetalRenderer<R> {
-        let device = unwrap_option_dcheck(Device::system_default(), "No device found");
+        let device = Device::system_default().expect("No device found");
         let layer = MetalLayer::new();
         layer.set_device(&device);
         layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
