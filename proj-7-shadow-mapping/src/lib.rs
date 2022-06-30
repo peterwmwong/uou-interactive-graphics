@@ -171,14 +171,14 @@ impl RendererDelgate for Delegate {
                 DEFAULT_AMBIENT_AMOUNT,
             ),
             model_light: RenderableModelObject::new(
-                "Model",
+                "Light",
                 &device,
                 assets_dir.join("light").join("light.obj"),
                 |_| f32x4x4::translate(0., 0., 0.),
                 0.8,
             ),
             model_plane: RenderableModelObject::new(
-                "Model",
+                "Plane",
                 &device,
                 assets_dir.join("plane").join("plane.obj"),
                 |_| f32x4x4::translate(0., -plane_y, 0.),
@@ -273,6 +273,7 @@ impl RendererDelgate for Delegate {
             let encoder = command_buffer.new_render_command_encoder(
                 new_depth_only_render_pass_descriptor(self.shadow_map_texture.as_ref()),
             );
+            encoder.set_label("Render Shadow Map");
             encoder.push_debug_group("Shadow Map (Light 1)");
             self.model.encode_use_resources(encoder);
             encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
@@ -288,6 +289,7 @@ impl RendererDelgate for Delegate {
             let encoder = command_buffer.new_render_command_encoder(
                 new_basic_render_pass_descriptor(render_target, self.depth_texture.as_ref()),
             );
+            encoder.set_label("Render Models");
             let mut models = [
                 &mut self.model,
                 &mut self.model_light,
