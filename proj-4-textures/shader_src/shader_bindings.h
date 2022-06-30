@@ -1,8 +1,8 @@
+#pragma once
+
 // Header containing types and enum struct constants shared between Metal shaders and Rust source code
 //
 // These are used to generate Rust types in the `build.rs` build script.
-#ifndef common_h
-#define common_h
 
 #ifdef __METAL_VERSION__
 
@@ -69,5 +69,3 @@ enum struct LightVertexBufferIndex: unsigned int
     World = 0,
     LENGTH,
 };
-
-#endif

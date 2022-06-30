@@ -1,7 +1,7 @@
+#pragma once
+
 // Rust Bindgen Workaround: Polyfill Vector Types
 #ifndef __METAL_VERSION__
-#ifndef rust_bindgen_only_vector_types_h
-#define rust_bindgen_only_vector_types_h
 
 // Definitions are according to Metal Shading Language Specification (Version 2.4)
 // https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
@@ -47,6 +47,4 @@ typedef struct alignas(16) float4x4
     float columns[4][4];
 } float4x4;
 
-
-#endif // rust_bindgen_only_vector_types_h
 #endif //__METAL_VERSION__
