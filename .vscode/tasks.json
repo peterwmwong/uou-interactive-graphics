@@ -262,5 +262,17 @@
             ],
             "label": "Run proj-7-shadow-mapping teapot"
         },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "proj-8-tesselation",
+            ],
+            "label": "Run proj-8-tesselation"
+        },
     ]
 }
