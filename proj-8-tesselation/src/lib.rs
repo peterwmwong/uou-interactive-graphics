@@ -74,6 +74,13 @@ impl RendererDelgate for Delegate {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // Take 2 command-line arguments: normal image path, displacement image path
+        // - no arguments: Use the teapot normal and displacement images from assets/
+        // - normal image path: Only Normal Mapping
+        // - normal and displacement image paths: Normal and Displacement Mapping
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
         let mut image_buffer = vec![];
         Self {

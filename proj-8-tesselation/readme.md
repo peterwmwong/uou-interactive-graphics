@@ -18,3 +18,6 @@ cargo run --bin proj-8-tesselation
 | Left button drag               | Camera orbits                                |
 | Ctrl + Right button drag       | Light orbits                                 |
 | Ctrl + Left button drag        | Light distance                               |
+| Spacebar                       | Toggle rendering triangulation               |
+| Up/Down                        | Increase/Decrease displacement               |
+| Right/Left                     | Increase/Decrease tesselation                |
