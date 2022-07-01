@@ -50,8 +50,11 @@ fragment half4
 main_fragment(         VertexOut   in        [[stage_in]],
               constant Space     & camera    [[buffer(FragBufferIndex::CameraSpace)]],
               constant Space     & light     [[buffer(FragBufferIndex::LightSpace)]],
+              constant bool      & shade_tri [[buffer(FragBufferIndex::ShadeTriangulation)]],
               texture2d<half>      normal_tx [[texture(FragTextureIndex::Normal)]])
 {
+    if (shade_tri) return half4(1, 1, 0, 1);
+
     const float4 pos_w       = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
           half3  normal      = normal_tx.sample(tx_sampler, in.tx_coord).xyz * 2 - 1;

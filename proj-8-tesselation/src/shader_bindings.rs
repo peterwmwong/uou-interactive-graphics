@@ -98,11 +98,11 @@ pub enum VertexBufferIndex {
 pub enum FragBufferIndex {
     CameraSpace = 0,
     LightSpace = 1,
-    LENGTH = 2,
+    ShadeTriangulation = 2,
+    LENGTH = 3,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragTextureIndex {
     Normal = 0,
-    LENGTH = 1,
 }

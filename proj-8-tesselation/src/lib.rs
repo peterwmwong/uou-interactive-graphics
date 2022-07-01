@@ -6,8 +6,9 @@ use metal_app::{components::camera, metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{f32::consts::PI, path::PathBuf, simd::f32x2};
 
-const INITIAL_TESSELATION_FACTOR: f32 = 64.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
+const MAX_TESSELATION_FACTOR: f32 = 64.;
+const INITIAL_TESSELATION_FACTOR: f32 = 32.;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., -PI / 4.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
@@ -42,6 +43,7 @@ struct Delegate {
     needs_render: bool,
     normal_texture: Texture,
     render_pipeline_state: RenderPipelineState,
+    show_triangulation: bool,
     tessellation_compute_state: ComputePipelineState,
     tessellation_factor: f32,
     tessellation_factors_buffer: Buffer,
@@ -92,6 +94,7 @@ impl RendererDelgate for Delegate {
                 );
                 p.pipeline_state
             },
+            show_triangulation: true,
             tessellation_compute_state: {
                 let fun = library
                     .get_function(&"tessell_compute", None)
@@ -152,6 +155,7 @@ impl RendererDelgate for Delegate {
             encoder.set_label("Render Plane");
             encoder.push_debug_group("Plane");
             encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
             encode_vertex_bytes(
                 encoder,
                 VertexBufferIndex::CameraSpace as _,
@@ -167,16 +171,25 @@ impl RendererDelgate for Delegate {
                 FragBufferIndex::LightSpace as _,
                 &self.light_space,
             );
-            encoder.set_fragment_texture(FragTextureIndex::Normal as _, Some(&self.normal_texture));
-            // encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
-            draw_patches_with_tesselation_factor_buffer(
+            encode_fragment_bytes::<bool>(
                 encoder,
-                &self.tessellation_factors_buffer,
-                4,
+                FragBufferIndex::ShadeTriangulation as _,
+                &false,
             );
+            encoder.set_fragment_texture(FragTextureIndex::Normal as _, Some(&self.normal_texture));
+            draw_patches_with_tesselation_factor_buffer(encoder, 4);
+            if self.show_triangulation {
+                encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
+                encode_fragment_bytes::<bool>(
+                    encoder,
+                    FragBufferIndex::ShadeTriangulation as _,
+                    &true,
+                );
+                draw_patches_with_tesselation_factor_buffer(encoder, 4);
+            }
             encoder.pop_debug_group();
             encoder.end_encoding();
-        };
+        }
         command_buffer
     }
 
@@ -189,6 +202,19 @@ impl RendererDelgate for Delegate {
         if let Some(update) = self.light.on_event(event) {
             self.light_space = update.into();
             self.needs_render = true;
+        }
+        use UserEvent::KeyDown;
+        match event {
+            KeyDown { key_code, .. } => {
+                match key_code {
+                    49  /* Spacebar */ => self.show_triangulation = !self.show_triangulation,
+                    126 /* Up */ => self.tessellation_factor = (self.tessellation_factor + 1.).min(MAX_TESSELATION_FACTOR),
+                    125 /* Down */ => self.tessellation_factor = (self.tessellation_factor - 1.).max(1.),
+                    _ => {return;}
+                }
+                self.needs_render = true;
+            }
+            _ => {}
         }
     }
 

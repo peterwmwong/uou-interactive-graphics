@@ -373,10 +373,10 @@ pub fn set_tessellation_config(desc: &mut RenderPipelineDescriptor) {
         let _: () = msg_send![d, setTessellationOutputWindingOrder: winding];
 
         #[allow(non_upper_case_globals)]
-        const MTLTessellationPartitionModePow2: NSUInteger = 0;
+        const MTLTessellationPartitionModeFractionalEven: NSUInteger = 3;
         let _: () = msg_send![
             d,
-            setTessellationPartitionMode: MTLTessellationPartitionModePow2
+            setTessellationPartitionMode: MTLTessellationPartitionModeFractionalEven
         ];
 
         const MAX_TESSELLATION_FACTOR: NSUInteger = 64;
@@ -385,15 +385,23 @@ pub fn set_tessellation_config(desc: &mut RenderPipelineDescriptor) {
 }
 
 #[inline]
-pub fn draw_patches_with_tesselation_factor_buffer<'a, 'b>(
+pub fn set_tesselation_factor_buffer<'a, 'b>(
     encoder: &'a RenderCommandEncoderRef,
     buf: &'b BufferRef,
-    patch_control_points: NSUInteger,
 ) {
     unsafe {
         let _: () = msg_send![encoder, setTessellationFactorBuffer:buf
                                        offset: 0
                                        instanceStride: 0];
+    }
+}
+
+#[inline]
+pub fn draw_patches_with_tesselation_factor_buffer<'a, 'b>(
+    encoder: &'a RenderCommandEncoderRef,
+    patch_control_points: NSUInteger,
+) {
+    unsafe {
         let _: () = msg_send![encoder, drawPatches:patch_control_points
                                        patchStart:0
                                        patchCount:1

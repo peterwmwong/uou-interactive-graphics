@@ -43,11 +43,11 @@ enum struct FragBufferIndex: unsigned int
 {
     CameraSpace = 0,
     LightSpace,
+    ShadeTriangulation,
     LENGTH
 };
 
 enum struct FragTextureIndex: unsigned int
 {
-    Normal = 0,
-    LENGTH
+    Normal = 0
 };
