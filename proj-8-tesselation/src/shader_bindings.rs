@@ -95,6 +95,11 @@ pub enum VertexBufferIndex {
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub enum VertexTextureIndex {
+    Displacement = 0,
+}
+#[repr(u32)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragBufferIndex {
     CameraSpace = 0,
     LightSpace = 1,

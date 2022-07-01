@@ -39,6 +39,12 @@ enum struct VertexBufferIndex: unsigned int
     LENGTH
 };
 
+enum struct VertexTextureIndex: unsigned int
+{
+    Displacement = 0
+};
+
+
 enum struct FragBufferIndex: unsigned int
 {
     CameraSpace = 0,

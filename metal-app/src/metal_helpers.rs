@@ -399,15 +399,20 @@ pub fn set_tesselation_factor_buffer<'a, 'b>(
 #[inline]
 pub fn draw_patches_with_tesselation_factor_buffer<'a, 'b>(
     encoder: &'a RenderCommandEncoderRef,
-    patch_control_points: NSUInteger,
+    numberOfPatchControlPoints: NSUInteger,
 ) {
     unsafe {
-        let _: () = msg_send![encoder, drawPatches:patch_control_points
-                                       patchStart:0
-                                       patchCount:1
+        let patchStart: NSUInteger = 0;
+        let patchCount: NSUInteger = 1;
+        let patchIndexBufferOffset: NSUInteger = 0;
+        let instanceCount: NSUInteger = 1;
+        let baseInstance: NSUInteger = 0;
+        let _: () = msg_send![encoder, drawPatches:numberOfPatchControlPoints
+                                       patchStart:patchStart
+                                       patchCount:patchCount
                                        patchIndexBuffer:nil
-                                       patchIndexBufferOffset:0
-                                       instanceCount:1
-                                       baseInstance:0];
+                                       patchIndexBufferOffset:patchIndexBufferOffset
+                                       instanceCount:instanceCount
+                                       baseInstance:baseInstance];
     };
 }

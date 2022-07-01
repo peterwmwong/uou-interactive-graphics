@@ -6,11 +6,12 @@ use metal_app::{components::camera, metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{f32::consts::PI, path::PathBuf, simd::f32x2};
 
-const MAX_TESSELATION_FACTOR: f32 = 64.;
-const INITIAL_TESSELATION_FACTOR: f32 = 32.;
+const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., -PI / 4.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
+const INITIAL_TESSELATION_FACTOR: f32 = 16.;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
+const MAX_TESSELATION_FACTOR: f32 = 64.;
 
 impl Default for Space {
     #[inline]
@@ -38,6 +39,9 @@ struct Delegate {
     camera: camera::Camera,
     command_queue: CommandQueue,
     device: Device,
+    depth_state: DepthStencilState,
+    depth_texture: Option<Texture>,
+    displacement_texture: Texture,
     light_space: Space,
     light: camera::Camera,
     needs_render: bool,
@@ -60,6 +64,19 @@ impl RendererDelgate for Delegate {
             camera_space: Default::default(),
             camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
             command_queue: device.new_command_queue(),
+            depth_state: {
+                let desc = DepthStencilDescriptor::new();
+                desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                desc.set_depth_write_enabled(true);
+                desc.set_label("Depth State");
+                device.new_depth_stencil_state(&desc)
+            },
+            depth_texture: None,
+            displacement_texture: new_texture_from_png(
+                assets_dir.join("teapot_disp.png"),
+                &device,
+                &mut image_buffer,
+            ),
             light_space: Default::default(),
             light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true, 1.),
             needs_render: false,
@@ -73,7 +90,7 @@ impl RendererDelgate for Delegate {
                     "Plane",
                     &library,
                     Some((DEFAULT_PIXEL_FORMAT, false)),
-                    None,
+                    Some(DEPTH_TEXTURE_FORMAT),
                     None,
                     Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
                     Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
@@ -150,16 +167,25 @@ impl RendererDelgate for Delegate {
         }
         // Render Plane
         {
-            let encoder = command_buffer
-                .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
+            let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+                Some(render_target),
+                self.depth_texture
+                    .as_ref()
+                    .map(|d| (d, MTLStoreAction::DontCare)),
+            ));
             encoder.set_label("Render Plane");
             encoder.push_debug_group("Plane");
             encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            encoder.set_depth_stencil_state(&self.depth_state);
             set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
             encode_vertex_bytes(
                 encoder,
                 VertexBufferIndex::CameraSpace as _,
                 &self.camera_space,
+            );
+            encoder.set_vertex_texture(
+                VertexTextureIndex::Displacement as _,
+                Some(&self.displacement_texture),
             );
             encode_fragment_bytes::<Space>(
                 encoder,
@@ -203,15 +229,28 @@ impl RendererDelgate for Delegate {
             self.light_space = update.into();
             self.needs_render = true;
         }
-        use UserEvent::KeyDown;
         match event {
-            KeyDown { key_code, .. } => {
+            UserEvent::KeyDown { key_code, .. } => {
                 match key_code {
                     49  /* Spacebar */ => self.show_triangulation = !self.show_triangulation,
                     126 /* Up */ => self.tessellation_factor = (self.tessellation_factor + 1.).min(MAX_TESSELATION_FACTOR),
                     125 /* Down */ => self.tessellation_factor = (self.tessellation_factor - 1.).max(1.),
                     _ => {return;}
                 }
+                self.needs_render = true;
+            }
+            UserEvent::WindowFocusedOrResized { size } => {
+                let desc = TextureDescriptor::new();
+                let &[x, y] = size.as_array();
+                desc.set_width(x as _);
+                desc.set_height(y as _);
+                desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
+                desc.set_storage_mode(MTLStorageMode::Memoryless);
+                desc.set_usage(MTLTextureUsage::RenderTarget);
+                let texture = self.device.new_texture(&desc);
+                texture.set_label("Depth");
+                self.depth_texture = Some(texture);
+
                 self.needs_render = true;
             }
             _ => {}

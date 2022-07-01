@@ -6,9 +6,10 @@ using namespace metal;
 
 typedef MTLQuadTessellationFactorsHalf QuadTessellFactors;
 
-kernel void tessell_compute(constant float              & factor  [[buffer(TesselComputeBufferIndex::TessellFactor)]],
-                            device   QuadTessellFactors * out     [[buffer(TesselComputeBufferIndex::OutputTessellFactors)]],
-                                     uint                 pid     [[thread_position_in_grid]])
+[[kernel]] void
+tessell_compute(constant float              & factor  [[buffer(TesselComputeBufferIndex::TessellFactor)]],
+                device   QuadTessellFactors * out     [[buffer(TesselComputeBufferIndex::OutputTessellFactors)]],
+                         uint                 pid     [[thread_position_in_grid]])
 {
     out[pid].edgeTessellationFactor[0] = factor;
     out[pid].edgeTessellationFactor[1] = factor;
@@ -27,10 +28,13 @@ struct VertexOut
 [[patch(quad, 4)]]
 [[vertex]] VertexOut
 main_vertex(         float2  patch_coord [[position_in_patch]],
-            constant Space & camera      [[buffer(VertexBufferIndex::CameraSpace)]])
+            constant Space & camera      [[buffer(VertexBufferIndex::CameraSpace)]],
+            texture2d<half>  disp_tx     [[texture(VertexTextureIndex::Displacement)]])
 {
+    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
+    const float  disp_amount = disp_tx.sample(tx_sampler, patch_coord).z * -0.25;
+
     // Control Points
-    constexpr float  size = 0.5;
     constexpr float2 tl = float2(-1, 1);  // top-left
     constexpr float2 tr = float2(1, 1);   // top-right
     constexpr float2 br = float2(1, -1);  // bottom-right
@@ -39,14 +43,14 @@ main_vertex(         float2  patch_coord [[position_in_patch]],
     // Linear interpolation
     const float2 upper_middle = mix(tl, tr, patch_coord.x);
     const float2 lower_middle = mix(br, bl, 1-patch_coord.x);
-    const float4 position     = float4(mix(upper_middle, lower_middle, patch_coord.y) * size, 0.0, 1.0);
+    const float2 position_xy  = mix(upper_middle, lower_middle, patch_coord.y);
     return {
-        .position = camera.matrix_world_to_projection * position,
-        .tx_coord = patch_coord,
+        .position = camera.matrix_world_to_projection * float4(position_xy, disp_amount, 1),
+        .tx_coord = patch_coord
     };
 }
 
-fragment half4
+[[fragment]] half4
 main_fragment(         VertexOut   in        [[stage_in]],
               constant Space     & camera    [[buffer(FragBufferIndex::CameraSpace)]],
               constant Space     & light     [[buffer(FragBufferIndex::LightSpace)]],
@@ -55,17 +59,18 @@ main_fragment(         VertexOut   in        [[stage_in]],
 {
     if (shade_tri) return half4(1, 1, 0, 1);
 
-    const float4 pos_w       = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
-          half3  normal      = normal_tx.sample(tx_sampler, in.tx_coord).xyz * 2 - 1;
+          half3  normal      = normal_tx.sample(tx_sampler, in.tx_coord).xyz * 2 - 1; // [0,1] -> [-1,1]
                  normal.z    = -normal.z;
+    const float4 pos_w       = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const float3 pos         = pos_w.xyz / pos_w.w;
     const half4  plane_color = 1;
     return shade_phong_blinn(
         {
-            .frag_pos   = half3(pos_w.xyz / pos_w.w),
+            .frag_pos   = half3(pos),
             .light_pos  = half3(light.position_world.xyz),
             .camera_pos = half3(camera.position_world.xyz),
-            .normal     = normalize(normal),
+            .normal     = normal,
         },
         ConstantMaterial(plane_color, plane_color, plane_color, 50)
     );
