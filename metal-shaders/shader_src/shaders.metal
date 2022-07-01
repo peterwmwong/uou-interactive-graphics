@@ -9,7 +9,7 @@ half4 test_shade_phong_blinn_with_constant_material() {
             .camera_pos = half3(0),
             .normal = half3(0),
         },
-        ConstantMaterial(0, 0, 0, 0)
+        ConstantMaterial(0, 0, 0, 0, 0)
     );
 }
 

@@ -35,7 +35,8 @@ enum struct TesselComputeBufferIndex: unsigned int
 
 enum struct VertexBufferIndex: unsigned int
 {
-    CameraSpace = 0,
+    MatrixWorldToProjection = 0,
+    DisplacementScale,
     LENGTH
 };
 
@@ -55,5 +56,6 @@ enum struct FragBufferIndex: unsigned int
 
 enum struct FragTextureIndex: unsigned int
 {
-    Normal = 0
+    Normal = 0,
+    ShadowMap
 };

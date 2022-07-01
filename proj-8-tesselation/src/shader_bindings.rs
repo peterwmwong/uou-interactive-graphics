@@ -90,8 +90,9 @@ pub enum TesselComputeBufferIndex {
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {
-    CameraSpace = 0,
-    LENGTH = 1,
+    MatrixWorldToProjection = 0,
+    DisplacementScale = 1,
+    LENGTH = 2,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
@@ -110,4 +111,5 @@ pub enum FragBufferIndex {
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragTextureIndex {
     Normal = 0,
+    ShadowMap = 1,
 }

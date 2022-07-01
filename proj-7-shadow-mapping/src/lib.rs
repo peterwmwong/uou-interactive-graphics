@@ -132,7 +132,12 @@ impl RendererDelgate for Delegate {
             .join("..")
             .join("common-assets");
         Self {
-            camera: camera::Camera::new(INITIAL_CAMERA_ROTATION, ModifierKeys::empty(), false, 0.),
+            camera: camera::Camera::new_with_default_distance(
+                INITIAL_CAMERA_ROTATION,
+                ModifierKeys::empty(),
+                false,
+                0.,
+            ),
             camera_space: Default::default(),
             command_queue: device.new_command_queue(),
             depth_texture: None,
@@ -142,7 +147,12 @@ impl RendererDelgate for Delegate {
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            light: camera::Camera::new(INITIAL_LIGHT_ROTATION, ModifierKeys::CONTROL, true, 1.),
+            light: camera::Camera::new_with_default_distance(
+                INITIAL_LIGHT_ROTATION,
+                ModifierKeys::CONTROL,
+                true,
+                1.,
+            ),
             light_matrix_world_to_projection: f32x4x4::identity(),
             light_space: Default::default(),
             model: RenderableModelObject::new(

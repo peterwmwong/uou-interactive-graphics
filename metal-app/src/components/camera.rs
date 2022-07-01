@@ -27,6 +27,7 @@ pub struct Camera {
 impl Camera {
     #[inline(always)]
     pub const fn new(
+        init_distance: f32,
         init_rotation: f32x2,
         on_mouse_drag_modifier_keys: ModifierKeys,
         invert_drag: bool,
@@ -34,7 +35,7 @@ impl Camera {
     ) -> Self {
         Self {
             ray: UIRay {
-                distance_from_origin: INITIAL_CAMERA_DISTANCE,
+                distance_from_origin: init_distance,
                 rotation_xy: init_rotation,
                 on_mouse_drag_modifier_keys,
                 invert_drag,
@@ -42,6 +43,22 @@ impl Camera {
             },
             screen_size: f32x2::splat(1.),
         }
+    }
+
+    #[inline(always)]
+    pub const fn new_with_default_distance(
+        init_rotation: f32x2,
+        on_mouse_drag_modifier_keys: ModifierKeys,
+        invert_drag: bool,
+        min_distance: f32,
+    ) -> Self {
+        Self::new(
+            INITIAL_CAMERA_DISTANCE,
+            init_rotation,
+            on_mouse_drag_modifier_keys,
+            invert_drag,
+            min_distance,
+        )
     }
 
     #[inline]

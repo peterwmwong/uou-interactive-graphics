@@ -261,6 +261,7 @@ pub enum FunctionType {
     Fragment,
 }
 
+// TODO: Change the API to allow verifying many argument buffers.
 pub fn debug_assert_argument_buffer_size<const BUFFER_INDEX: u64, T>(
     p: &CreateRenderPipelineResults,
     func_type: FunctionType,
@@ -397,7 +398,7 @@ pub fn set_tesselation_factor_buffer<'a, 'b>(
 }
 
 #[inline]
-pub fn draw_patches_with_tesselation_factor_buffer<'a, 'b>(
+pub fn draw_patches<'a, 'b>(
     encoder: &'a RenderCommandEncoderRef,
     numberOfPatchControlPoints: NSUInteger,
 ) {

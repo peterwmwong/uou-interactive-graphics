@@ -8,17 +8,19 @@ struct ConstantMaterial {
     const half4 ambient;
     const half4 diffuse;
     const half4 specular;
-    const half shineness;
-    inline ConstantMaterial(half4 ambient, half4 diffuse, half4 specular, half shineness):
+    const half  shineness;
+    const half  ambient_amt;
+    inline ConstantMaterial(half4 ambient, half4 diffuse, half4 specular, half shineness, half ambient_amount):
         ambient(ambient),
         diffuse(diffuse),
         specular(specular),
-        shineness(shineness) {}
+        shineness(shineness),
+        ambient_amt(ambient_amount) {}
     inline half4 ambient_color() const { return ambient; }
     inline half4 diffuse_color() const { return diffuse; }
     inline half4 specular_color() const { return specular; }
     inline half  specular_shineness() const { return shineness; }
-    inline constexpr half ambient_amount() const { return 0.15; }
+    inline constexpr half ambient_amount() const { return ambient_amt; }
 };
 
 template<typename T>

@@ -27,12 +27,13 @@ struct VertexOut
 
 [[patch(quad, 4)]]
 [[vertex]] VertexOut
-main_vertex(         float2  patch_coord [[position_in_patch]],
-            constant Space & camera      [[buffer(VertexBufferIndex::CameraSpace)]],
-            texture2d<half>  disp_tx     [[texture(VertexTextureIndex::Displacement)]])
+main_vertex(         float2     patch_coord                [[position_in_patch]],
+            constant float4x4 & matrix_world_to_projection [[buffer(VertexBufferIndex::MatrixWorldToProjection)]],
+            constant float    & displacement_scale         [[buffer(VertexBufferIndex::DisplacementScale)]],
+            texture2d<half>     disp_tx                    [[texture(VertexTextureIndex::Displacement)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
-    const float  disp_amount = disp_tx.sample(tx_sampler, patch_coord).z * -0.25;
+    const float disp_amount = disp_tx.sample(tx_sampler, patch_coord).z * -displacement_scale;
 
     // Control Points
     constexpr float2 tl = float2(-1, 1);  // top-left
@@ -45,7 +46,7 @@ main_vertex(         float2  patch_coord [[position_in_patch]],
     const float2 lower_middle = mix(br, bl, 1-patch_coord.x);
     const float2 position_xy  = mix(upper_middle, lower_middle, patch_coord.y);
     return {
-        .position = camera.matrix_world_to_projection * float4(position_xy, disp_amount, 1),
+        .position = matrix_world_to_projection * float4(position_xy, disp_amount, 1),
         .tx_coord = patch_coord
     };
 }
@@ -55,23 +56,35 @@ main_fragment(         VertexOut   in        [[stage_in]],
               constant Space     & camera    [[buffer(FragBufferIndex::CameraSpace)]],
               constant Space     & light     [[buffer(FragBufferIndex::LightSpace)]],
               constant bool      & shade_tri [[buffer(FragBufferIndex::ShadeTriangulation)]],
-              texture2d<half>      normal_tx [[texture(FragTextureIndex::Normal)]])
+              texture2d<half>     normal_tx [[texture(FragTextureIndex::Normal)]],
+              depth2d<float, access::sample>  shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {
     if (shade_tri) return half4(1, 1, 0, 1);
 
-    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
+    constexpr sampler tx_sampler(mag_filter::linear,
+                                 address::clamp_to_edge,
+                                 min_filter::linear);
           half3  normal      = normal_tx.sample(tx_sampler, in.tx_coord).xyz * 2 - 1; // [0,1] -> [-1,1]
                  normal.z    = -normal.z;
     const float4 pos_w       = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos         = pos_w.xyz / pos_w.w;
-    const half4  plane_color = 1;
+
+    constexpr sampler shadow_sampler(address::clamp_to_border,
+                                     border_color::opaque_white,
+                                     compare_func::less_equal,
+                                     filter::linear);
+          float4 shadow_tx_coord = light.matrix_world_to_projection * float4(pos, 1);
+                 shadow_tx_coord = shadow_tx_coord / shadow_tx_coord.w;
+          float  is_lit          = shadow_tx.sample_compare(shadow_sampler, shadow_tx_coord.xy, shadow_tx_coord.z);
+
+    const half4  plane_color = is_lit;
     return shade_phong_blinn(
         {
             .frag_pos   = half3(pos),
             .light_pos  = half3(light.position_world.xyz),
             .camera_pos = half3(camera.position_world.xyz),
-            .normal     = normal,
+            .normal     = half3(normalize(normal)),
         },
-        ConstantMaterial(plane_color, plane_color, plane_color, 50)
+        ConstantMaterial(plane_color, plane_color, plane_color, 50, 0)
     );
 };

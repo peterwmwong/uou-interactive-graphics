@@ -50,7 +50,7 @@ inline half4 shade_mirror(const float4            screen_pos,
             .camera_pos = camera_pos,
             .normal     = normal
         },
-        ConstantMaterial(half4(1), bg_color, bg_color, 50)
+        ConstantMaterial(half4(1), bg_color, bg_color, 50, 0.15)
     );
 }
 
