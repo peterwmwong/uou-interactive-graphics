@@ -14,7 +14,7 @@ pub fn build() {
 
 fn generate_rust_shader_bindings() {
     let shader_src_dir = PathBuf::from("shader_src");
-    let shader_common_header_file = shader_src_dir.join("shader_bindings.h");
+    let shader_bindings_header_file = shader_src_dir.join("shader_bindings.h");
     let rust_bindgen_only_vector_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
         .join("..")
         .join("metal-types")
@@ -22,9 +22,9 @@ fn generate_rust_shader_bindings() {
         .join("rust_bindgen_only_metal_types.h");
 
     // TODO: Rename to shader_bindings_h_hash
-    let cached_hash_path = shader_src_dir.join("common_h_hash");
+    let cached_hash_path = shader_src_dir.join("shader_bindings_h_hash");
     let current_hash = hash_shader_src([
-        &shader_common_header_file,
+        &shader_bindings_header_file,
         &rust_bindgen_only_vector_types_header_file,
     ]);
     if let Some(old_hash) = read_cached_shader_src_hash(&cached_hash_path) {
@@ -63,7 +63,7 @@ use metal_app::metal_types::*;
 
         let mut builder = bindgen::Builder::default()
             .header(rust_bindgen_only_vector_types_header_file.to_string_lossy())
-            .header(shader_common_header_file.to_string_lossy())
+            .header(shader_bindings_header_file.to_string_lossy())
             .clang_arg("-xc++")
             .clang_arg("-std=c++17")
             .derive_eq(true)

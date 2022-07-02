@@ -397,6 +397,7 @@ pub fn set_tesselation_factor_buffer<'a, 'b>(
     }
 }
 
+#[allow(non_snake_case)]
 #[inline]
 pub fn draw_patches<'a, 'b>(
     encoder: &'a RenderCommandEncoderRef,
