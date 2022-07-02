@@ -2,6 +2,8 @@
 
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=8
 
+![Project 8](./p8.gif)
+
 # Usage
 
 **IMPORTANT: Current working directory is the workspace directory (repository root), not the project directory.**

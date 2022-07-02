@@ -58,7 +58,7 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "$(SRCROOT)/../common-assets/teapot/teapot.obj"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>

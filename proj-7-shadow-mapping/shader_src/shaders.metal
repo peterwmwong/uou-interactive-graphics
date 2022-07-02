@@ -26,8 +26,8 @@ main_vertex(         uint         vertex_id [[vertex_id]],
 
 fragment half4
 main_fragment(         VertexOut         in       [[stage_in]],
-              constant Space           & camera   [[buffer(FragBufferIndex::CameraSpace)]],
-              constant Space           & light    [[buffer(FragBufferIndex::LightSpace)]],
+              constant ProjectedSpace  & camera   [[buffer(FragBufferIndex::CameraSpace)]],
+              constant ProjectedSpace  & light    [[buffer(FragBufferIndex::LightSpace)]],
               constant Material        & material [[buffer(FragBufferIndex::Material)]],
                        depth2d<float, access::sample> shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {

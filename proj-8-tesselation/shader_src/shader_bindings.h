@@ -4,28 +4,7 @@
 //
 // These are used to generate Rust types in the `build.rs` build script.
 
-#ifdef __METAL_VERSION__
-
-#include <metal_stdlib>
-using namespace metal;
-
-#define ARG_CONSTANT_PTR(x) constant x*
-#define ARG_TEXTURE(x) x
-#define DEF_CONSTANT constant
-
-#else
-
-#define ARG_CONSTANT_PTR(x) unsigned long
-#define ARG_TEXTURE(x) unsigned long
-#define DEF_CONSTANT
-
-#endif
-
-struct Space {
-    float4x4 matrix_world_to_projection;
-    float4x4 matrix_screen_to_world;
-    float4   position_world;
-};
+#include "../../metal-shaders/shader_src/common-bindings.h"
 
 enum struct TesselComputeBufferIndex: unsigned int
 {
@@ -58,4 +37,17 @@ enum struct FragTextureIndex: unsigned int
 {
     Normal = 0,
     ShadowMap
+};
+
+enum struct LightVertexBufferIndex: unsigned int
+{
+    MatrixModelToProjection = 0,
+    Geometry,
+    LENGTH
+};
+
+enum struct LightFragBufferIndex: unsigned int
+{
+    Material = 0,
+    LENGTH
 };

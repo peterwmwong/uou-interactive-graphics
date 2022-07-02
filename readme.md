@@ -64,7 +64,12 @@ This repository contains my attempt to complete the projects associated with the
 ![Project 7 Yoda](./proj-7-shadow-mapping/p7-yoda.gif)
 
 
-# Project 8: Tesselation (coming soon)
+# [Project 8: Tesselation](./proj-8-tesselation/)
+
+- Normal Mapping
+- Displacement Mapping with Tesselation Shaders
+
+![Project 8](./proj-8-tesselation/p8.gif)
 
 
 # Implementation

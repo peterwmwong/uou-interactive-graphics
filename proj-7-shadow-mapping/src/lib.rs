@@ -85,7 +85,7 @@ impl RenderableModelObject {
     }
 }
 
-impl Default for Space {
+impl Default for ProjectedSpace {
     #[inline]
     fn default() -> Self {
         Self {
@@ -97,14 +97,14 @@ impl Default for Space {
 }
 
 struct Delegate {
-    camera_space: Space,
+    camera_space: ProjectedSpace,
     camera: camera::Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
     light_matrix_world_to_projection: f32x4x4,
-    light_space: Space,
+    light_space: ProjectedSpace,
     light: camera::Camera,
     model_light: RenderableModelObject,
     model_pipeline_state: RenderPipelineState,
@@ -228,14 +228,14 @@ impl RendererDelgate for Delegate {
                     &p,
                     FunctionType::Vertex,
                 );
-                debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, Space>(
-                    &p,
-                    FunctionType::Fragment,
-                );
-                debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, Space>(
-                    &p,
-                    FunctionType::Fragment,
-                );
+                debug_assert_argument_buffer_size::<
+                    { FragBufferIndex::CameraSpace as _ },
+                    ProjectedSpace,
+                >(&p, FunctionType::Fragment);
+                debug_assert_argument_buffer_size::<
+                    { FragBufferIndex::LightSpace as _ },
+                    ProjectedSpace,
+                >(&p, FunctionType::Fragment);
                 p.pipeline_state
             },
             // TODO: How much instruction reduction do we get if we reorder/group like things together.
@@ -316,12 +316,12 @@ impl RendererDelgate for Delegate {
             models.iter().for_each(|m| m.encode_use_resources(encoder));
             encoder.set_render_pipeline_state(&self.model_pipeline_state);
             encoder.set_depth_stencil_state(&self.depth_state);
-            encode_fragment_bytes::<Space>(
+            encode_fragment_bytes::<ProjectedSpace>(
                 encoder,
                 FragBufferIndex::CameraSpace as _,
                 &self.camera_space,
             );
-            encode_fragment_bytes::<Space>(
+            encode_fragment_bytes::<ProjectedSpace>(
                 encoder,
                 FragBufferIndex::LightSpace as _,
                 &self.light_space,
@@ -342,7 +342,7 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
         if let Some(update) = self.camera.on_event(event) {
-            self.camera_space = Space {
+            self.camera_space = ProjectedSpace {
                 matrix_world_to_projection: update.matrix_world_to_projection,
                 matrix_screen_to_world: update.matrix_screen_to_world,
                 position_world: update.position_world.into(),
@@ -354,7 +354,7 @@ impl RendererDelgate for Delegate {
                 * f32x4x4::y_rotate(PI)
                 * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
             self.light_matrix_world_to_projection = update.matrix_world_to_projection;
-            self.light_space = Space {
+            self.light_space = ProjectedSpace {
                 //
                 // IMPORTANT: Projecting to a Texture, NOT to the screen.
                 // Used to sample Shadow Map Depth Texture during shading to produce shadows.

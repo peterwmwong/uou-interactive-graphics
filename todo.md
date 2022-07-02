@@ -1,5 +1,39 @@
 # metal-app
 
+- Encapsulate Render Pipeline
+    - PSO's split setup and encoding... but they have to line-up exactly...
+        - Attachments: Color Pixel Format, Depth Pixel Format
+            - At setup time, creating pipeline
+            - At encode time, creating render pass
+        - Vertex/Fragment Function
+            - At setup time, we verify (non-release profile) Buffer Argument Index/Sizes (add Texture Index verification?)
+                - Although not a requirement, in practice, extremely helpful to catch buffer index/size early on.
+                    - Example: Buffer Index is wrong
+                    - Example: Argument Buffer has a different struct (different size)
+            - At encode time, we need to set the same Buffer Index/Size and Textures
+    - It's easy to fuck up...
+        - Example: Setup pipeline with Depth, create render pass without depth
+        - Example: Forget to encode a Buffer
+        - Example: Encode the wrong Argument Buffer (wrong struct, different size)
+    - Feels like an abstraction could tie setup/encode together, eliminate mistakes, and reduce duplication.
+- Encapsulate Shadow Mapping... somehow
+    - Some overlap with Encapsulate Render Pipeline
+    - Parts
+        - Depth Texture
+            - Param: Depth Pixel Format
+            - Handle creation/resizing
+        - Render Pipeline
+            - Depth Only
+            - Param: Label
+            - Param: Vertex Function
+        - Depth State
+            - Param: Label
+        - Encoding
+            - Setup Render Pass Descriptor / Render Command Encoder
+            - Set Label, Render Pipeline, Depth State
+            - Hand it back caller to do pre-draw and draw...
+                - Set Buffers, Textures, any other pre-draw commands
+                - Draw
 - Camera
     - Implement Reverse-Z + Infinity Z for better depth precision (ex. fix Z-fighting)
         - https://dev.theomader.com/depth-precision/
@@ -124,6 +158,11 @@
 - Review [Real-Time Polygonal-Light Shading with Linearly Transformed Cosines](https://eheitzresearch.wordpress.com/415-2/)
 - Review [Combining Analytic Direct Illumination and Stochastic Shadows](https://eheitzresearch.wordpress.com/705-2/)
 - Review [GPU Gems 2, Chapter 14. Perspective Shadow Maps: Care and Feeding](https://developer.nvidia.com/gpugems/gpugems/part-ii-lighting-and-shadows/chapter-14-perspective-shadow-maps-care-and-feeding)
+
+## proj-8
+
+- Implement Parallax Occlusion Mapping
+- Implement using Mesh Shaders
 
 # tasks.json
 

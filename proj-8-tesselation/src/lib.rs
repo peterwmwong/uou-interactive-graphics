@@ -10,10 +10,11 @@ use std::{
     simd::{f32x2, u32x2},
 };
 
-const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
+const DEPTH_COMPARISON_BIAS: f32 = 4e-3;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 16., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 3., PI / 6.]);
+const INITIAL_DISPLACEMENT_SCALE: f32 = 0.1;
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 3.5, PI / 3.]);
 const INITIAL_TESSELATION_FACTOR: f32 = 32.;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const MAX_DISPLACEMENT_SCALE: f32 = 1.;
@@ -21,7 +22,7 @@ const MAX_TESSELATION_FACTOR: f32 = 64.;
 const MAX_TEXTURE_SIZE: u16 = 16384;
 const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 
-impl Default for Space {
+impl Default for ProjectedSpace {
     #[inline]
     fn default() -> Self {
         Self {
@@ -32,9 +33,9 @@ impl Default for Space {
     }
 }
 
-impl From<&camera::CameraUpdate> for Space {
+impl From<&camera::CameraUpdate> for ProjectedSpace {
     fn from(update: &camera::CameraUpdate) -> Self {
-        Space {
+        ProjectedSpace {
             matrix_world_to_projection: update.matrix_world_to_projection,
             matrix_screen_to_world: update.matrix_screen_to_world,
             position_world: update.position_world.into(),
@@ -43,20 +44,20 @@ impl From<&camera::CameraUpdate> for Space {
 }
 
 struct Delegate {
-    camera_space: Space,
+    camera_space: ProjectedSpace,
     camera: camera::Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
     displacement_scale: f32,
-    displacement_texture: Texture,
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // Render light
+    displacement_texture: Option<Texture>,
+    light_matrix_model_to_world: f32x4x4,
     light_matrix_world_to_projection: f32x4x4,
-    light_space: Space,
+    light_model:
+        Model<{ LightVertexBufferIndex::Geometry as _ }, { LightFragBufferIndex::Material as _ }>,
+    light_pipeline_state: RenderPipelineState,
+    light_space: ProjectedSpace,
     light: camera::Camera,
     needs_render: bool,
     normal_texture: Texture,
@@ -71,17 +72,29 @@ struct Delegate {
 
 impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
+        let (normal_image_path, displacement_image_path): (PathBuf, Option<PathBuf>) =
+            match (std::env::args().nth(1), std::env::args().nth(2)) {
+                // No images provided (executable only)
+                (None, None) => {
+                    let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
+                    (
+                        assets_dir.join("teapot_normal.png"),
+                        Some(assets_dir.join("teapot_disp.png")),
+                    )
+                }
+                // Only Normal image provided
+                (Some(normal_path), None) => (PathBuf::from(normal_path), None),
+                // Normal and Displacement image provided
+                (Some(normal_path), Some(displacement_path)) => (
+                    PathBuf::from(normal_path),
+                    Some(PathBuf::from(displacement_path)),
+                ),
+                _ => panic!("Illegal arguments provided"),
+            };
+
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // Take 2 command-line arguments: normal image path, displacement image path
-        // - no arguments: Use the teapot normal and displacement images from assets/
-        // - normal image path: Only Normal Mapping
-        // - normal and displacement image paths: Normal and Displacement Mapping
-        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
         let mut image_buffer = vec![];
         Self {
             camera_space: Default::default(),
@@ -101,26 +114,69 @@ impl RendererDelgate for Delegate {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: None,
-            displacement_scale: 0.25,
-            displacement_texture: new_texture_from_png(
-                assets_dir.join("teapot_disp.png"),
-                &device,
-                &mut image_buffer,
-            ),
+            displacement_scale: INITIAL_DISPLACEMENT_SCALE,
+            displacement_texture: displacement_image_path
+                .map(|p| new_texture_from_png(p, &device, &mut image_buffer)),
+            light_matrix_model_to_world: f32x4x4::identity(),
             light_matrix_world_to_projection: f32x4x4::identity(),
+            light_model: Model::from_file(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("..")
+                    .join("common-assets")
+                    .join("light")
+                    .join("light.obj"),
+                &device,
+                |arg: &mut Geometry, geo| {
+                    arg.indices = geo.indices_buffer;
+                    arg.positions = geo.positions_buffer;
+                    arg.normals = geo.normals_buffer;
+                    arg.tx_coords = geo.tx_coords_buffer;
+                },
+                |arg: &mut Material, mat| {
+                    arg.ambient_texture = mat.ambient_texture;
+                    arg.diffuse_texture = mat.diffuse_texture;
+                    arg.specular_texture = mat.specular_texture;
+                    arg.specular_shineness = mat.specular_shineness;
+                    arg.ambient_amount = 0.8;
+                },
+            ),
+            light_pipeline_state: {
+                let p = create_render_pipeline(
+                    &device,
+                    &new_render_pipeline_descriptor(
+                        "Light",
+                        &library,
+                        Some((DEFAULT_PIXEL_FORMAT, false)),
+                        Some(DEPTH_TEXTURE_FORMAT),
+                        None,
+                        Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
+                        Some((&"light_fragment", LightFragBufferIndex::LENGTH as _)),
+                    ),
+                );
+                debug_assert_argument_buffer_size::<
+                    { LightVertexBufferIndex::MatrixModelToProjection as _ },
+                    f32x4x4,
+                >(&p, FunctionType::Vertex);
+                debug_assert_argument_buffer_size::<
+                    { LightVertexBufferIndex::Geometry as _ },
+                    Geometry,
+                >(&p, FunctionType::Vertex);
+                debug_assert_argument_buffer_size::<
+                    { LightFragBufferIndex::Material as _ },
+                    Material,
+                >(&p, FunctionType::Fragment);
+                p.pipeline_state
+            },
             light_space: Default::default(),
-            light: camera::Camera::new_with_default_distance(
+            light: camera::Camera::new(
+                1.25,
                 INITIAL_LIGHT_ROTATION,
                 ModifierKeys::CONTROL,
                 true,
                 1.,
             ),
             needs_render: false,
-            normal_texture: new_texture_from_png(
-                assets_dir.join("teapot_normal.png"),
-                &device,
-                &mut image_buffer,
-            ),
+            normal_texture: new_texture_from_png(normal_image_path, &device, &mut image_buffer),
             render_pipeline_state: {
                 let mut desc = new_render_pipeline_descriptor(
                     "Plane",
@@ -141,14 +197,14 @@ impl RendererDelgate for Delegate {
                     { VertexBufferIndex::DisplacementScale as _ },
                     f32,
                 >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, Space>(
-                    &p,
-                    FunctionType::Fragment,
-                );
-                debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, Space>(
-                    &p,
-                    FunctionType::Fragment,
-                );
+                debug_assert_argument_buffer_size::<
+                    { FragBufferIndex::CameraSpace as _ },
+                    ProjectedSpace,
+                >(&p, FunctionType::Fragment);
+                debug_assert_argument_buffer_size::<
+                    { FragBufferIndex::LightSpace as _ },
+                    ProjectedSpace,
+                >(&p, FunctionType::Fragment);
                 p.pipeline_state
             },
             shadow_map_pipeline_state: {
@@ -174,7 +230,7 @@ impl RendererDelgate for Delegate {
                 p.pipeline_state
             },
             shadow_map_texture: None,
-            show_triangulation: true,
+            show_triangulation: false,
             tessellation_compute_state: {
                 let fun = library
                     .get_function(&"tessell_compute", None)
@@ -202,12 +258,10 @@ impl RendererDelgate for Delegate {
         let command_buffer = self.command_queue.new_command_buffer();
         command_buffer.set_label("Command Buffer");
 
-        // Compute Tesselation Factors
+        // Tesselation Factors
         {
             let encoder = command_buffer.new_compute_command_encoder();
-            encoder.set_label("Compute Tesselation");
-            encoder.push_debug_group("Compute Tesselation Factors");
-
+            encoder.set_label("Tesselation Factors");
             encoder.set_compute_pipeline_state(&self.tessellation_compute_state);
             encoder.set_bytes(
                 TesselComputeBufferIndex::TessellFactor as _,
@@ -225,7 +279,6 @@ impl RendererDelgate for Delegate {
                 depth: 1,
             };
             encoder.dispatch_thread_groups(size_one, size_one);
-            encoder.pop_debug_group();
             encoder.end_encoding();
         }
         // Render Shadow Map
@@ -236,8 +289,7 @@ impl RendererDelgate for Delegate {
                     .as_ref()
                     .map(|d| (d, MTLStoreAction::Store)),
             ));
-            encoder.set_label("Render Shadow Map");
-            encoder.push_debug_group("Shadow Map");
+            encoder.set_label("Shadow Map");
             encoder.set_render_pipeline_state(&self.shadow_map_pipeline_state);
             encoder.set_depth_stencil_state(&self.depth_state);
             set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
@@ -253,10 +305,9 @@ impl RendererDelgate for Delegate {
             );
             encoder.set_vertex_texture(
                 VertexTextureIndex::Displacement as _,
-                Some(&self.displacement_texture),
+                self.displacement_texture.as_deref(),
             );
             draw_patches(encoder, 4);
-            encoder.pop_debug_group();
             encoder.end_encoding()
         }
         // Render Plane
@@ -267,49 +318,67 @@ impl RendererDelgate for Delegate {
                     .as_ref()
                     .map(|d| (d, MTLStoreAction::DontCare)),
             ));
-            encoder.set_label("Render Plane");
-            encoder.push_debug_group("Plane");
-            encoder.set_render_pipeline_state(&self.render_pipeline_state);
-            encoder.set_depth_stencil_state(&self.depth_state);
-            set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::MatrixWorldToProjection as _,
-                &self.camera_space.matrix_world_to_projection,
-            );
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::DisplacementScale as _,
-                &self.displacement_scale,
-            );
-            encoder.set_vertex_texture(
-                VertexTextureIndex::Displacement as _,
-                Some(&self.displacement_texture),
-            );
-            encode_fragment_bytes(
-                encoder,
-                FragBufferIndex::CameraSpace as _,
-                &self.camera_space,
-            );
-            encode_fragment_bytes(encoder, FragBufferIndex::LightSpace as _, &self.light_space);
-            encode_fragment_bytes(encoder, FragBufferIndex::ShadeTriangulation as _, &false);
-            encoder.set_fragment_texture(FragTextureIndex::Normal as _, Some(&self.normal_texture));
-            encoder.set_fragment_texture(
-                FragTextureIndex::ShadowMap as _,
-                self.shadow_map_texture.as_deref(),
-            );
-            draw_patches(encoder, 4);
-            // IMPORTANT: This does *NOT* meet the project requirements, but accomplishes the same
-            //            thing!
-            // - The requirements ask for Geometry shader to render the triangulation.
-            // - Unfortunately (fortunately?), the Metal API does not support/have Geometry Shaders.
-            // TODO: Re-implement this project with Metal 3's Mesh Shaders!
-            if self.show_triangulation {
-                encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
-                encode_fragment_bytes(encoder, FragBufferIndex::ShadeTriangulation as _, &true);
-                draw_patches(encoder, 4);
+            encoder.set_label("Plane and Light");
+            {
+                encoder.push_debug_group("Light");
+                encoder.set_render_pipeline_state(&self.light_pipeline_state);
+                encoder.set_depth_stencil_state(&self.depth_state);
+                encode_vertex_bytes(
+                    encoder,
+                    LightVertexBufferIndex::MatrixModelToProjection as _,
+                    &(self.camera_space.matrix_world_to_projection
+                        * self.light_matrix_model_to_world),
+                );
+                self.light_model.encode_draws(encoder);
+                encoder.pop_debug_group();
             }
-            encoder.pop_debug_group();
+            {
+                encoder.push_debug_group("Plane");
+                encoder.set_render_pipeline_state(&self.render_pipeline_state);
+                encoder.set_depth_stencil_state(&self.depth_state);
+                set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
+                encode_vertex_bytes(
+                    encoder,
+                    VertexBufferIndex::MatrixWorldToProjection as _,
+                    &self.camera_space.matrix_world_to_projection,
+                );
+                encode_vertex_bytes(
+                    encoder,
+                    VertexBufferIndex::DisplacementScale as _,
+                    &self.displacement_scale,
+                );
+                encoder.set_vertex_texture(
+                    VertexTextureIndex::Displacement as _,
+                    self.displacement_texture.as_deref(),
+                );
+                encode_fragment_bytes(
+                    encoder,
+                    FragBufferIndex::CameraSpace as _,
+                    &self.camera_space,
+                );
+                encode_fragment_bytes(encoder, FragBufferIndex::LightSpace as _, &self.light_space);
+                encode_fragment_bytes(encoder, FragBufferIndex::ShadeTriangulation as _, &false);
+                encoder.set_fragment_texture(
+                    FragTextureIndex::Normal as _,
+                    Some(&self.normal_texture),
+                );
+                encoder.set_fragment_texture(
+                    FragTextureIndex::ShadowMap as _,
+                    self.shadow_map_texture.as_deref(),
+                );
+                draw_patches(encoder, 4);
+                // IMPORTANT: This does *NOT* meet the project requirements, but accomplishes the
+                //            same thing!
+                // - The requirements ask for a Geometry Shader to render the triangulation.
+                // - Unfortunately (fortunately?), the Metal API does not support/have Geometry
+                //   Shaders.
+                if self.show_triangulation {
+                    encoder.set_triangle_fill_mode(MTLTriangleFillMode::Lines);
+                    encode_fragment_bytes(encoder, FragBufferIndex::ShadeTriangulation as _, &true);
+                    draw_patches(encoder, 4);
+                }
+                encoder.pop_debug_group();
+            }
             encoder.end_encoding();
         }
         command_buffer
@@ -318,12 +387,15 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
         if let Some(update) = self.camera.on_event(event) {
-            self.camera_space = Space::from(&update);
+            self.camera_space = ProjectedSpace::from(&update);
             self.needs_render = true;
         }
         if let Some(update) = self.light.on_event(event) {
+            self.light_matrix_model_to_world = update.matrix_camera_to_world
+                * f32x4x4::y_rotate(PI)
+                * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
             self.light_matrix_world_to_projection = update.matrix_world_to_projection;
-            self.light_space = Space::from(&update);
+            self.light_space = ProjectedSpace::from(&update);
             //
             // IMPORTANT: Projecting to a Texture, NOT to the screen.
             // Used to **sample** Shadow Map Depth Texture during shading to produce shadows.
@@ -375,7 +447,7 @@ impl RendererDelgate for Delegate {
         match event {
             UserEvent::KeyDown { key_code, .. } => {
                 match key_code {
-                    49  /* Space */ => self.show_triangulation = !self.show_triangulation,
+                    49  /* ProjectedSpace */ => self.show_triangulation = !self.show_triangulation,
                     126 /* Up    */ => self.displacement_scale = (self.displacement_scale + 0.01).min(MAX_DISPLACEMENT_SCALE),
                     125 /* Down  */ => self.displacement_scale = (self.displacement_scale - 0.01).max(0.),
                     124 /* Right */ => self.tessellation_factor = (self.tessellation_factor + 1.).min(MAX_TESSELATION_FACTOR),
