@@ -1,8 +1,6 @@
 # metal-shaders
 
-- Split up structs in `common-bindings.h`
-    - Currently, their projects that don't use certain structs, but still generate (unused) bindings
-      for these structs
+- Testing
 
 # metal-app
 

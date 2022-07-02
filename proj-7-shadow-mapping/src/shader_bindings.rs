@@ -208,6 +208,59 @@ fn bindgen_test_layout_Material() {
 }
 #[repr(C)]
 #[repr(align(16))]
+pub struct ModelSpace {
+    pub matrix_model_to_projection: float4x4,
+    pub matrix_normal_to_world: float3x3,
+}
+#[test]
+fn bindgen_test_layout_ModelSpace() {
+    assert_eq!(
+        ::std::mem::size_of::<ModelSpace>(),
+        112usize,
+        concat!("Size of: ", stringify!(ModelSpace))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<ModelSpace>(),
+        16usize,
+        concat!("Alignment of ", stringify!(ModelSpace))
+    );
+    fn test_field_matrix_model_to_projection() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).matrix_model_to_projection) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(ModelSpace),
+                "::",
+                stringify!(matrix_model_to_projection)
+            )
+        );
+    }
+    test_field_matrix_model_to_projection();
+    fn test_field_matrix_normal_to_world() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).matrix_normal_to_world) as usize - ptr as usize
+            },
+            64usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(ModelSpace),
+                "::",
+                stringify!(matrix_normal_to_world)
+            )
+        );
+    }
+    test_field_matrix_normal_to_world();
+}
+#[repr(C)]
+#[repr(align(16))]
 pub struct ProjectedSpace {
     pub matrix_world_to_projection: float4x4,
     pub matrix_screen_to_world: float4x4,
@@ -276,59 +329,6 @@ fn bindgen_test_layout_ProjectedSpace() {
         );
     }
     test_field_position_world();
-}
-#[repr(C)]
-#[repr(align(16))]
-pub struct ModelSpace {
-    pub matrix_model_to_projection: float4x4,
-    pub matrix_normal_to_world: float3x3,
-}
-#[test]
-fn bindgen_test_layout_ModelSpace() {
-    assert_eq!(
-        ::std::mem::size_of::<ModelSpace>(),
-        112usize,
-        concat!("Size of: ", stringify!(ModelSpace))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<ModelSpace>(),
-        16usize,
-        concat!("Alignment of ", stringify!(ModelSpace))
-    );
-    fn test_field_matrix_model_to_projection() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_model_to_projection) as usize - ptr as usize
-            },
-            0usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(ModelSpace),
-                "::",
-                stringify!(matrix_model_to_projection)
-            )
-        );
-    }
-    test_field_matrix_model_to_projection();
-    fn test_field_matrix_normal_to_world() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_normal_to_world) as usize - ptr as usize
-            },
-            64usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(ModelSpace),
-                "::",
-                stringify!(matrix_normal_to_world)
-            )
-        );
-    }
-    test_field_matrix_normal_to_world();
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]

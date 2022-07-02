@@ -4,7 +4,10 @@
 //
 // These are used to generate Rust types in the `build.rs` build script.
 
-#include "../../metal-shaders/shader_src/common-bindings.h"
+#include "../../metal-shaders/shader_src/bindings/geometry.h"
+#include "../../metal-shaders/shader_src/bindings/material.h"
+#include "../../metal-shaders/shader_src/bindings/model-space.h"
+#include "../../metal-shaders/shader_src/bindings/projected-space.h"
 
 enum struct VertexBufferIndex: unsigned int
 {

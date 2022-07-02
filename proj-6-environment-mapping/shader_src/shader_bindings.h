@@ -4,7 +4,7 @@
 //
 // These are used to generate Rust types in the `build.rs` build script.
 
-#include "../../metal-shaders/shader_src/common-bindings.h"
+#include "../../metal-shaders/shader_src/bindings/geometry.h"
 
 DEF_CONSTANT constexpr unsigned short MIRRORED_INSTANCE_ID = 1;
 

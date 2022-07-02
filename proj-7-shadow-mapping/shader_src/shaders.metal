@@ -25,11 +25,12 @@ main_vertex(         uint         vertex_id [[vertex_id]],
 }
 
 fragment half4
-main_fragment(         VertexOut         in       [[stage_in]],
-              constant ProjectedSpace  & camera   [[buffer(FragBufferIndex::CameraSpace)]],
-              constant ProjectedSpace  & light    [[buffer(FragBufferIndex::LightSpace)]],
-              constant Material        & material [[buffer(FragBufferIndex::Material)]],
-                       depth2d<float, access::sample> shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
+main_fragment(         VertexOut                 in        [[stage_in]],
+              constant ProjectedSpace          & camera    [[buffer(FragBufferIndex::CameraSpace)]],
+              constant ProjectedSpace          & light     [[buffer(FragBufferIndex::LightSpace)]],
+              constant Material                & material  [[buffer(FragBufferIndex::Material)]],
+                       depth2d<float,
+                               access::sample>   shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
 {
     float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
