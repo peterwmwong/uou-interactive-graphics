@@ -5,3 +5,4 @@
 #include "./bindings/material.h"
 #include "./bindings/model-space.h"
 #include "./bindings/projected-space.h"
+#include "./bindings/shading-mode.h"

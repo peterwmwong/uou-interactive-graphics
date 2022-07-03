@@ -20,6 +20,14 @@ cargo run --bin proj-8-tesselation
 | Left button drag               | Camera orbits                                |
 | Ctrl + Right button drag       | Light orbits                                 |
 | Ctrl + Left button drag        | Light distance                               |
-| Spacebar                       | Toggle rendering triangulation               |
-| Up/Down                        | Increase/Decrease displacement               |
-| Right/Left                     | Increase/Decrease tesselation                |
+
+| Key        | Action                                 |
+|------------|----------------------------------------|
+| 0          | Ambient + Diffuse + Specular (default) |
+| 1          | Normals                                |
+| 2          | Ambient                                |
+| 3          | Ambient + Diffuse                      |
+| 4          | Specular                               |
+| Spacebar   | Toggle rendering triangulation         |
+| Up/Down    | Increase/Decrease displacement         |
+| Right/Left | Increase/Decrease tesselation          |

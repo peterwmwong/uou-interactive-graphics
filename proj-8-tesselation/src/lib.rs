@@ -2,7 +2,13 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::camera, math_helpers::round_up_pow_of_2, metal::*, metal_types::*, *};
+use metal_app::{
+    components::{camera, ShadingModeSelector},
+    math_helpers::round_up_pow_of_2,
+    metal::*,
+    metal_types::*,
+    *,
+};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -52,22 +58,65 @@ struct Delegate {
     device: Device,
     displacement_scale: f32,
     displacement_texture: Option<Texture>,
+    library: Library,
     light_matrix_model_to_world: f32x4x4,
     light_matrix_world_to_projection: f32x4x4,
     light_model:
         Model<{ LightVertexBufferIndex::Geometry as _ }, { LightFragBufferIndex::Material as _ }>,
-    light_pipeline_state: RenderPipelineState,
+    light_pipeline: RenderPipelineState,
     light_space: ProjectedSpace,
     light: camera::Camera,
     needs_render: bool,
     normal_texture: Texture,
-    render_pipeline_state: RenderPipelineState,
-    shadow_map_pipeline_state: RenderPipelineState,
+    render_pipeline: RenderPipelineState,
+    shading_mode: ShadingModeSelector,
+    shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
     show_triangulation: bool,
-    tessellation_compute_state: ComputePipelineState,
+    tessellation_compute_pipeline: ComputePipelineState,
     tessellation_factor: f32,
     tessellation_factors_buffer: Buffer,
+}
+
+fn create_pipeline(
+    device: &Device,
+    library: &Library,
+    mode: ShadingModeSelector,
+) -> RenderPipelineState {
+    let mut desc = new_render_pipeline_descriptor(
+        "Plane",
+        &library,
+        Some((DEFAULT_PIXEL_FORMAT, false)),
+        Some(DEPTH_TEXTURE_FORMAT),
+        Some(&mode.encode(
+            FunctionConstantValues::new(),
+            ShadingMode::HasAmbient as _,
+            ShadingMode::HasDiffuse as _,
+            ShadingMode::HasSpecular as _,
+            ShadingMode::OnlyNormals as _,
+        )),
+        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+        Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+    );
+    set_tessellation_config(&mut desc);
+    let p = create_render_pipeline(&device, &desc);
+    debug_assert_argument_buffer_size::<{ VertexBufferIndex::MatrixWorldToProjection as _ }, f32x4x4>(
+        &p,
+        FunctionType::Vertex,
+    );
+    debug_assert_argument_buffer_size::<{ VertexBufferIndex::DisplacementScale as _ }, f32>(
+        &p,
+        FunctionType::Vertex,
+    );
+    debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, ProjectedSpace>(
+        &p,
+        FunctionType::Fragment,
+    );
+    debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, ProjectedSpace>(
+        &p,
+        FunctionType::Fragment,
+    );
+    p.pipeline_state
 }
 
 impl RendererDelgate for Delegate {
@@ -95,6 +144,8 @@ impl RendererDelgate for Delegate {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
+        let shading_mode = ShadingModeSelector::DEFAULT;
+        let render_pipeline_state = create_pipeline(&device, &library, shading_mode);
         let mut image_buffer = vec![];
         Self {
             camera_space: Default::default(),
@@ -140,7 +191,7 @@ impl RendererDelgate for Delegate {
                     arg.ambient_amount = 0.8;
                 },
             ),
-            light_pipeline_state: {
+            light_pipeline: {
                 let p = create_render_pipeline(
                     &device,
                     &new_render_pipeline_descriptor(
@@ -177,37 +228,9 @@ impl RendererDelgate for Delegate {
             ),
             needs_render: false,
             normal_texture: new_texture_from_png(normal_image_path, &device, &mut image_buffer),
-            render_pipeline_state: {
-                let mut desc = new_render_pipeline_descriptor(
-                    "Plane",
-                    &library,
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    Some(DEPTH_TEXTURE_FORMAT),
-                    None,
-                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-                );
-                set_tessellation_config(&mut desc);
-                let p = create_render_pipeline(&device, &desc);
-                debug_assert_argument_buffer_size::<
-                    { VertexBufferIndex::MatrixWorldToProjection as _ },
-                    f32x4x4,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<
-                    { VertexBufferIndex::DisplacementScale as _ },
-                    f32,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<
-                    { FragBufferIndex::CameraSpace as _ },
-                    ProjectedSpace,
-                >(&p, FunctionType::Fragment);
-                debug_assert_argument_buffer_size::<
-                    { FragBufferIndex::LightSpace as _ },
-                    ProjectedSpace,
-                >(&p, FunctionType::Fragment);
-                p.pipeline_state
-            },
-            shadow_map_pipeline_state: {
+            render_pipeline: render_pipeline_state,
+            shading_mode,
+            shadow_map_pipeline: {
                 let mut desc = new_render_pipeline_descriptor(
                     "Shadow Map Pipeline",
                     &library,
@@ -231,7 +254,7 @@ impl RendererDelgate for Delegate {
             },
             shadow_map_texture: None,
             show_triangulation: false,
-            tessellation_compute_state: {
+            tessellation_compute_pipeline: {
                 let fun = library
                     .get_function(&"tessell_compute", None)
                     .expect("Failed to get tessellation compute function");
@@ -248,6 +271,7 @@ impl RendererDelgate for Delegate {
                 buf
             },
             device,
+            library,
         }
     }
 
@@ -262,7 +286,7 @@ impl RendererDelgate for Delegate {
         {
             let encoder = command_buffer.new_compute_command_encoder();
             encoder.set_label("Tesselation Factors");
-            encoder.set_compute_pipeline_state(&self.tessellation_compute_state);
+            encoder.set_compute_pipeline_state(&self.tessellation_compute_pipeline);
             encoder.set_bytes(
                 TesselComputeBufferIndex::TessellFactor as _,
                 std::mem::size_of_val(&self.tessellation_factor) as _,
@@ -290,7 +314,7 @@ impl RendererDelgate for Delegate {
                     .map(|d| (d, MTLStoreAction::Store)),
             ));
             encoder.set_label("Shadow Map");
-            encoder.set_render_pipeline_state(&self.shadow_map_pipeline_state);
+            encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
             encoder.set_depth_stencil_state(&self.depth_state);
             set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
             encode_vertex_bytes(
@@ -321,7 +345,7 @@ impl RendererDelgate for Delegate {
             encoder.set_label("Plane and Light");
             {
                 encoder.push_debug_group("Light");
-                encoder.set_render_pipeline_state(&self.light_pipeline_state);
+                encoder.set_render_pipeline_state(&self.light_pipeline);
                 encoder.set_depth_stencil_state(&self.depth_state);
                 encode_vertex_bytes(
                     encoder,
@@ -334,7 +358,7 @@ impl RendererDelgate for Delegate {
             }
             {
                 encoder.push_debug_group("Plane");
-                encoder.set_render_pipeline_state(&self.render_pipeline_state);
+                encoder.set_render_pipeline_state(&self.render_pipeline);
                 encoder.set_depth_stencil_state(&self.depth_state);
                 set_tesselation_factor_buffer(encoder, &self.tessellation_factors_buffer);
                 encode_vertex_bytes(
@@ -442,6 +466,10 @@ impl RendererDelgate for Delegate {
                 }
                 PROJECTION_TO_TEXTURE_COORDINATE_SPACE
             } * update.matrix_world_to_projection;
+            self.needs_render = true;
+        }
+        if self.shading_mode.on_event(event) {
+            self.render_pipeline = create_pipeline(&self.device, &self.library, self.shading_mode);
             self.needs_render = true;
         }
         match event {

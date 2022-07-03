@@ -2,7 +2,13 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::camera, math_helpers::round_up_pow_of_2, metal::*, metal_types::*, *};
+use metal_app::{
+    components::{camera, ShadingModeSelector},
+    math_helpers::round_up_pow_of_2,
+    metal::*,
+    metal_types::*,
+    *,
+};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -103,16 +109,60 @@ struct Delegate {
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
+    library: Library,
     light_matrix_world_to_projection: f32x4x4,
     light_space: ProjectedSpace,
     light: camera::Camera,
     model_light: RenderableModelObject,
-    model_pipeline_state: RenderPipelineState,
+    model_pipeline: RenderPipelineState,
     model_plane: RenderableModelObject,
     model: RenderableModelObject,
     needs_render: bool,
+    shading_mode: ShadingModeSelector,
     shadow_map_pipeline: RenderPipelineState,
     shadow_map_texture: Option<Texture>,
+}
+
+fn create_pipeline(
+    device: &Device,
+    library: &Library,
+    mode: ShadingModeSelector,
+) -> RenderPipelineState {
+    let p = create_render_pipeline(
+        &device,
+        &new_render_pipeline_descriptor(
+            "Model",
+            &library,
+            Some((DEFAULT_PIXEL_FORMAT, false)),
+            Some(DEPTH_TEXTURE_FORMAT),
+            Some(&mode.encode(
+                FunctionConstantValues::new(),
+                ShadingMode::HasAmbient as _,
+                ShadingMode::HasDiffuse as _,
+                ShadingMode::HasSpecular as _,
+                ShadingMode::OnlyNormals as _,
+            )),
+            Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+        ),
+    );
+    debug_assert_argument_buffer_size::<{ VertexBufferIndex::ModelSpace as _ }, ModelSpace>(
+        &p,
+        FunctionType::Vertex,
+    );
+    debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+        &p,
+        FunctionType::Vertex,
+    );
+    debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, ProjectedSpace>(
+        &p,
+        FunctionType::Fragment,
+    );
+    debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, ProjectedSpace>(
+        &p,
+        FunctionType::Fragment,
+    );
+    p.pipeline_state
 }
 
 impl RendererDelgate for Delegate {
@@ -131,6 +181,7 @@ impl RendererDelgate for Delegate {
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("common-assets");
+        let shading_mode = ShadingModeSelector::DEFAULT;
         Self {
             camera: camera::Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
@@ -207,37 +258,7 @@ impl RendererDelgate for Delegate {
             //    3. Change fragment function
             //    4. Create Pipeline 2
             //    5. etc.
-            model_pipeline_state: {
-                let p = create_render_pipeline(
-                    &device,
-                    &new_render_pipeline_descriptor(
-                        "Model",
-                        &library,
-                        Some((DEFAULT_PIXEL_FORMAT, false)),
-                        Some(DEPTH_TEXTURE_FORMAT),
-                        None,
-                        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                        Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-                    ),
-                );
-                debug_assert_argument_buffer_size::<
-                    { VertexBufferIndex::ModelSpace as _ },
-                    ModelSpace,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-                    &p,
-                    FunctionType::Vertex,
-                );
-                debug_assert_argument_buffer_size::<
-                    { FragBufferIndex::CameraSpace as _ },
-                    ProjectedSpace,
-                >(&p, FunctionType::Fragment);
-                debug_assert_argument_buffer_size::<
-                    { FragBufferIndex::LightSpace as _ },
-                    ProjectedSpace,
-                >(&p, FunctionType::Fragment);
-                p.pipeline_state
-            },
+            model_pipeline: create_pipeline(&device, &library, shading_mode),
             // TODO: How much instruction reduction do we get if we reorder/group like things together.
             // - Pipeline Creation
             // - Depth State Creation
@@ -265,8 +286,10 @@ impl RendererDelgate for Delegate {
                 );
                 p.pipeline_state
             },
+            shading_mode,
             shadow_map_texture: None,
             needs_render: false,
+            library,
             device,
         }
     }
@@ -314,7 +337,7 @@ impl RendererDelgate for Delegate {
                 &mut self.model_plane,
             ];
             models.iter().for_each(|m| m.encode_use_resources(encoder));
-            encoder.set_render_pipeline_state(&self.model_pipeline_state);
+            encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.depth_state);
             encode_fragment_bytes::<ProjectedSpace>(
                 encoder,
@@ -402,6 +425,10 @@ impl RendererDelgate for Delegate {
                 matrix_screen_to_world: update.matrix_screen_to_world,
                 position_world: update.position_world.into(),
             };
+            self.needs_render = true;
+        }
+        if self.shading_mode.on_event(event) {
+            self.model_pipeline = create_pipeline(&self.device, &self.library, self.shading_mode);
             self.needs_render = true;
         }
         match event {

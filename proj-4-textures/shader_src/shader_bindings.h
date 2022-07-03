@@ -6,14 +6,7 @@
 
 #include "../../metal-shaders/shader_src/bindings/geometry.h"
 #include "../../metal-shaders/shader_src/bindings/material.h"
-
-enum struct FC: unsigned char
-{
-    HasAmbient = 0,
-    HasDiffuse,
-    HasNormal,
-    HasSpecular,
-};
+#include "../../metal-shaders/shader_src/bindings/shading-mode.h"
 
 struct World {
     float4x4 matrix_model_to_projection;

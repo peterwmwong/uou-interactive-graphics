@@ -38,3 +38,11 @@ cargo run --bin proj-6-environment-mapping proj-6-environment-mapping/assets/sph
 |--------------------------------|----------------------------------------------|
 | Right button drag              | Camera zoom in/out                           |
 | Left button drag               | Camera orbits                                |
+
+| Key | Action                                 |
+|-----|----------------------------------------|
+|  0  | Ambient + Diffuse + Specular (default) |
+|  1  | Normals                                |
+|  2  | Ambient                                |
+|  3  | Ambient + Diffuse                      |
+|  4  | Specular                               |

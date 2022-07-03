@@ -208,10 +208,10 @@ fn bindgen_test_layout_Material() {
 }
 #[repr(u8)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
-pub enum FC {
+pub enum ShadingMode {
     HasAmbient = 0,
     HasDiffuse = 1,
-    HasNormal = 2,
+    OnlyNormals = 2,
     HasSpecular = 3,
 }
 #[repr(C)]

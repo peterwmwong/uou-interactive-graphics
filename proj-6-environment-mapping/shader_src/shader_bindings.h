@@ -5,6 +5,8 @@
 // These are used to generate Rust types in the `build.rs` build script.
 
 #include "../../metal-shaders/shader_src/bindings/geometry.h"
+#include "../../metal-shaders/shader_src/bindings/macros.h"
+#include "../../metal-shaders/shader_src/bindings/shading-mode.h"
 
 DEF_CONSTANT constexpr unsigned short MIRRORED_INSTANCE_ID = 1;
 

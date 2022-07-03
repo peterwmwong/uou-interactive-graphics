@@ -8,6 +8,9 @@ half4 test_shade_phong_blinn_with_constant_material() {
             .light_pos = half3(0),
             .camera_pos = half3(0),
             .normal = half3(0),
+            .has_ambient = true,
+            .has_diffuse = true,
+            .has_specular = true,
         },
         ConstantMaterial(0, 0, 0, 0, 0)
     );
@@ -29,6 +32,9 @@ half4 test_shade_phong_blinn_with_textured_material(constant Material & material
             .light_pos = half3(0),
             .camera_pos = half3(0),
             .normal = half3(0),
+            .has_ambient = true,
+            .has_diffuse = true,
+            .has_specular = true,
         },
         TexturedMaterial<Material>(float2(0), false, material)
     );

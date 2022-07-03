@@ -23,6 +23,10 @@ struct ConstantMaterial {
     inline constexpr half ambient_amount() const { return ambient_amt; }
 };
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// This no longer needs to be tempated and just use the Material struct from bindings/material.h
 template<typename T>
 struct TexturedMaterial {
     const    float2     tx_coord;
@@ -53,10 +57,15 @@ struct ShadePhongBlinParams {
     const half3 light_pos;
     const half3 camera_pos;
     const half3 normal;
+    const bool has_ambient = true;
+    const bool has_diffuse = true;
+    const bool has_specular = true;
+    const bool only_normals = false;
 };
 
 template<typename T>
-inline half4 shade_phong_blinn(const ShadePhongBlinParams p, const T material) {
+inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
+                               const T material) {
     /*
     ================================================================
     Rendering Equation: Ambient + Geometry Term (Diffuse + Specular)
@@ -85,11 +94,15 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p, const T material) {
     // - Should be a performance improvement
     //      1. Memory reduction: no need to store world.camera_position
     //      2. Faster: calculating `c` (direction/unit vector towards camera) is simply `-pos` (assuming pos is now in view space)
-    const half3 l  = normalize(p.light_pos - p.frag_pos);  // Light  - world space direction from fragment to light
-    const half3 c  = normalize(p.camera_pos - p.frag_pos); // Camera - world space direction from fragment to camera
-    const half3 h  = normalize(l + c);                 // Half   - half-way vector between Light and Camera
-    const half3 n  = p.normal;                           // Normal - unit vector, world space direction perpendicular to surface
-    const half  hn = dot(h, n);
+    const half3 l = normalize(p.light_pos - p.frag_pos);  // Light  - world space direction from fragment to light
+    const half3 c = normalize(p.camera_pos - p.frag_pos); // Camera - world space direction from fragment to camera
+    const half3 h = normalize(l + c);                     // Half   - half-way vector between Light and Camera
+    const half3 n = p.normal;                             // Normal - unit vector, world space direction perpendicular to surface
+    if (p.only_normals) {
+        return half4(n.xy, n.z * -1, 1);
+    }
+
+    const half hn = dot(h, n);
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
     const half ln = max(dot(l, n), 0.h);
@@ -103,22 +116,17 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p, const T material) {
     const half Il = step(0.h, dot(c, n)) * (1. - Ia);
 
     half4 color = 0;
-
-    // TODO: Bring back Function Constant capable specialization (see proj-4), to allow for
-    // debug views (ex. normal, ambient only, diffues only, specular only)
-    // - Can it be C++ template parameter?
-    // - If it's just a function parameter, will the Metal compiler be smart enough to inline and
-    //   do constant propagation?
-    //   - Should be easy enough with XCode (after GPU profiling) to see the number of instructions
-    //     matches that of proj-4 (uses Function Constants, recompiles pipeline after switching
-    //     modes).
-    const half4 Ks = material.specular_color();
-    color += Il * pow(hn * Ks, material.specular_shineness());
-
-    const half4 Ka = material.ambient_color();
-    color += Ia * Ka;
-
-    const half4 Kd = material.diffuse_color();
-    color += Il * ln * Kd;
+    if (p.has_specular) {
+        const half4 Ks = material.specular_color();
+        color += Il * pow(hn * Ks, material.specular_shineness());
+    }
+    if (p.has_ambient) {
+        const half4 Ka = material.ambient_color();
+        color += Ia * Ka;
+    }
+    if (p.has_diffuse) {
+        const half4 Kd = material.diffuse_color();
+        color += Il * ln * Kd;
+    }
     return color;
 }

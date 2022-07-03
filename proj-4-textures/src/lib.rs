@@ -2,91 +2,92 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use bitflags::bitflags;
 use metal_app::{components::*, metal::*, metal_types::*, *};
-use shader_bindings::*;
+use shader_bindings::{ShadingMode, *};
 use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
 
-bitflags! {
-    struct Mode: usize {
-        const HAS_AMBIENT = 1 << FC::HasAmbient as usize;
-        const HAS_DIFFUSE = 1 << FC::HasDiffuse as usize;
-        const HAS_NORMAL = 1 << FC::HasNormal as usize;
-        const HAS_SPECULAR = 1 << FC::HasSpecular as usize;
-        const DEFAULT = Self::HAS_AMBIENT.bits | Self::HAS_DIFFUSE.bits | Self::HAS_SPECULAR.bits;
-    }
-}
-
+const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
-const INITIAL_MODE: Mode = Mode::DEFAULT;
+const INITIAL_MODE: ShadingModeSelector = ShadingModeSelector::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = 0.5;
 
 pub struct Delegate<'a, const RENDER_LIGHT: bool> {
     camera: camera::Camera,
+    command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
-    command_queue: CommandQueue,
-    pub device: Device,
     library: Library,
+    light_pipeline: RenderPipelineState,
     light: light::Light,
     matrix_model_to_world: f32x4x4,
-    mode: Mode,
+    model_pipeline: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
-    render_light_pipeline_state: RenderPipelineState,
-    render_pipeline_state: RenderPipelineState,
+    needs_render: bool,
+    device: Device,
+    shading_mode: ShadingModeSelector,
     world_arg_buffer: Buffer,
     world_arg_ptr: &'a mut World,
-    needs_render: bool,
 }
 
-struct PipelineResults {
-    model_pipeline: CreateRenderPipelineResults,
-    light_pipeline: CreateRenderPipelineResults,
-}
-
-fn create_pipelines(device: &Device, library: &Library, mode: Mode) -> PipelineResults {
-    let function_constants = FunctionConstantValues::new();
-    for index in [
-        FC::HasAmbient as usize,
-        FC::HasDiffuse as usize,
-        FC::HasSpecular as usize,
-        FC::HasNormal as usize,
-    ] {
-        function_constants.set_constant_value_at_index(
-            (&mode.contains(Mode::from_bits_truncate(1 << index)) as *const _) as _,
-            MTLDataType::Bool,
-            index as _,
-        );
-    }
-    PipelineResults {
-        model_pipeline: create_render_pipeline(
-            &device,
-            &new_render_pipeline_descriptor(
-                "Plane",
-                &library,
-                Some((DEFAULT_PIXEL_FORMAT, false)),
-                None,
-                Some(&function_constants),
-                Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-            ),
-        ),
-        light_pipeline: create_render_pipeline(
-            &device,
-            &new_render_pipeline_descriptor(
-                "Light",
-                &library,
-                Some((DEFAULT_PIXEL_FORMAT, false)),
-                None,
-                Some(&function_constants),
-                Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
-                Some((&"light_fragment", 0)),
-            ),
-        ),
-    }
+fn create_pipelines(
+    device: &Device,
+    library: &Library,
+    mode: ShadingModeSelector,
+) -> (RenderPipelineState, RenderPipelineState) {
+    let function_constants = mode.encode(
+        FunctionConstantValues::new(),
+        ShadingMode::HasAmbient as _,
+        ShadingMode::HasDiffuse as _,
+        ShadingMode::HasSpecular as _,
+        ShadingMode::OnlyNormals as _,
+    );
+    (
+        {
+            let p = create_render_pipeline(
+                &device,
+                &new_render_pipeline_descriptor(
+                    "Plane",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    None,
+                    Some(&function_constants),
+                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                ),
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::Material as _ }, Material>(
+                &p,
+                FunctionType::Fragment,
+            );
+            p.pipeline_state
+        },
+        {
+            let p = create_render_pipeline(
+                &device,
+                &new_render_pipeline_descriptor(
+                    "Light",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    None,
+                    Some(&function_constants),
+                    Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
+                    Some((&"light_fragment", 0)),
+                ),
+            );
+            debug_assert_argument_buffer_size::<{ LightVertexBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Vertex,
+            );
+            p.pipeline_state
+        },
+    )
 }
 
 impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT> {
@@ -102,18 +103,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let mode = INITIAL_MODE;
-        let PipelineResults {
-            model_pipeline,
-            light_pipeline,
-        } = create_pipelines(&device, &library, mode);
-        debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-            &model_pipeline,
-            FunctionType::Vertex,
-        );
-        debug_assert_argument_buffer_size::<{ FragBufferIndex::Material as _ }, Material>(
-            &model_pipeline,
-            FunctionType::Fragment,
-        );
+        let (model_pipeline, light_pipeline) = create_pipelines(&device, &library, mode);
         let model = Model::from_file(
             model_file,
             &device,
@@ -140,15 +130,8 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 arg.diffuse_texture = diffuse_texture;
                 arg.specular_texture = specular_texture;
                 arg.specular_shineness = specular_shineness;
+                arg.ambient_amount = DEFAULT_AMBIENT_AMOUNT;
             },
-        );
-        debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
-            &model_pipeline,
-            FunctionType::Vertex,
-        );
-        debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
-            &model_pipeline,
-            FunctionType::Fragment,
         );
         let world_arg_buffer = device.new_buffer(
             std::mem::size_of::<World>() as _,
@@ -188,6 +171,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 false,
                 0.,
             ),
+            command_queue: device.new_command_queue(),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -202,15 +186,14 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 ModifierKeys::CONTROL,
                 true,
             ),
+            light_pipeline,
             matrix_model_to_world,
-            mode,
             model,
-            render_pipeline_state: model_pipeline.pipeline_state,
-            render_light_pipeline_state: light_pipeline.pipeline_state,
+            model_pipeline,
+            needs_render: false,
+            shading_mode: mode,
             world_arg_buffer,
             world_arg_ptr,
-            needs_render: false,
-            command_queue: device.new_command_queue(),
             device,
         }
     }
@@ -231,7 +214,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         // Render Model
         {
             encoder.push_debug_group("Model");
-            encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.depth_state);
             self.model.encode_use_resources(&encoder);
             encoder.set_vertex_buffer(
@@ -250,7 +233,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         // Render Light
         if RENDER_LIGHT {
             encoder.push_debug_group("Light");
-            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
+            encoder.set_render_pipeline_state(&self.light_pipeline);
             // // TODO: Figure out a better way to unset this buffers from the previous draw call
             encoder.set_vertex_buffers(
                 0,
@@ -296,17 +279,13 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 self.needs_render = true;
             });
 
+        if self.shading_mode.on_event(event) {
+            (self.model_pipeline, self.light_pipeline) =
+                create_pipelines(&self.device, &self.library, self.shading_mode);
+            self.needs_render = true;
+        }
+
         match event {
-            UserEvent::KeyDown { key_code, .. } => {
-                self.update_mode(match key_code {
-                29 /* 0 */ => Mode::DEFAULT,
-                18 /* 1 */ => Mode::HAS_NORMAL,
-                19 /* 2 */ => Mode::HAS_AMBIENT,
-                20 /* 3 */ => Mode::HAS_AMBIENT | Mode::HAS_DIFFUSE,
-                21 /* 4 */ => Mode::HAS_SPECULAR,
-                _ => self.mode
-            });
-            }
             UserEvent::WindowFocusedOrResized { size, .. } => {
                 self.update_depth_texture_size(size);
             }
@@ -325,17 +304,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
 }
 
 impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
-    #[inline]
-    fn update_mode(&mut self, mode: Mode) {
-        if mode != self.mode {
-            self.mode = mode;
-            let results = create_pipelines(&self.device, &self.library, mode);
-            self.render_pipeline_state = results.model_pipeline.pipeline_state;
-            self.render_light_pipeline_state = results.light_pipeline.pipeline_state;
-            self.needs_render = true;
-        }
-    }
-
     #[inline]
     fn update_depth_texture_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();

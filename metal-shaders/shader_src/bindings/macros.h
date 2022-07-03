@@ -2,6 +2,7 @@
 
 #ifdef __METAL_VERSION__
 
+// TODO: Can this be removed
 #include <metal_stdlib>
 using namespace metal;
 

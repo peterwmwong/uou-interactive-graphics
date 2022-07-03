@@ -330,6 +330,14 @@ fn bindgen_test_layout_ProjectedSpace() {
     }
     test_field_position_world();
 }
+#[repr(u8)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub enum ShadingMode {
+    HasAmbient = 0,
+    HasDiffuse = 1,
+    OnlyNormals = 2,
+    HasSpecular = 3,
+}
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum VertexBufferIndex {

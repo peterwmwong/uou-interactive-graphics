@@ -49,10 +49,14 @@ main_fragment(         VertexOut                 in        [[stage_in]],
 
     return shade_phong_blinn(
         {
-            .frag_pos   = half3(pos.xyz),
-            .light_pos  = half3(light.position_world.xyz),
-            .camera_pos = half3(camera.position_world.xyz),
-            .normal     = half3(normalize(in.normal)),
+            .frag_pos     = half3(pos.xyz),
+            .light_pos    = half3(light.position_world.xyz),
+            .camera_pos   = half3(camera.position_world.xyz),
+            .normal       = half3(normalize(in.normal)),
+            .has_ambient  = HasAmbient,
+            .has_diffuse  = HasDiffuse,
+            .has_specular = HasSpecular,
+            .only_normals = OnlyNormals,
         },
         TexturedMaterial<Material>(in.tx_coord, is_shadow, material)
     );

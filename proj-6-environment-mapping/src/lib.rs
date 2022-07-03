@@ -2,38 +2,113 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::camera, image_helpers, metal::*, metal_types::*, *};
+use metal_app::{
+    components::{camera::Camera, *},
+    image_helpers,
+    metal::*,
+    metal_types::*,
+    *,
+};
 use shader_bindings::*;
 use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
-
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
-const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
-
-struct Delegate<'a> {
-    bg_pipeline_state: RenderPipelineState,
-    bg_depth_state: DepthStencilState,
-    camera: camera::Camera,
-    command_queue: CommandQueue,
-    cubemap_texture: Texture,
-    model_depth_state: DepthStencilState,
-    depth_texture: Option<Texture>,
-    device: Device,
-    matrix_model_to_world: f32x4x4,
-    needs_render: bool,
-    model_pipeline_state: RenderPipelineState,
-    model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
-    mirrored_model_texture: Option<Texture>,
-    plane_pipeline_state: RenderPipelineState,
-    world_arg_buffer: Buffer,
-    world_arg_ptr: &'a mut World,
-}
 
 const CUBEMAP_TEXTURE_BYTES_PER_PIXEL: u32 = 4; // Assumed to be 4-component (ex. RGBA)
 const CUBEMAP_TEXTURE_WIDTH: u32 = 2048;
 const CUBEMAP_TEXTURE_HEIGHT: u32 = CUBEMAP_TEXTURE_WIDTH;
 const CUBEMAP_TEXTURE_BYTES_PER_ROW: u32 = CUBEMAP_TEXTURE_WIDTH * CUBEMAP_TEXTURE_BYTES_PER_PIXEL;
 const CUBEMAP_TEXTURE_BYTES_PER_FACE: u32 = CUBEMAP_TEXTURE_HEIGHT * CUBEMAP_TEXTURE_BYTES_PER_ROW;
+const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
+const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
+
+struct Delegate<'a> {
+    bg_depth_state: DepthStencilState,
+    bg_pipeline_state: RenderPipelineState,
+    camera: Camera,
+    command_queue: CommandQueue,
+    cubemap_texture: Texture,
+    depth_texture: Option<Texture>,
+    device: Device,
+    library: Library,
+    matrix_model_to_world: f32x4x4,
+    mirrored_model_texture: Option<Texture>,
+    model_depth_state: DepthStencilState,
+    model_pipeline: RenderPipelineState,
+    model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
+    needs_render: bool,
+    plane_pipeline: RenderPipelineState,
+    shading_mode: ShadingModeSelector,
+    world_arg_buffer: Buffer,
+    world_arg_ptr: &'a mut World,
+}
+
+fn create_pipelines(
+    device: &Device,
+    library: &Library,
+    mode: ShadingModeSelector,
+) -> (RenderPipelineState, RenderPipelineState) {
+    let function_constants = mode.encode(
+        FunctionConstantValues::new(),
+        ShadingMode::HasAmbient as _,
+        ShadingMode::HasDiffuse as _,
+        ShadingMode::HasSpecular as _,
+        ShadingMode::OnlyNormals as _,
+    );
+    (
+        // Model Pipeline
+        {
+            let p = create_render_pipeline(
+                &device,
+                &new_render_pipeline_descriptor(
+                    "Model",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    Some(DEPTH_TEXTURE_FORMAT),
+                    Some(&function_constants),
+                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+                ),
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Fragment,
+            );
+            p.pipeline_state
+        },
+        // Plane Pipeline
+        {
+            let p = create_render_pipeline(
+                &device,
+                &new_render_pipeline_descriptor(
+                    "Plane",
+                    &library,
+                    Some((DEFAULT_PIXEL_FORMAT, false)),
+                    Some(DEPTH_TEXTURE_FORMAT),
+                    Some(&function_constants),
+                    Some((&"plane_vertex", VertexBufferIndex::LENGTH as _)),
+                    Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
+                ),
+            );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Vertex,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
+                &p,
+                FunctionType::Fragment,
+            );
+            p.pipeline_state
+        },
+    )
+}
 
 impl<'a> RendererDelgate for Delegate<'a> {
     fn new(device: Device) -> Self {
@@ -133,7 +208,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                     &library,
                     Some((DEFAULT_PIXEL_FORMAT, false)),
                     Some(DEPTH_TEXTURE_FORMAT),
-                    None,
+                    Some(&FunctionConstantValues::new()),
                     Some((&"bg_vertex", 0)),
                     Some((&"bg_fragment", BGFragBufferIndex::LENGTH as _)),
                 ),
@@ -144,56 +219,9 @@ impl<'a> RendererDelgate for Delegate<'a> {
             );
             p
         };
-        let model_pipeline = {
-            let p = create_render_pipeline(
-                &device,
-                &new_render_pipeline_descriptor(
-                    "Model",
-                    &library,
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    Some(DEPTH_TEXTURE_FORMAT),
-                    None,
-                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-                ),
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-                &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Fragment,
-            );
-            p
-        };
-        let plane_pipeline = {
-            let p = create_render_pipeline(
-                &device,
-                &new_render_pipeline_descriptor(
-                    "Plane",
-                    &library,
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    Some(DEPTH_TEXTURE_FORMAT),
-                    None,
-                    Some((&"plane_vertex", VertexBufferIndex::LENGTH as _)),
-                    Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
-                ),
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Fragment,
-            );
-            p
-        };
+        let shading_mode = ShadingModeSelector::DEFAULT;
+        let (model_pipeline, plane_pipeline) = create_pipelines(&device, &library, shading_mode);
+
         let world_arg_buffer = device.new_buffer(
             std::mem::size_of::<World>() as _,
             MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
@@ -235,7 +263,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 device.new_depth_stencil_state(&desc)
             },
             bg_pipeline_state: bg_pipeline.pipeline_state,
-            camera: camera::Camera::new_with_default_distance(
+            camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
                 false,
@@ -243,21 +271,23 @@ impl<'a> RendererDelgate for Delegate<'a> {
             ),
             command_queue: device.new_command_queue(),
             cubemap_texture,
+            depth_texture: None,
+            library,
+            matrix_model_to_world,
+            mirrored_model_texture: None,
             model_depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            depth_texture: None,
-            matrix_model_to_world,
+            model_pipeline,
             model,
-            mirrored_model_texture: None,
-            model_pipeline_state: model_pipeline.pipeline_state,
-            plane_pipeline_state: plane_pipeline.pipeline_state,
+            needs_render: false,
+            plane_pipeline,
+            shading_mode,
             world_arg_buffer,
             world_arg_ptr,
-            needs_render: false,
             device,
         }
     }
@@ -280,7 +310,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
             {
                 encoder.push_debug_group("Model (mirrored)");
                 self.model.encode_use_resources(encoder);
-                encoder.set_render_pipeline_state(&self.model_pipeline_state);
+                encoder.set_render_pipeline_state(&self.model_pipeline);
                 encoder.set_depth_stencil_state(&self.model_depth_state);
                 encoder.set_vertex_buffer(
                     VertexBufferIndex::World as _,
@@ -311,7 +341,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         {
             encoder.push_debug_group("Model");
             self.model.encode_use_resources(encoder);
-            encoder.set_render_pipeline_state(&self.model_pipeline_state);
+            encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.model_depth_state);
             encoder.set_vertex_buffer(
                 VertexBufferIndex::World as _,
@@ -332,7 +362,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
         }
         {
             encoder.push_debug_group("Plane");
-            encoder.set_render_pipeline_state(&self.plane_pipeline_state);
+            encoder.set_render_pipeline_state(&self.plane_pipeline);
             encoder.set_fragment_texture(
                 FragTextureIndex::ModelTexture as _,
                 self.mirrored_model_texture.as_deref(),
@@ -377,6 +407,10 @@ impl<'a> RendererDelgate for Delegate<'a> {
             self.needs_render = true;
         }
 
+        if self.shading_mode.on_event(event) {
+            self.update_mode();
+        }
+
         match event {
             UserEvent::WindowFocusedOrResized { size } => {
                 self.update_textures_size(size);
@@ -415,6 +449,13 @@ impl<'a> Delegate<'a> {
         let texture = self.device.new_texture(&desc);
         texture.set_label("Model (mirrored)");
         self.mirrored_model_texture = Some(texture);
+    }
+
+    #[inline]
+    fn update_mode(&mut self) {
+        (self.model_pipeline, self.plane_pipeline) =
+            create_pipelines(&self.device, &self.library, self.shading_mode);
+        self.needs_render = true;
     }
 }
 

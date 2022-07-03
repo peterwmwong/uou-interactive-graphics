@@ -3,6 +3,7 @@
 #![feature(slice_as_chunks)]
 mod shader_bindings;
 
+use metal_app::components::ShadingModeSelector;
 use metal_app::*;
 use metal_app::{metal::*, metal_types::*};
 use shader_bindings::*;
@@ -17,10 +18,15 @@ const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth32Float;
 const INITIAL_CAMERA_DISTANCE: f32 = 50.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
-const INITIAL_MODE: FragMode = FragMode::AmbientDiffuseSpecular;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// - Use Model
+// - Use Camera
+// - Use Light
 struct Delegate {
     camera_distance: f32,
     camera_rotation: f32x2,
@@ -29,6 +35,8 @@ struct Delegate {
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     device: Device,
+    library: Library,
+    light_pipeline: RenderPipelineState,
     light_world_position: f32x4,
     light_xy_rotation: f32x2,
     matrix_model_to_projection: f32x4x4,
@@ -37,14 +45,40 @@ struct Delegate {
     matrix_world_to_camera: f32x4x4,
     matrix_world_to_projection: f32x4x4,
     max_bound: f32,
-    mode: FragMode,
+    model_pipeline: RenderPipelineState,
+    needs_render: bool,
     num_triangles: usize,
-    render_light_pipeline_state: RenderPipelineState,
-    render_pipeline_state: RenderPipelineState,
     screen_size: f32x2,
+    shading_mode: ShadingModeSelector,
     vertex_buffer_indices: Buffer,
     vertex_buffer_normals: Buffer,
     vertex_buffer_positions: Buffer,
+}
+
+fn create_model_pipeline(
+    device: &Device,
+    library: &Library,
+    shading_mode: ShadingModeSelector,
+) -> RenderPipelineState {
+    create_render_pipeline(
+        &device,
+        &new_render_pipeline_descriptor(
+            "Render Teapot Pipeline",
+            &library,
+            Some((DEFAULT_PIXEL_FORMAT, false)),
+            None,
+            Some(&shading_mode.encode(
+                FunctionConstantValues::new(),
+                ShadingMode::HasAmbient as _,
+                ShadingMode::HasDiffuse as _,
+                ShadingMode::HasSpecular as _,
+                ShadingMode::OnlyNormals as _,
+            )),
+            Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
+            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
+        ),
+    )
+    .pipeline_state
 }
 
 impl RendererDelgate for Delegate {
@@ -108,6 +142,7 @@ impl RendererDelgate for Delegate {
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
+        let shading_mode = ShadingModeSelector::DEFAULT;
 
         // Setup Render Pipeline Descriptor used for rendering the teapot and light
         let mut delegate = Self {
@@ -130,22 +165,10 @@ impl RendererDelgate for Delegate {
             matrix_world_to_camera: f32x4x4::identity(),
             matrix_world_to_projection: f32x4x4::identity(),
             max_bound,
-            mode: INITIAL_MODE,
+            needs_render: false,
             num_triangles: indices.len() / 3,
-            render_pipeline_state: create_render_pipeline(
-                &device,
-                &new_render_pipeline_descriptor(
-                    "Render Teapot Pipeline",
-                    &library,
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    None,
-                    None,
-                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-                ),
-            )
-            .pipeline_state,
-            render_light_pipeline_state: create_render_pipeline(
+            model_pipeline: create_model_pipeline(&device, &library, shading_mode),
+            light_pipeline: create_render_pipeline(
                 &device,
                 &new_render_pipeline_descriptor(
                     "Render Light Pipeline",
@@ -159,6 +182,7 @@ impl RendererDelgate for Delegate {
             )
             .pipeline_state,
             screen_size: f32x2::default(),
+            shading_mode,
             vertex_buffer_indices: allocate_new_buffer_with_data(
                 &device,
                 "Vertex Buffer Indices",
@@ -175,6 +199,7 @@ impl RendererDelgate for Delegate {
                 &positions,
             ),
             device,
+            library,
         };
         delegate.update_light(delegate.light_xy_rotation);
         delegate.update_camera(
@@ -187,6 +212,8 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        self.needs_render = false;
+
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
@@ -197,7 +224,7 @@ impl RendererDelgate for Delegate {
                 .as_ref()
                 .map(|d| (d, MTLStoreAction::DontCare)),
         ));
-        encoder.set_render_pipeline_state(&self.render_pipeline_state);
+        encoder.set_render_pipeline_state(&self.model_pipeline);
         encoder.set_depth_stencil_state(&self.depth_state);
 
         let light_world_position = float4::from(self.light_world_position);
@@ -233,7 +260,6 @@ impl RendererDelgate for Delegate {
                 VertexBufferIndex::MatrixModelToProjection as _,
                 &self.matrix_model_to_projection,
             );
-            encode_fragment_bytes(&encoder, FragBufferIndex::FragMode as _, &self.mode);
             encode_fragment_bytes(
                 &encoder,
                 FragBufferIndex::MatrixProjectionToWorld as _,
@@ -279,7 +305,7 @@ impl RendererDelgate for Delegate {
                 &[None; FragBufferIndex::LENGTH as _],
                 &[0; FragBufferIndex::LENGTH as _],
             );
-            encoder.set_render_pipeline_state(&self.render_light_pipeline_state);
+            encoder.set_render_pipeline_state(&self.light_pipeline);
             encode_vertex_bytes(
                 &encoder,
                 LightVertexBufferIndex::MatrixWorldToProjection as _,
@@ -299,6 +325,13 @@ impl RendererDelgate for Delegate {
     fn on_event(&mut self, event: UserEvent) {
         use metal_app::MouseButton::*;
         use UserEvent::*;
+
+        if self.shading_mode.on_event(event) {
+            self.model_pipeline =
+                create_model_pipeline(&self.device, &self.library, self.shading_mode);
+            self.needs_render = true;
+        }
+
         match event {
             MouseDrag {
                 button,
@@ -342,22 +375,17 @@ impl RendererDelgate for Delegate {
                     }
                 }
             }
-            KeyDown { key_code, .. } => {
-                self.mode = match key_code {
-                    29 /* 0 */ => FragMode::AmbientDiffuseSpecular,
-                    18 /* 1 */ => FragMode::Normals,
-                    19 /* 2 */ => FragMode::Ambient,
-                    20 /* 3 */ => FragMode::AmbientDiffuse,
-                    21 /* 4 */ => FragMode::Specular,
-                    _ => self.mode
-                };
-            }
             WindowFocusedOrResized { size, .. } => {
                 self.update_depth_texture_size(size);
                 self.update_camera(size, self.camera_rotation, self.camera_distance);
             }
             _ => {}
         }
+    }
+
+    #[inline]
+    fn needs_render(&self) -> bool {
+        self.needs_render
     }
 
     fn device(&self) -> &Device {
@@ -404,7 +432,8 @@ impl Delegate {
         self.light_xy_rotation = light_xy_rotation;
         self.light_world_position =
             f32x4x4::rotate(self.light_xy_rotation[0], self.light_xy_rotation[1], 0.)
-                * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.])
+                * f32x4::from_array([0., 0., -LIGHT_DISTANCE, 1.]);
+        self.needs_render = true;
     }
 
     fn update_camera(&mut self, screen_size: f32x2, camera_rotation: f32x2, camera_distance: f32) {
@@ -422,6 +451,7 @@ impl Delegate {
         self.matrix_model_to_projection =
             self.matrix_world_to_projection * self.matrix_model_to_world;
         self.matrix_projection_to_world = self.matrix_world_to_projection.inverse();
+        self.needs_render = true;
     }
 }
 

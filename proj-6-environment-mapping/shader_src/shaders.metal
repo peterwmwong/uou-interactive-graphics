@@ -45,12 +45,16 @@ inline half4 shade_mirror(const float4            screen_pos,
     const half3 light_pos = half3(0, 1, -1) * world_transform;
     return shade_phong_blinn(
         {
-            .frag_pos   = pos,
-            .light_pos  = light_pos,
-            .camera_pos = camera_pos,
-            .normal     = normal
+            .frag_pos     = pos,
+            .light_pos    = light_pos,
+            .camera_pos   = camera_pos,
+            .normal       = normal,
+            .has_ambient  = HasAmbient,
+            .has_diffuse  = HasDiffuse,
+            .has_specular = HasSpecular,
+            .only_normals = OnlyNormals,
         },
-        ConstantMaterial(half4(1), bg_color, bg_color, 50, 0.15)
+        ConstantMaterial(1, bg_color, bg_color, 50, 0.15)
     );
 }
 
@@ -70,6 +74,10 @@ bg_vertex(uint vertex_id [[vertex_id]])
     return { .position = float4(position2d, 1, 1) };
 }
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Use ProjectedSpace and ModelSpace
 
 fragment half4
 bg_fragment(         BGVertexOut         in       [[stage_in]],
@@ -115,8 +123,7 @@ main_fragment(         VertexOut           in         [[stage_in]],
               constant World             & world      [[buffer(FragBufferIndex::World)]],
                        texturecube<half>   bg_texture [[texture(FragTextureIndex::CubeMapTexture)]])
 {
-    const half4 color = shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture, in.is_mirrored);
-    return color;
+    return shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture, in.is_mirrored);
 };
 
 struct PlaneVertexOut

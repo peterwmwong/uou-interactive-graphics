@@ -29,16 +29,13 @@ main_vertex(         uint            inst_id         [[instance_id]],
 
 fragment half4
 main_fragment(         VertexOut   in            [[stage_in]],
-              constant FragMode  & mode          [[buffer(FragBufferIndex::FragMode)]],
               constant float4x4  & proj_to_world [[buffer(FragBufferIndex::MatrixProjectionToWorld)]],
               constant float2    & screen_size   [[buffer(FragBufferIndex::ScreenSize)]],
               constant float3    & light_pos     [[buffer(FragBufferIndex::LightPosition)]],
               constant float3    & cam_pos       [[buffer(FragBufferIndex::CameraPosition)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
-    if (mode == FragMode::Normals) {
-        return half4(half3(n * float3(1,1,-1)), 1);
-    }
+    if (OnlyNormals) return half4(half3(n * float3(1,1,-1)), 1);
 
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
     // 1. Viewport Coordinate -> Normalized Device Coordinate (aka Projected w/Perspective)
@@ -87,7 +84,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 diffuse  = select(
                                 0,
                                 Il * ln * Kd,
-                                mode == FragMode::AmbientDiffuseSpecular || mode == FragMode::AmbientDiffuse
+                                HasDiffuse
                             );
 
     const float3 Ks       = 1;   // Specular Material Color
@@ -95,7 +92,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 specular = select(
                                 0,
                                 Il * pow(dot(h, n) * Ks, s),
-                                mode == FragMode::AmbientDiffuseSpecular || mode == FragMode::Specular
+                                HasSpecular
                             );
 
     const float  Ia       = 0.1; // Ambient Intensity
@@ -103,7 +100,7 @@ main_fragment(         VertexOut   in            [[stage_in]],
     const float3 ambient  = select(
                                 0,
                                 Ia * Ka,
-                                mode == FragMode::AmbientDiffuseSpecular || mode == FragMode::Ambient || mode == FragMode::AmbientDiffuse
+                                HasAmbient
                             );
 
     return half4(half3(ambient + diffuse + specular), 1.0h);

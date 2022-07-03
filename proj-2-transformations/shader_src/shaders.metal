@@ -57,7 +57,7 @@ struct VertexOut
 // the Vertex Shader as a constant space buffer. It is done in the Vertex Shader for this project as
 // a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
-main_vertex(         uint            vertex_id        [[instance_id]],
+main_vertex(         uint            vertex_id        [[vertex_id]],
             constant packed_float4 * mins_maxs        [[buffer(VertexBufferIndex::MaxPositionValue)]],
             constant packed_float3 * positions        [[buffer(VertexBufferIndex::Positions)]],
             constant float2        & screen_size      [[buffer(VertexBufferIndex::ScreenSize)]],

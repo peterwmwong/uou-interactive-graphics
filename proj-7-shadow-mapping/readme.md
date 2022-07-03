@@ -34,3 +34,11 @@ cargo run --bin proj-7-shadow-mapping common-assets/yoda/yoda.obj
 | Left button drag               | Camera orbits                                |
 | Ctrl + Right button drag       | Light orbits                                 |
 | Ctrl + Left button drag        | Light distance                               |
+
+| Key | Action                                 |
+|-----|----------------------------------------|
+|  0  | Ambient + Diffuse + Specular (default) |
+|  1  | Normals                                |
+|  2  | Ambient                                |
+|  3  | Ambient + Diffuse                      |
+|  4  | Specular                               |

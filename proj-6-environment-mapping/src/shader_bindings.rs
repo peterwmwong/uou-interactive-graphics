@@ -99,6 +99,14 @@ fn bindgen_test_layout_Geometry() {
     }
     test_field_tx_coords();
 }
+#[repr(u8)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub enum ShadingMode {
+    HasAmbient = 0,
+    HasDiffuse = 1,
+    OnlyNormals = 2,
+    HasSpecular = 3,
+}
 pub const MIRRORED_INSTANCE_ID: ::std::os::raw::c_ushort = 1;
 #[repr(C)]
 #[repr(align(16))]

@@ -4,6 +4,8 @@
 //
 // These are used to generate Rust types in the `build.rs` build script.
 
+#include "../../metal-shaders/shader_src/bindings/shading-mode.h"
+
 enum struct VertexBufferIndex
 {
     Indices = 0,
@@ -14,19 +16,9 @@ enum struct VertexBufferIndex
     LENGTH
 };
 
-enum struct FragMode
-{
-    Normals = 0,
-    Ambient,
-    AmbientDiffuse,
-    Specular,
-    AmbientDiffuseSpecular,
-};
-
 enum struct FragBufferIndex
 {
-    FragMode = 0,
-    MatrixProjectionToWorld,
+    MatrixProjectionToWorld = 0,
     ScreenSize,
     LightPosition,
     CameraPosition,

@@ -73,7 +73,6 @@ fn dot(lhs: f32x4, rhs: f32x4) -> f32 {
 pub type f32x4x4 = float4x4;
 
 impl f32x4x4 {
-    #[allow(dead_code)]
     #[inline]
     pub const fn new(row1: [f32; 4], row2: [f32; 4], row3: [f32; 4], row4: [f32; 4]) -> Self {
         f32x4x4 {
@@ -99,7 +98,6 @@ impl f32x4x4 {
         }
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn inverse(&self) -> Self {
         // Based on https://stackoverflow.com/questions/1148309/inverting-a-4x4-matrix/44446912#44446912
@@ -163,7 +161,6 @@ impl f32x4x4 {
         };
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub const fn zero_translate(&self) -> Self {
         Self {
@@ -176,7 +173,6 @@ impl f32x4x4 {
         }
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub const fn scale_translate(sx: f32, sy: f32, sz: f32, tx: f32, ty: f32, tz: f32) -> Self {
         Self::new(
@@ -187,7 +183,6 @@ impl f32x4x4 {
         )
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub const fn translate(x: f32, y: f32, z: f32) -> Self {
         Self::new(
@@ -198,7 +193,6 @@ impl f32x4x4 {
         )
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub const fn scale(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self::new(
@@ -209,7 +203,6 @@ impl f32x4x4 {
         )
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn z_rotate(zrot: f32) -> Self {
         Self::new(
@@ -220,7 +213,6 @@ impl f32x4x4 {
         )
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn y_rotate(yrot: f32) -> Self {
         Self::new(
@@ -231,7 +223,6 @@ impl f32x4x4 {
         )
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn x_rotate(xrot: f32) -> Self {
         Self::new(
@@ -242,19 +233,16 @@ impl f32x4x4 {
         )
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn rotate(xrot: f32, yrot: f32, zrot: f32) -> Self {
         Self::x_rotate(xrot) * Self::y_rotate(yrot) * Self::z_rotate(zrot)
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub const fn identity() -> Self {
         Self::scale(1., 1., 1., 1.)
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub const fn row<const N: usize>(&self) -> f32x4 {
         let c = self.columns;

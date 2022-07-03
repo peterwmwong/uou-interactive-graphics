@@ -12,6 +12,12 @@ use std::{
 };
 use tobj::LoadOptions;
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// - Use Model
+// - Use Camera
+
 struct Delegate {
     camera_distance_offset: f32,
     camera_distance: f32,
@@ -21,7 +27,7 @@ struct Delegate {
     command_queue: CommandQueue,
     mins_maxs: [packed_float4; 2],
     num_vertices: usize,
-    render_pipeline_state: RenderPipelineState,
+    render_pipeline: RenderPipelineState,
     screen_size: f32x2,
     use_perspective: bool,
     vertex_buffer_positions: Buffer,
@@ -76,7 +82,7 @@ impl RendererDelgate for Delegate {
             command_queue: device.new_command_queue(),
             mins_maxs,
             num_vertices: positions.len() / 3,
-            render_pipeline_state: {
+            render_pipeline: {
                 let library = device
                     .new_library_with_data(include_bytes!(concat!(
                         env!("OUT_DIR"),
@@ -146,8 +152,8 @@ impl RendererDelgate for Delegate {
             VertexBufferIndex::UsePerspective as _,
             &self.use_perspective,
         );
-        encoder.set_render_pipeline_state(&self.render_pipeline_state);
-        encoder.draw_primitives_instanced(MTLPrimitiveType::Point, 0, 1, self.num_vertices as _);
+        encoder.set_render_pipeline_state(&self.render_pipeline);
+        encoder.draw_primitives(MTLPrimitiveType::Point, 0, self.num_vertices as _);
         encoder.end_encoding();
         command_buffer
     }
