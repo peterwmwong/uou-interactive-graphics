@@ -196,8 +196,6 @@ impl RendererDelgate for Delegate {
             encode_fragment_bytes(
                 &encoder,
                 FragBufferIndex::LightPosition as _,
-                // IMPORTANT: In the shader, this maps to a float3. This works because the float4
-                // and float3 have the same size and alignment.
                 &self.light_world_position,
             );
             self.model.encode_draws(encoder);

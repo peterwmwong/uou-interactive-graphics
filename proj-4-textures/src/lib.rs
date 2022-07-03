@@ -9,7 +9,12 @@ use metal_app::{
     *,
 };
 use shader_bindings::{ShadingMode, *};
-use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
+use std::{
+    f32::consts::PI,
+    ops::Neg,
+    path::PathBuf,
+    simd::{f32x2, f32x4},
+};
 
 const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
@@ -19,22 +24,22 @@ const INITIAL_MODE: ShadingModeSelector = ShadingModeSelector::DEFAULT;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = 0.5;
 
-pub struct Delegate<'a, const RENDER_LIGHT: bool> {
+pub struct Delegate<const RENDER_LIGHT: bool> {
     camera: Camera,
+    camera_space: ProjectedSpace,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     library: Library,
     light_pipeline: RenderPipelineState,
     light: Camera,
+    light_position: float4,
     matrix_model_to_world: f32x4x4,
     model_pipeline: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
     needs_render: bool,
     device: Device,
     shading_mode: ShadingModeSelector,
-    world_arg_buffer: Buffer,
-    world_arg_ptr: &'a mut World,
 }
 
 fn create_pipelines(
@@ -67,7 +72,19 @@ fn create_pipelines(
                 &p,
                 FunctionType::Vertex,
             );
+            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Model as _ }, ModelSpace>(
+                &p,
+                FunctionType::Vertex,
+            );
             debug_assert_argument_buffer_size::<{ FragBufferIndex::Material as _ }, Material>(
+                &p,
+                FunctionType::Fragment,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::Camera as _ }, ProjectedSpace>(
+                &p,
+                FunctionType::Fragment,
+            );
+            debug_assert_argument_buffer_size::<{ FragBufferIndex::LightPosition as _ }, float4>(
                 &p,
                 FunctionType::Fragment,
             );
@@ -86,16 +103,20 @@ fn create_pipelines(
                     Some((&"light_fragment", 0)),
                 ),
             );
-            debug_assert_argument_buffer_size::<{ LightVertexBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Vertex,
-            );
+            debug_assert_argument_buffer_size::<
+                { LightVertexBufferIndex::Camera as _ },
+                ProjectedSpace,
+            >(&p, FunctionType::Vertex);
+            debug_assert_argument_buffer_size::<
+                { LightVertexBufferIndex::LightPosition as _ },
+                float4,
+            >(&p, FunctionType::Vertex);
             p.pipeline_state
         },
     )
 }
 
-impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT> {
+impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     fn new(device: Device) -> Self {
         let executable_name = std::env::args()
             .nth(0)
@@ -138,11 +159,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 arg.ambient_amount = DEFAULT_AMBIENT_AMOUNT;
             },
         );
-        let world_arg_buffer =
-            device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
-        world_arg_buffer.set_label("World Argument Buffer");
-        let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
-
         let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
 
@@ -161,12 +177,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.));
         let matrix_model_to_world = model_to_world_scale_rot * f32x4x4::translate(cx, cy, cz);
 
-        // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
-        // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
-        // (no translation). Since normals are directions (not positions, relative to a
-        // point on a surface), translations are meaningless.
-        world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
-
         Self {
             camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
@@ -174,6 +184,11 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 false,
                 0.,
             ),
+            camera_space: ProjectedSpace {
+                matrix_world_to_projection: f32x4x4::identity().into(),
+                matrix_screen_to_world: f32x4x4::identity().into(),
+                position_world: f32x4::default().into(),
+            },
             command_queue: device.new_command_queue(),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
@@ -183,6 +198,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             },
             depth_texture: None,
             library,
+            light_position: f32x4::default().into(),
             light: Camera::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
@@ -196,8 +212,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             model_pipeline,
             needs_render: false,
             shading_mode: mode,
-            world_arg_buffer,
-            world_arg_ptr,
             device,
         }
     }
@@ -221,15 +235,24 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.depth_state);
             self.model.encode_use_resources(&encoder);
-            encoder.set_vertex_buffer(
-                VertexBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
-                0,
+            encode_vertex_bytes(
+                encoder,
+                VertexBufferIndex::Model as _,
+                &(ModelSpace {
+                    matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+                        * self.matrix_model_to_world,
+                    // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
+                    // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
+                    // (no translation). Since normals are directions (not positions, relative to a
+                    // point on a surface), translations are meaningless.
+                    matrix_normal_to_world: self.matrix_model_to_world.into(),
+                }),
             );
-            encoder.set_fragment_buffer(
-                FragBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
-                0,
+            encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
+            encode_fragment_bytes(
+                encoder,
+                FragBufferIndex::LightPosition as _,
+                &self.light_position,
             );
             self.model.encode_draws(&encoder);
             encoder.pop_debug_group();
@@ -238,21 +261,15 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         if RENDER_LIGHT {
             encoder.push_debug_group("Light");
             encoder.set_render_pipeline_state(&self.light_pipeline);
-            // // TODO: Figure out a better way to unset this buffers from the previous draw call
-            encoder.set_vertex_buffers(
-                0,
-                &[None; VertexBufferIndex::LENGTH as _],
-                &[0; VertexBufferIndex::LENGTH as _],
+            encode_vertex_bytes(
+                encoder,
+                LightVertexBufferIndex::Camera as _,
+                &self.camera_space,
             );
-            encoder.set_fragment_buffers(
-                0,
-                &[None; FragBufferIndex::LENGTH as _],
-                &[0; FragBufferIndex::LENGTH as _],
-            );
-            encoder.set_vertex_buffer(
-                LightVertexBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
-                0,
+            encode_vertex_bytes(
+                encoder,
+                LightVertexBufferIndex::LightPosition as _,
+                &self.light_position,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
             encoder.pop_debug_group();
@@ -263,16 +280,14 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
 
     fn on_event(&mut self, event: UserEvent) {
         if let Some(update) = self.camera.on_event(event) {
-            self.world_arg_ptr.camera_position = update.position_world.into();
-            self.world_arg_ptr.matrix_screen_to_world = update.matrix_screen_to_world;
-            self.world_arg_ptr.matrix_world_to_projection = update.matrix_world_to_projection;
-            self.world_arg_ptr.matrix_model_to_projection =
-                update.matrix_world_to_projection * self.matrix_model_to_world;
+            self.camera_space.position_world = update.position_world.into();
+            self.camera_space.matrix_screen_to_world = update.matrix_screen_to_world;
+            self.camera_space.matrix_world_to_projection = update.matrix_world_to_projection;
             self.needs_render = true;
         }
 
         if let Some(CameraUpdate { position_world, .. }) = self.light.on_event(event) {
-            self.world_arg_ptr.light_position = position_world.into();
+            self.light_position = position_world.into();
             self.needs_render = true;
         };
 
@@ -284,7 +299,17 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
 
         match event {
             UserEvent::WindowFocusedOrResized { size, .. } => {
-                self.update_depth_texture_size(size);
+                let desc = TextureDescriptor::new();
+                let &[x, y] = size.as_array();
+                desc.set_width(x as _);
+                desc.set_height(y as _);
+                desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
+                desc.set_storage_mode(MTLStorageMode::Memoryless);
+                desc.set_usage(MTLTextureUsage::RenderTarget);
+                let texture = self.device.new_texture(&desc);
+                texture.set_label("Depth");
+                self.depth_texture = Some(texture);
+                self.needs_render = true;
             }
             _ => {}
         }
@@ -297,22 +322,6 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
 
     fn device(&self) -> &Device {
         &self.device
-    }
-}
-
-impl<'a, const RENDER_LIGHT: bool> Delegate<'a, RENDER_LIGHT> {
-    #[inline]
-    fn update_depth_texture_size(&mut self, size: f32x2) {
-        let desc = TextureDescriptor::new();
-        let &[x, y] = size.as_array();
-        desc.set_width(x as _);
-        desc.set_height(y as _);
-        desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
-        desc.set_storage_mode(MTLStorageMode::Memoryless);
-        desc.set_usage(MTLTextureUsage::RenderTarget);
-        let texture = self.device.new_texture(&desc);
-        texture.set_label("Depth");
-        self.depth_texture = Some(texture);
     }
 }
 

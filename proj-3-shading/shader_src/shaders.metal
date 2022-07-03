@@ -26,7 +26,7 @@ main_vertex(         uint         vertex_id       [[vertex_id]],
 fragment half4
 main_fragment(         VertexOut        in        [[stage_in]],
               constant ProjectedSpace & camera    [[buffer(FragBufferIndex::CameraSpace)]],
-              constant float3         & light_pos [[buffer(FragBufferIndex::LightPosition)]])
+              constant float4         & light_pos [[buffer(FragBufferIndex::LightPosition)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (OnlyNormals) return half4(half3(n * float3(1,1,-1)), 1);

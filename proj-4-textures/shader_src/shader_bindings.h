@@ -6,33 +6,28 @@
 
 #include "../../metal-shaders/shader_src/bindings/geometry.h"
 #include "../../metal-shaders/shader_src/bindings/material.h"
+#include "../../metal-shaders/shader_src/bindings/model-space.h"
+#include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
-
-struct World {
-    float4x4 matrix_model_to_projection;
-    float3x3 matrix_normal_to_world;
-    float4x4 matrix_world_to_projection;
-    float4x4 matrix_screen_to_world;
-    float4   light_position;
-    float4   camera_position;
-};
 
 enum struct VertexBufferIndex: unsigned int
 {
     Geometry = 0,
-    World,
+    Model,
     LENGTH
 };
 
 enum struct FragBufferIndex: unsigned int
 {
     Material = 0,
-    World,
+    Camera,
+    LightPosition,
     LENGTH
 };
 
 enum struct LightVertexBufferIndex: unsigned int
 {
-    World = 0,
+    Camera = 0,
+    LightPosition,
     LENGTH,
 };

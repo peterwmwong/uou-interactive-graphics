@@ -11,41 +11,37 @@ struct VertexOut
     float2 tx_coord;
 };
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Use ProjectedSpace and ModelSpace ()
-
 vertex VertexOut
-main_vertex(         uint       vertex_id [[vertex_id]],
-            constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]],
-            constant World    & world     [[buffer(VertexBufferIndex::World)]])
+main_vertex(         uint         vertex_id [[vertex_id]],
+            constant Geometry   & geometry  [[buffer(VertexBufferIndex::Geometry)]],
+            constant ModelSpace & model     [[buffer(VertexBufferIndex::Model)]])
 {
     const uint   idx      = geometry.indices[vertex_id];
     const float4 position = float4(geometry.positions[idx], 1.0);
     const float3 normal   = geometry.normals[idx];
     const float2 tx_coord = geometry.tx_coords[idx];
     return {
-        .position  = world.matrix_model_to_projection * position,
-        .normal    = world.matrix_normal_to_world * normal,
+        .position  = model.matrix_model_to_projection * position,
+        .normal    = model.matrix_normal_to_world * normal,
         // TODO: Should flipping-x be determined by some data in the material?
         .tx_coord  = float2(tx_coord.x, 1. - tx_coord.y)
     };
 }
 
 fragment half4
-main_fragment(         VertexOut   in       [[stage_in]],
-              constant Material  & material [[buffer(FragBufferIndex::Material)]],
-              constant World     & world    [[buffer(FragBufferIndex::World)]])
+main_fragment(         VertexOut        in        [[stage_in]],
+              constant Material       & material  [[buffer(FragBufferIndex::Material)]],
+              constant ProjectedSpace & camera    [[buffer(FragBufferIndex::Camera)]],
+              constant float4         & light_pos [[buffer(FragBufferIndex::LightPosition)]])
 {
-    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
-    float4 pos = world.matrix_screen_to_world * float4(in.position.xyz, 1);
-           pos   = pos / pos.w;
+    // Calculate the fragment's ProjectedSpace Space position from a Metal Viewport Coordinate.
+    float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+           pos = pos / pos.w;
     return shade_phong_blinn(
         {
             .frag_pos     = half3(pos.xyz),
-            .light_pos    = half3(world.light_position.xyz),
-            .camera_pos   = half3(world.camera_position.xyz),
+            .light_pos    = half3(light_pos.xyz),
+            .camera_pos   = half3(camera.position_world.xyz),
             .normal       = half3(normalize(in.normal)),
             .has_ambient  = HasAmbient,
             .has_diffuse  = HasDiffuse,
@@ -63,10 +59,11 @@ struct LightVertexOut {
 };
 
 vertex LightVertexOut
-light_vertex(constant World & world [[buffer(LightVertexBufferIndex::World)]])
+light_vertex(constant ProjectedSpace & camera    [[buffer(LightVertexBufferIndex::Camera)]],
+             constant float4         & light_pos [[buffer(LightVertexBufferIndex::LightPosition)]])
 {
     return {
-        .position = world.matrix_world_to_projection * world.light_position,
+        .position = camera.matrix_world_to_projection * light_pos,
         .size = 50,
     };
 }

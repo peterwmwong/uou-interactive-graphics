@@ -18,7 +18,7 @@
 /* Begin PBXLegacyTarget section */
 		13A3A733280A728A00F0BAE0 /* xcode-project */ = {
 			isa = PBXLegacyTarget;
-			buildArgumentsString = "$(CONFIGURATION) proj-6-environment-mapping";
+			buildArgumentsString = "$(CONFIGURATION) proj-4-textures";
 			buildConfigurationList = 13A3A736280A728A00F0BAE0 /* Build configuration list for PBXLegacyTarget "xcode-project" */;
 			buildPhases = (
 			);
