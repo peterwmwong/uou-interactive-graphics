@@ -1,6 +1,6 @@
-pub mod camera;
-pub mod light;
+mod camera;
 mod shading_mode_selector;
 pub mod ui_ray;
 
-pub use shading_mode_selector::ShadingModeSelector;
+pub use camera::*;
+pub use shading_mode_selector::*;

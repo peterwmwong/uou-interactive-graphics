@@ -3,7 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{camera, ShadingModeSelector},
+    components::{Camera, ShadingModeSelector},
     math_helpers::round_up_pow_of_2,
     metal::*,
     metal_types::*,
@@ -104,7 +104,7 @@ impl Default for ProjectedSpace {
 
 struct Delegate {
     camera_space: ProjectedSpace,
-    camera: camera::Camera,
+    camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
@@ -112,7 +112,7 @@ struct Delegate {
     library: Library,
     light_matrix_world_to_projection: f32x4x4,
     light_space: ProjectedSpace,
-    light: camera::Camera,
+    light: Camera,
     model_light: RenderableModelObject,
     model_pipeline: RenderPipelineState,
     model_plane: RenderableModelObject,
@@ -183,7 +183,7 @@ impl RendererDelgate for Delegate {
             .join("common-assets");
         let shading_mode = ShadingModeSelector::DEFAULT;
         Self {
-            camera: camera::Camera::new_with_default_distance(
+            camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
                 false,
@@ -198,7 +198,7 @@ impl RendererDelgate for Delegate {
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            light: camera::Camera::new_with_default_distance(
+            light: Camera::new_with_default_distance(
                 INITIAL_LIGHT_ROTATION,
                 ModifierKeys::CONTROL,
                 true,

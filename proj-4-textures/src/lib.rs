@@ -2,7 +2,12 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::*, metal::*, metal_types::*, *};
+use metal_app::{
+    components::{Camera, CameraUpdate, ShadingModeSelector},
+    metal::*,
+    metal_types::*,
+    *,
+};
 use shader_bindings::{ShadingMode, *};
 use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
 
@@ -15,13 +20,13 @@ const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 const LIGHT_DISTANCE: f32 = 0.5;
 
 pub struct Delegate<'a, const RENDER_LIGHT: bool> {
-    camera: camera::Camera,
+    camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
     library: Library,
     light_pipeline: RenderPipelineState,
-    light: light::Light,
+    light: Camera,
     matrix_model_to_world: f32x4x4,
     model_pipeline: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
@@ -52,7 +57,7 @@ fn create_pipelines(
                     "Plane",
                     &library,
                     Some((DEFAULT_PIXEL_FORMAT, false)),
-                    None,
+                    Some(DEPTH_TEXTURE_FORMAT),
                     Some(&function_constants),
                     Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
                     Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
@@ -75,7 +80,7 @@ fn create_pipelines(
                     "Light",
                     &library,
                     Some((DEFAULT_PIXEL_FORMAT, false)),
-                    None,
+                    Some(DEPTH_TEXTURE_FORMAT),
                     Some(&function_constants),
                     Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
                     Some((&"light_fragment", 0)),
@@ -133,10 +138,8 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
                 arg.ambient_amount = DEFAULT_AMBIENT_AMOUNT;
             },
         );
-        let world_arg_buffer = device.new_buffer(
-            std::mem::size_of::<World>() as _,
-            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
-        );
+        let world_arg_buffer =
+            device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
         world_arg_buffer.set_label("World Argument Buffer");
         let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
 
@@ -151,7 +154,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         //      exhibit a weird triangal-ish pattern.
         let scale = 1. / size.reduce_max();
 
-        // TODO: This generates an immense amount of code!
+        // TODO: DO IT. This generates an immense amount of code!
         // - It's the matrix multiplications we're unable to avoid with const evaluation (currently not supported in rust for floating point operations)
         // - We can create combo helpers, see f32x4x4::scale_translate()
         let model_to_world_scale_rot = f32x4x4::scale(scale, scale, scale, 1.)
@@ -165,7 +168,7 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
         world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
 
         Self {
-            camera: camera::Camera::new_with_default_distance(
+            camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
                 false,
@@ -180,11 +183,12 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
             },
             depth_texture: None,
             library,
-            light: light::Light::new(
+            light: Camera::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
                 ModifierKeys::CONTROL,
                 true,
+                0.,
             ),
             light_pipeline,
             matrix_model_to_world,
@@ -258,26 +262,19 @@ impl<'a, const RENDER_LIGHT: bool> RendererDelgate for Delegate<'a, RENDER_LIGHT
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(camera::CameraUpdate {
-            position_world,
-            matrix_screen_to_world,
-            matrix_world_to_projection,
-            ..
-        }) = self.camera.on_event(event)
-        {
-            self.world_arg_ptr.camera_position = position_world.into();
-            self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
-            self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
+        if let Some(update) = self.camera.on_event(event) {
+            self.world_arg_ptr.camera_position = update.position_world.into();
+            self.world_arg_ptr.matrix_screen_to_world = update.matrix_screen_to_world;
+            self.world_arg_ptr.matrix_world_to_projection = update.matrix_world_to_projection;
             self.world_arg_ptr.matrix_model_to_projection =
-                matrix_world_to_projection * self.matrix_model_to_world;
+                update.matrix_world_to_projection * self.matrix_model_to_world;
             self.needs_render = true;
         }
 
-        self.light
-            .on_event(event, |light::LightUpdate { position }| {
-                self.world_arg_ptr.light_position = position.into();
-                self.needs_render = true;
-            });
+        if let Some(CameraUpdate { position_world, .. }) = self.light.on_event(event) {
+            self.world_arg_ptr.light_position = position_world.into();
+            self.needs_render = true;
+        };
 
         if self.shading_mode.on_event(event) {
             (self.model_pipeline, self.light_pipeline) =

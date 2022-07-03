@@ -4,30 +4,28 @@
 //
 // These are used to generate Rust types in the `build.rs` build script.
 
+#include "../../metal-shaders/shader_src/bindings/geometry.h"
+#include "../../metal-shaders/shader_src/bindings/model-space.h"
+#include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
 
 enum struct VertexBufferIndex
 {
-    Indices = 0,
-    Positions,
-    Normals,
-    MatrixModelToProjection,
-    MatrixNormalToWorld,
+    Geometry = 0,
+    ModelSpace,
     LENGTH
 };
 
 enum struct FragBufferIndex
 {
-    MatrixProjectionToWorld = 0,
-    ScreenSize,
+    CameraSpace = 0,
     LightPosition,
-    CameraPosition,
     LENGTH,
 };
 
 enum struct LightVertexBufferIndex
 {
-    MatrixWorldToProjection = 0,
+    CameraSpace = 0,
     LightPosition,
     LENGTH,
 };

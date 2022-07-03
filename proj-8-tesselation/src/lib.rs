@@ -3,7 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{camera, ShadingModeSelector},
+    components::{Camera, CameraUpdate, ShadingModeSelector},
     math_helpers::round_up_pow_of_2,
     metal::*,
     metal_types::*,
@@ -39,8 +39,8 @@ impl Default for ProjectedSpace {
     }
 }
 
-impl From<&camera::CameraUpdate> for ProjectedSpace {
-    fn from(update: &camera::CameraUpdate) -> Self {
+impl From<&CameraUpdate> for ProjectedSpace {
+    fn from(update: &CameraUpdate) -> Self {
         ProjectedSpace {
             matrix_world_to_projection: update.matrix_world_to_projection,
             matrix_screen_to_world: update.matrix_screen_to_world,
@@ -51,7 +51,7 @@ impl From<&camera::CameraUpdate> for ProjectedSpace {
 
 struct Delegate {
     camera_space: ProjectedSpace,
-    camera: camera::Camera,
+    camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: Option<Texture>,
@@ -65,7 +65,7 @@ struct Delegate {
         Model<{ LightVertexBufferIndex::Geometry as _ }, { LightFragBufferIndex::Material as _ }>,
     light_pipeline: RenderPipelineState,
     light_space: ProjectedSpace,
-    light: camera::Camera,
+    light: Camera,
     needs_render: bool,
     normal_texture: Texture,
     render_pipeline: RenderPipelineState,
@@ -149,7 +149,7 @@ impl RendererDelgate for Delegate {
         let mut image_buffer = vec![];
         Self {
             camera_space: Default::default(),
-            camera: camera::Camera::new(
+            camera: Camera::new(
                 2.5,
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
@@ -219,7 +219,7 @@ impl RendererDelgate for Delegate {
                 p.pipeline_state
             },
             light_space: Default::default(),
-            light: camera::Camera::new(
+            light: Camera::new(
                 1.25,
                 INITIAL_LIGHT_ROTATION,
                 ModifierKeys::CONTROL,
@@ -279,7 +279,9 @@ impl RendererDelgate for Delegate {
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.needs_render = false;
 
-        let command_buffer = self.command_queue.new_command_buffer();
+        let command_buffer = self
+            .command_queue
+            .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Command Buffer");
 
         // Tesselation Factors

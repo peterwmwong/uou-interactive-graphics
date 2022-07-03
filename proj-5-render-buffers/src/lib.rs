@@ -2,7 +2,12 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::camera, metal::*, metal_types::*, *};
+use metal_app::{
+    components::{Camera, CameraUpdate},
+    metal::*,
+    metal_types::*,
+    *,
+};
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
 use std::{f32::consts::PI, simd::f32x2};
@@ -77,7 +82,7 @@ impl RendererDelgate for CheckerboardDelegate {
 }
 
 struct Delegate<R: RendererDelgate> {
-    camera: camera::Camera,
+    camera: Camera,
     command_queue: CommandQueue,
     matrix_model_to_world: f32x4x4,
     matrix_model_to_projection: f32x4x4,
@@ -113,7 +118,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
         let command_queue = device.new_command_queue();
 
         Self {
-            camera: camera::Camera::new_with_default_distance(
+            camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
                 false,
@@ -183,7 +188,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
     fn on_event(&mut self, event: UserEvent) {
         use UserEvent::*;
 
-        if let Some(camera::CameraUpdate {
+        if let Some(CameraUpdate {
             matrix_world_to_projection,
             ..
         }) = self.camera.on_event(event)

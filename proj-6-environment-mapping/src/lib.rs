@@ -3,7 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{camera::Camera, *},
+    components::{Camera, CameraUpdate, ShadingModeSelector},
     image_helpers,
     metal::*,
     metal_types::*,
@@ -222,10 +222,8 @@ impl<'a> RendererDelgate for Delegate<'a> {
         let shading_mode = ShadingModeSelector::DEFAULT;
         let (model_pipeline, plane_pipeline) = create_pipelines(&device, &library, shading_mode);
 
-        let world_arg_buffer = device.new_buffer(
-            std::mem::size_of::<World>() as _,
-            MTLResourceOptions::CPUCacheModeWriteCombined | MTLResourceOptions::StorageModeShared,
-        );
+        let world_arg_buffer =
+            device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
         world_arg_buffer.set_label("World Argument Buffer");
         let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
 
@@ -392,7 +390,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(camera::CameraUpdate {
+        if let Some(CameraUpdate {
             position_world,
             matrix_screen_to_world,
             matrix_world_to_projection,
