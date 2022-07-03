@@ -58,6 +58,6 @@ main_fragment(         VertexOut                 in        [[stage_in]],
             .has_specular = HasSpecular,
             .only_normals = OnlyNormals,
         },
-        TexturedMaterial<Material>(in.tx_coord, is_shadow, material)
+        TexturedMaterial(material, in.tx_coord, is_shadow)
     );
 };

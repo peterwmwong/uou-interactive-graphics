@@ -1,6 +1,7 @@
 #pragma once
 
 #include <metal_stdlib>
+#include "./bindings/material.h"
 
 using namespace metal;
 
@@ -16,29 +17,24 @@ struct ConstantMaterial {
         specular(specular),
         shineness(shineness),
         ambient_amt(ambient_amount) {}
-    inline half4 ambient_color() const { return ambient; }
-    inline half4 diffuse_color() const { return diffuse; }
-    inline half4 specular_color() const { return specular; }
-    inline half  specular_shineness() const { return shineness; }
+    inline half4 ambient_color() const           { return ambient; }
+    inline half4 diffuse_color() const           { return diffuse; }
+    inline half4 specular_color() const          { return specular; }
+    inline half  specular_shineness() const      { return shineness; }
     inline constexpr half ambient_amount() const { return ambient_amt; }
 };
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// This no longer needs to be tempated and just use the Material struct from bindings/material.h
-template<typename T>
 struct TexturedMaterial {
-    const    float2     tx_coord;
-    const    bool       is_shadow;
-    const constant T & m;
+    const constant Material & m;
+    const          float2     tx_coord;
+    const          bool       is_shadow;
 
-    inline TexturedMaterial<T>(          float2    tx_coord,
-                                         bool      is_shadow,
-                                constant T       & m):
+    inline TexturedMaterial(constant Material & material,
+                                     float2     tx_coord,
+                                     bool       is_shadow = false):
+        m(material),
         tx_coord(tx_coord),
-        is_shadow(is_shadow),
-        m(m) {}
+        is_shadow(is_shadow) {}
 
     inline constexpr const struct sampler s() const {
         constexpr struct sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
