@@ -2,8 +2,7 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use metal_app::*;
-use metal_app::{metal::*, metal_types::*};
+use metal_app::{metal::*, metal_types::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -89,7 +88,7 @@ impl RendererDelgate for Delegate {
                         "/shaders.metallib"
                     )))
                     .expect("Failed to import shader metal lib.");
-                create_render_pipeline(
+                let p = create_render_pipeline(
                     &device,
                     &new_render_pipeline_descriptor(
                         "Render Pipeline",
@@ -100,8 +99,21 @@ impl RendererDelgate for Delegate {
                         Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
                         Some((&"main_fragment", 0)),
                     ),
-                )
-                .pipeline_state
+                );
+                use debug_assert_pipeline_function_arguments::*;
+                debug_assert_render_pipeline_function_arguments(
+                    &p,
+                    &[
+                        pointer_arg::<packed_float4>(VertexBufferIndex::MaxPositionValue as _),
+                        pointer_arg::<packed_float3>(VertexBufferIndex::Positions as _),
+                        value_arg::<float2>(VertexBufferIndex::ScreenSize as _),
+                        value_arg::<float2>(VertexBufferIndex::CameraRotation as _),
+                        value_arg::<f32>(VertexBufferIndex::CameraDistance as _),
+                        value_arg::<bool>(VertexBufferIndex::UsePerspective as _),
+                    ],
+                    None,
+                );
+                p.pipeline_state
             },
             use_perspective: true,
             vertex_buffer_positions: allocate_new_buffer_with_data(

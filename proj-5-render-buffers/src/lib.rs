@@ -2,12 +2,7 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{
-    components::{Camera, CameraUpdate},
-    metal::*,
-    metal_types::*,
-    *,
-};
+use metal_app::{components::Camera, metal::*, metal_types::*, *};
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
 use std::{f32::consts::PI, simd::f32x2};
@@ -20,7 +15,7 @@ struct CheckerboardDelegate {
     command_queue: CommandQueue,
     pub device: Device,
     needs_render: bool,
-    render_pipeline_state: RenderPipelineState,
+    render_pipeline: RenderPipelineState,
 }
 
 impl RendererDelgate for CheckerboardDelegate {
@@ -28,7 +23,7 @@ impl RendererDelgate for CheckerboardDelegate {
         Self {
             command_queue: device.new_command_queue(),
             needs_render: true,
-            render_pipeline_state: create_render_pipeline(
+            render_pipeline: create_render_pipeline(
                 &device,
                 &new_render_pipeline_descriptor(
                     "Checkerboard",
@@ -58,7 +53,7 @@ impl RendererDelgate for CheckerboardDelegate {
         // Render Plane
         {
             encoder.push_debug_group("Checkerboard");
-            encoder.set_render_pipeline_state(&self.render_pipeline_state);
+            encoder.set_render_pipeline_state(&self.render_pipeline);
             encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
             encoder.pop_debug_group();
         }
@@ -99,7 +94,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         let render_pipeline_state = {
-            create_render_pipeline(
+            let p = create_render_pipeline(
                 &device,
                 &new_render_pipeline_descriptor(
                     "Plane",
@@ -110,8 +105,16 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                     Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
                     Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
                 ),
-            )
-            .pipeline_state
+            );
+            use debug_assert_pipeline_function_arguments::*;
+            debug_assert_render_pipeline_function_arguments(
+                &p,
+                &[value_arg::<float4x4>(
+                    VertexBufferIndex::MatrixModelToProjection as _,
+                )],
+                None,
+            );
+            p.pipeline_state
         };
         let matrix_model_to_world =
             f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::scale(0.5, 0.5, 0.5, 1.);
@@ -188,13 +191,9 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
     fn on_event(&mut self, event: UserEvent) {
         use UserEvent::*;
 
-        if let Some(CameraUpdate {
-            matrix_world_to_projection,
-            ..
-        }) = self.camera.on_event(event)
-        {
+        if let Some(update) = self.camera.on_event(event) {
             self.matrix_model_to_projection =
-                matrix_world_to_projection * self.matrix_model_to_world;
+                update.matrix_world_to_projection * self.matrix_model_to_world;
             self.needs_render = true;
         }
 

@@ -146,21 +146,19 @@ fn create_pipeline(
             Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
         ),
     );
-    debug_assert_argument_buffer_size::<{ VertexBufferIndex::ModelSpace as _ }, ModelSpace>(
+    use debug_assert_pipeline_function_arguments::*;
+    debug_assert_render_pipeline_function_arguments(
         &p,
-        FunctionType::Vertex,
-    );
-    debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-        &p,
-        FunctionType::Vertex,
-    );
-    debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, ProjectedSpace>(
-        &p,
-        FunctionType::Fragment,
-    );
-    debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, ProjectedSpace>(
-        &p,
-        FunctionType::Fragment,
+        &[
+            value_arg::<ModelSpace>(VertexBufferIndex::ModelSpace as _),
+            value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
+        ],
+        Some(&[
+            value_arg::<ProjectedSpace>(FragBufferIndex::CameraSpace as _),
+            value_arg::<ProjectedSpace>(FragBufferIndex::LightSpace as _),
+            value_arg::<Material>(FragBufferIndex::Material as _),
+            texture_arg(FragTextureIndex::ShadowMap as _, MTLTextureType::D2),
+        ]),
     );
     p.pipeline_state
 }
@@ -276,13 +274,14 @@ impl RendererDelgate for Delegate {
                         None,
                     ),
                 );
-                debug_assert_argument_buffer_size::<
-                    { VertexBufferIndex::ModelSpace as _ },
-                    ModelSpace,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+                use debug_assert_pipeline_function_arguments::*;
+                debug_assert_render_pipeline_function_arguments(
                     &p,
-                    FunctionType::Vertex,
+                    &[
+                        value_arg::<ModelSpace>(VertexBufferIndex::ModelSpace as _),
+                        value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
+                    ],
+                    None,
                 );
                 p.pipeline_state
             },

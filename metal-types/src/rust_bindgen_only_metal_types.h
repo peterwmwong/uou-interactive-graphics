@@ -26,6 +26,10 @@ struct alignas(4) packed_float2 {
     float xy[2];
 };
 
+struct alignas(4) packed_float3 {
+    float xyzw[3];
+};
+
 struct alignas(4) packed_float4 {
     float xyzw[4];
 };

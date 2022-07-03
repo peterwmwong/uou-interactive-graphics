@@ -256,33 +256,114 @@ where
     result.unwrap_unchecked()
 }
 
-pub enum FunctionType {
-    Vertex,
-    Fragment,
-}
+pub mod debug_assert_pipeline_function_arguments {
+    use super::*;
 
-// TODO: Change the API to allow verifying many argument buffers.
-pub fn debug_assert_argument_buffer_size<const BUFFER_INDEX: u64, T>(
-    p: &CreateRenderPipelineResults,
-    func_type: FunctionType,
-) {
-    #[cfg(debug_assertions)]
-    {
-        let bindings: &BindingArrayRef = match func_type {
-            FunctionType::Vertex => p.pipeline_state_reflection.vertex_bindings(),
-            FunctionType::Fragment => p.pipeline_state_reflection.fragment_bindings(),
-        };
-        let arg_size = bindings
-            .object_at_as::<BufferBindingRef>(BUFFER_INDEX)
-            .expect(&format!(
-                "Failed to access binding information at buffer index {BUFFER_INDEX}"
-            ))
-            .buffer_data_size();
-        debug_assert_eq!(
-            std::mem::size_of::<T>(),
-            arg_size as _,
-            "Shader bindings generated a differently sized argument struct than what Metal expects for buffer index {BUFFER_INDEX}"
-        );
+    enum BindingInner {
+        Value {
+            index: usize,
+            size: usize,
+        },
+        Texture {
+            index: usize,
+            texture_type: MTLTextureType,
+        },
+        // TODO: Handle Buffer Pointer Type
+        // - Example: `constant packed_float4 * positions [[buffer(0)]]`
+        // - metal-rs needs to implement BufferPointerType and accessor on BufferBinding
+        //   - https://developer.apple.com/documentation/metal/mtlbufferbinding/3929858-bufferpointertype
+        // Pointer { index: usize, size: usize },
+    }
+
+    pub struct Binding(BindingInner);
+
+    pub fn value_arg<T: Sized>(index: usize) -> Binding {
+        Binding(BindingInner::Value {
+            index,
+            size: std::mem::size_of::<T>(),
+        })
+    }
+
+    pub fn pointer_arg<T: Sized>(index: usize) -> Binding {
+        value_arg::<T>(index)
+    }
+
+    pub fn texture_arg(index: usize, texture_type: MTLTextureType) -> Binding {
+        Binding(BindingInner::Texture {
+            index,
+            texture_type,
+        })
+    }
+
+    pub fn debug_assert_render_pipeline_function_arguments(
+        p: &CreateRenderPipelineResults,
+        vertex_buffer_index_and_sizes: &[Binding],
+        fragment_buffer_index_and_sizes: Option<&[Binding]>,
+    ) {
+        #[cfg(debug_assertions)]
+        for func_binds in [
+            Some((
+                "Vertex",
+                p.pipeline_state_reflection.vertex_bindings(),
+                vertex_buffer_index_and_sizes,
+            )),
+            fragment_buffer_index_and_sizes.map(|exp| {
+                (
+                    "Fragment",
+                    p.pipeline_state_reflection.fragment_bindings(),
+                    exp,
+                )
+            }),
+        ] {
+            if let Some((func, binds, expected)) = func_binds {
+                debug_assert_eq!(
+                    binds.count(),
+                    expected.len() as _,
+                    "Unexpected number of arguments for {func} function"
+                );
+                for (arg_index, binding) in expected.iter().enumerate() {
+                    match binding {
+                        &Binding(BindingInner::Value {
+                            index: expected_index,
+                            size: expected_size,
+                        }) => {
+                            let bind = binds
+                            .object_at_as::<BufferBindingRef>(arg_index as _)
+                            .expect(&format!(
+                                "Failed to access {func} function buffer argument [{arg_index}] binding information"
+                            ));
+                            debug_assert_eq!(
+                                expected_index,
+                                bind.index() as _,
+                                "Incorrect buffer index for {func} function buffer argument [{arg_index}]"
+                            );
+                            debug_assert_eq!(
+                                expected_size, bind.buffer_data_size() as _,
+                                "Incorrect argument size for {func} function buffer argument [{arg_index}]"
+                            );
+                        }
+                        &Binding(BindingInner::Texture {
+                            index: expected_index,
+                            texture_type: expected_type,
+                        }) => {
+                            let bind = binds
+                            .object_at_as::<TextureBindingRef>(arg_index as _)
+                            .expect(&format!(
+                                "Failed to access {func} function texture argument [{arg_index}] binding information"
+                            ));
+                            debug_assert_eq!(
+                                expected_index, bind.index() as _,
+                                "Incorrect texture index for {func} function texture argument {arg_index}"
+                            );
+                            debug_assert_eq!(
+                                expected_type, bind.texture_type(),
+                                "Incorrect texture type for {func} function texture argument {arg_index}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

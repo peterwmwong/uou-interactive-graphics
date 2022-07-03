@@ -100,21 +100,21 @@ fn create_pipeline(
     );
     set_tessellation_config(&mut desc);
     let p = create_render_pipeline(&device, &desc);
-    debug_assert_argument_buffer_size::<{ VertexBufferIndex::MatrixWorldToProjection as _ }, f32x4x4>(
+    use debug_assert_pipeline_function_arguments::*;
+    debug_assert_render_pipeline_function_arguments(
         &p,
-        FunctionType::Vertex,
-    );
-    debug_assert_argument_buffer_size::<{ VertexBufferIndex::DisplacementScale as _ }, f32>(
-        &p,
-        FunctionType::Vertex,
-    );
-    debug_assert_argument_buffer_size::<{ FragBufferIndex::CameraSpace as _ }, ProjectedSpace>(
-        &p,
-        FunctionType::Fragment,
-    );
-    debug_assert_argument_buffer_size::<{ FragBufferIndex::LightSpace as _ }, ProjectedSpace>(
-        &p,
-        FunctionType::Fragment,
+        &[
+            value_arg::<f32x4x4>(VertexBufferIndex::MatrixWorldToProjection as _),
+            value_arg::<f32>(VertexBufferIndex::DisplacementScale as _),
+            texture_arg(VertexTextureIndex::Displacement as _, MTLTextureType::D2),
+        ],
+        Some(&[
+            value_arg::<ProjectedSpace>(FragBufferIndex::CameraSpace as _),
+            value_arg::<ProjectedSpace>(FragBufferIndex::LightSpace as _),
+            value_arg::<bool>(FragBufferIndex::ShadeTriangulation as _),
+            texture_arg(FragTextureIndex::Normal as _, MTLTextureType::D2),
+            texture_arg(FragTextureIndex::ShadowMap as _, MTLTextureType::D2),
+        ]),
     );
     p.pipeline_state
 }
@@ -204,18 +204,15 @@ impl RendererDelgate for Delegate {
                         Some((&"light_fragment", LightFragBufferIndex::LENGTH as _)),
                     ),
                 );
-                debug_assert_argument_buffer_size::<
-                    { LightVertexBufferIndex::MatrixModelToProjection as _ },
-                    f32x4x4,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<
-                    { LightVertexBufferIndex::Geometry as _ },
-                    Geometry,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<
-                    { LightFragBufferIndex::Material as _ },
-                    Material,
-                >(&p, FunctionType::Fragment);
+                use debug_assert_pipeline_function_arguments::*;
+                debug_assert_render_pipeline_function_arguments(
+                    &p,
+                    &[
+                        value_arg::<f32x4x4>(LightVertexBufferIndex::MatrixModelToProjection as _),
+                        value_arg::<Geometry>(LightVertexBufferIndex::Geometry as _),
+                    ],
+                    Some(&[value_arg::<Material>(LightFragBufferIndex::Material as _)]),
+                );
                 p.pipeline_state
             },
             light_space: Default::default(),
@@ -242,14 +239,16 @@ impl RendererDelgate for Delegate {
                 );
                 set_tessellation_config(&mut desc);
                 let p = create_render_pipeline(&device, &desc);
-                debug_assert_argument_buffer_size::<
-                    { VertexBufferIndex::MatrixWorldToProjection as _ },
-                    f32x4x4,
-                >(&p, FunctionType::Vertex);
-                debug_assert_argument_buffer_size::<
-                    { VertexBufferIndex::DisplacementScale as _ },
-                    f32,
-                >(&p, FunctionType::Vertex);
+                use debug_assert_pipeline_function_arguments::*;
+                debug_assert_render_pipeline_function_arguments(
+                    &p,
+                    &[
+                        value_arg::<f32x4x4>(VertexBufferIndex::MatrixWorldToProjection as _),
+                        value_arg::<f32>(VertexBufferIndex::DisplacementScale as _),
+                        texture_arg(VertexTextureIndex::Displacement as _, MTLTextureType::D2),
+                    ],
+                    None,
+                );
                 p.pipeline_state
             },
             shadow_map_texture: None,

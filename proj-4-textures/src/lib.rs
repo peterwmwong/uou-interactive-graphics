@@ -47,6 +47,7 @@ fn create_pipelines(
     library: &Library,
     mode: ShadingModeSelector,
 ) -> (RenderPipelineState, RenderPipelineState) {
+    use debug_assert_pipeline_function_arguments::*;
     let function_constants = mode.encode(
         FunctionConstantValues::new(),
         ShadingMode::HasAmbient as _,
@@ -68,25 +69,17 @@ fn create_pipelines(
                     Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
                 ),
             );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
+            debug_assert_render_pipeline_function_arguments(
                 &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Model as _ }, ModelSpace>(
-                &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::Material as _ }, Material>(
-                &p,
-                FunctionType::Fragment,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::Camera as _ }, ProjectedSpace>(
-                &p,
-                FunctionType::Fragment,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::LightPosition as _ }, float4>(
-                &p,
-                FunctionType::Fragment,
+                &[
+                    value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
+                    value_arg::<ModelSpace>(VertexBufferIndex::Model as _),
+                ],
+                Some(&[
+                    value_arg::<Material>(FragBufferIndex::Material as _),
+                    value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
+                    value_arg::<float4>(FragBufferIndex::LightPosition as _),
+                ]),
             );
             p.pipeline_state
         },
@@ -103,14 +96,14 @@ fn create_pipelines(
                     Some((&"light_fragment", 0)),
                 ),
             );
-            debug_assert_argument_buffer_size::<
-                { LightVertexBufferIndex::Camera as _ },
-                ProjectedSpace,
-            >(&p, FunctionType::Vertex);
-            debug_assert_argument_buffer_size::<
-                { LightVertexBufferIndex::LightPosition as _ },
-                float4,
-            >(&p, FunctionType::Vertex);
+            debug_assert_render_pipeline_function_arguments(
+                &p,
+                &[
+                    value_arg::<ProjectedSpace>(LightVertexBufferIndex::Camera as _),
+                    value_arg::<float4>(LightVertexBufferIndex::LightPosition as _),
+                ],
+                Some(&[]),
+            );
             p.pipeline_state
         },
     )

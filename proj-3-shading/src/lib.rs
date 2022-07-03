@@ -44,7 +44,7 @@ fn create_model_pipeline(
     library: &Library,
     shading_mode: ShadingModeSelector,
 ) -> RenderPipelineState {
-    create_render_pipeline(
+    let p = create_render_pipeline(
         &device,
         &new_render_pipeline_descriptor(
             "Render Teapot Pipeline",
@@ -61,8 +61,20 @@ fn create_model_pipeline(
             Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
             Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
         ),
-    )
-    .pipeline_state
+    );
+    use debug_assert_pipeline_function_arguments::*;
+    debug_assert_render_pipeline_function_arguments(
+        &p,
+        &[
+            value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
+            value_arg::<ModelSpace>(VertexBufferIndex::ModelSpace as _),
+        ],
+        Some(&[
+            value_arg::<ProjectedSpace>(FragBufferIndex::CameraSpace as _),
+            value_arg::<float4>(FragBufferIndex::LightPosition as _),
+        ]),
+    );
+    p.pipeline_state
 }
 
 impl RendererDelgate for Delegate {

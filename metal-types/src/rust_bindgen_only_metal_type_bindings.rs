@@ -145,6 +145,41 @@ fn bindgen_test_layout_packed_float2() {
 }
 #[repr(C)]
 #[derive(Copy, Clone, PartialEq)]
+pub struct packed_float3 {
+    pub xyzw: [f32; 3usize],
+}
+#[test]
+fn bindgen_test_layout_packed_float3() {
+    assert_eq!(
+        ::std::mem::size_of::<packed_float3>(),
+        12usize,
+        concat!("Size of: ", stringify!(packed_float3))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<packed_float3>(),
+        4usize,
+        concat!("Alignment of ", stringify!(packed_float3))
+    );
+    fn test_field_xyzw() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<packed_float3>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).xyzw) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(packed_float3),
+                "::",
+                stringify!(xyzw)
+            )
+        );
+    }
+    test_field_xyzw();
+}
+#[repr(C)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct packed_float4 {
     pub xyzw: [f32; 4usize],
 }
