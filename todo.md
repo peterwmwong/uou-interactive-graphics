@@ -20,6 +20,47 @@
         - Example: Forget to encode a Buffer
         - Example: Encode the wrong Argument Buffer (wrong struct, different size)
     - Feels like an abstraction could tie setup/encode together, eliminate mistakes, and reduce duplication.
+        - Consider as input to this API, a combination `new_render_pipeline_descriptor` and `debug_assert_render_pipeline_function_arguments`
+        - Wouldn't be cool if it were something like...
+            ```rs
+            let pipeline = create_pipeline!(
+                DEFAULT_PIXEL_FORMAT,
+                Some(DEPTH_TEXTURE_FORMAT),
+                "vertex_fn", &[
+                    value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _)
+                    value_arg::<ModelSpace>(FragBufferIndex::Model as _)
+                ],
+                "fragment_fn", &[
+                    value_arg::<Material>(FragBufferIndex::Material as _)
+                ]
+            );
+
+            // IMPORTANT: Removes getting the arguments to `new_render_pass_descriptor()` correctly.
+            let encoder = pipeline.new_render_command_encoder(&command_buffer);
+
+            // IMPORTANT: Compile time checked!
+            encoder.setup_binds(
+                // IMPORTANT: vvv Strongly typed vvv
+                // vertex_function_args: (Bind<ProjectedSpace>, Bind<ModelSpace>)
+                (
+                    Bind::Bytes(&self.camera_space),
+                    Bind::Bytes(&ModelSpace { ... }),
+                ),
+                // fragment_function_args: (Bind<Material>)
+                (Bind::Bytes(&self.model.materials[0]))
+            );
+            ```
+        - Open question: Can we somehow handle multiple pipelines?
+            - `proj-6` sets up a bunch of buffers/textures that **multiple** pipelines
+            - Maybe another/extended API like `create_pipelines!`
+                - This would have knowledge of **order of pipelines**, then the abstraction could enforce...
+                    - Shared binds line-up (ex. `proj-6`'s `FragBufferIndex::Camera` is used)
+                - Improve performance, by optimizing the minimal resources needed to be encoded.
+                    - Example: Pipeline 1 only uses Buffer A, Pipeline 2 uses Buffer A, Buffer B
+                        - Drawing w/Pipeline 1, **only** requires Buffer A
+                        - Drawing w/Pipeline 2, **only** requires Buffer B
+                            - Buffer A is optionally needed, it's encoded already, but allow it to
+                              be overwritten with a different value.
 - Encapsulate Shadow Mapping... somehow
     - Some overlap with Encapsulate Render Pipeline
     - Parts
