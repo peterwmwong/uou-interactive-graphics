@@ -1,4 +1,3 @@
-#![feature(array_zip)]
 #![feature(portable_simd)]
 mod shader_bindings;
 

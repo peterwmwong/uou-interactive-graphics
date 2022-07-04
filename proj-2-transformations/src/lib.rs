@@ -1,6 +1,4 @@
-#![feature(array_zip)]
 #![feature(portable_simd)]
-#![feature(slice_as_chunks)]
 mod shader_bindings;
 use metal_app::{components::Camera, metal::*, *};
 use shader_bindings::*;
