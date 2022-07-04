@@ -74,18 +74,13 @@ bg_vertex(uint vertex_id [[vertex_id]])
     return { .position = float4(position2d, 1, 1) };
 }
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Use ProjectedSpace and ModelSpace
-
 fragment half4
 bg_fragment(         BGVertexOut         in       [[stage_in]],
-            constant World             & world    [[buffer(BGFragBufferIndex::World)]],
-                     texturecube<half>   texture  [[texture(BGFragTextureIndex::CubeMapTexture)]])
+            constant ProjectedSpace    & camera   [[buffer(FragBufferIndex::Camera)]],
+                     texturecube<half>   texture  [[texture(FragTextureIndex::CubeMapTexture)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    const float4 pos   = world.matrix_screen_to_world * float4(in.position.xy, 1, 1);
+    const float4 pos   = camera.matrix_screen_to_world * float4(in.position.xy, 1, 1);
     const half4  color = texture.sample(tx_sampler, pos.xyz);
     return color;
 }
@@ -97,33 +92,41 @@ struct VertexOut
     bool   is_mirrored;
 };
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Figure out the transform necessary to push through as a ProjectedSpace/ModelSpace
+// - Get rid of matrx_model_to_world and plan_y
 vertex VertexOut
-main_vertex(         uint       vertex_id [[vertex_id]],
-                     uint       inst_id   [[instance_id]],
-            constant World    & world     [[buffer(VertexBufferIndex::World)]],
-            constant Geometry & geometry  [[buffer(VertexBufferIndex::Geometry)]])
+main_vertex(         uint             vertex_id             [[vertex_id]],
+                     uint             inst_id               [[instance_id]],
+            constant Geometry       & geometry              [[buffer(VertexBufferIndex::Geometry)]],
+            constant ProjectedSpace & camera                [[buffer(VertexBufferIndex::Camera)]],
+            constant ModelSpace     & model                 [[buffer(VertexBufferIndex::Model)]],
+            constant float4x4       & matrix_model_to_world [[buffer(VertexBufferIndex::MatrixModelToWorld)]],
+            constant float          & plane_y               [[buffer(VertexBufferIndex::PlaneY)]])
 {
     const uint idx = geometry.indices[vertex_id];
     const bool is_mirrored = inst_id == MIRRORED_INSTANCE_ID;
     float4 pos = float4(geometry.positions[idx], 1.0);
-    float3 normal = world.matrix_normal_to_world * float3(geometry.normals[idx]);
+    float3 normal = model.matrix_normal_to_world * float3(geometry.normals[idx]);
     if (is_mirrored) {
-        const float3 pos_world = (world.matrix_model_to_world * pos).xyz + float3(0, -(2.0 * world.plane_y), 0);
+        const float3 pos_world = (matrix_model_to_world * pos).xyz + float3(0, -(2.0 * plane_y), 0);
         const float3 refl = normalize(float3(pos_world.x, 0.0, pos_world.z));
-        pos = world.matrix_world_to_projection * float4(reflect(-pos_world.xyz, refl), 1.0);
+        pos = camera.matrix_world_to_projection * float4(reflect(-pos_world.xyz, refl), 1.0);
         normal = reflect(-normal, refl);
     } else {
-        pos = world.matrix_model_to_projection * pos;
+        pos = model.matrix_model_to_projection * pos;
     }
     return { .position = pos, .normal = normal, is_mirrored };
 }
 
 fragment half4
 main_fragment(         VertexOut           in         [[stage_in]],
-              constant World             & world      [[buffer(FragBufferIndex::World)]],
+              constant ProjectedSpace    & camera     [[buffer(FragBufferIndex::Camera)]],
                        texturecube<half>   bg_texture [[texture(FragTextureIndex::CubeMapTexture)]])
 {
-    return shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture, in.is_mirrored);
+    return shade_mirror(in.position, camera.position_world, in.normal, camera.matrix_screen_to_world, bg_texture, in.is_mirrored);
 };
 
 struct PlaneVertexOut
@@ -133,9 +136,9 @@ struct PlaneVertexOut
 };
 
 vertex PlaneVertexOut
-plane_vertex(         uint      vertex_id [[vertex_id]],
-                     uint       inst_id   [[instance_id]],
-            constant World    & world     [[buffer(VertexBufferIndex::World)]])
+plane_vertex(         uint             vertex_id [[vertex_id]],
+             constant ProjectedSpace & camera    [[buffer(VertexBufferIndex::Camera)]],
+             constant float          & plane_y   [[buffer(VertexBufferIndex::PlaneY)]])
 {
     // Vertices of Plane laying flat on the ground, along the x/z axis.
     constexpr const float plane_size = 0.9;
@@ -147,14 +150,14 @@ plane_vertex(         uint      vertex_id [[vertex_id]],
     };
     const float2 v = verts_xz[vertex_id] * plane_size;
     return {
-        .position = world.matrix_world_to_projection * float4(v[0], world.plane_y, v[1], 1.0),
+        .position = camera.matrix_world_to_projection * float4(v[0], plane_y, v[1], 1.0),
         .normal   = float3(0, 1, 0),
     };
 }
 
 fragment half4
-plane_fragment(         PlaneVertexOut     in                     [[stage_in]],
-              constant World             & world                  [[buffer(FragBufferIndex::World)]],
+plane_fragment(        PlaneVertexOut      in                     [[stage_in]],
+              constant ProjectedSpace    & camera                 [[buffer(FragBufferIndex::Camera)]],
                        texturecube<half>   bg_texture             [[texture(FragTextureIndex::CubeMapTexture)]],
                        texture2d<half>     mirrored_model_texture [[texture(FragTextureIndex::ModelTexture)]])
 {
@@ -174,7 +177,7 @@ plane_fragment(         PlaneVertexOut     in                     [[stage_in]],
         const constexpr half4 darken = half4(half3(0.8), 1);
         return mirror_color * darken;
     } else {
-        return shade_mirror(in.position, world.camera_position, in.normal, world.matrix_screen_to_world, bg_texture, false);
+        return shade_mirror(in.position, camera.position_world, in.normal, camera.matrix_screen_to_world, bg_texture, false);
     }
 };
 

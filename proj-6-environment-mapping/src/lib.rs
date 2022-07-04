@@ -3,14 +3,19 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{Camera, CameraUpdate, ShadingModeSelector},
+    components::{Camera, ShadingModeSelector},
     image_helpers,
     metal::*,
     metal_types::*,
     *,
 };
 use shader_bindings::*;
-use std::{f32::consts::PI, ops::Neg, path::PathBuf, simd::f32x2};
+use std::{
+    f32::consts::PI,
+    ops::Neg,
+    path::PathBuf,
+    simd::{f32x2, f32x4},
+};
 
 const CUBEMAP_TEXTURE_BYTES_PER_PIXEL: u32 = 4; // Assumed to be 4-component (ex. RGBA)
 const CUBEMAP_TEXTURE_WIDTH: u32 = 2048;
@@ -21,10 +26,11 @@ const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
-struct Delegate<'a> {
+struct Delegate {
     bg_depth_state: DepthStencilState,
     bg_pipeline_state: RenderPipelineState,
     camera: Camera,
+    camera_space: ProjectedSpace,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
     depth_texture: Option<Texture>,
@@ -37,9 +43,8 @@ struct Delegate<'a> {
     model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
     needs_render: bool,
     plane_pipeline: RenderPipelineState,
+    plane_y: f32,
     shading_mode: ShadingModeSelector,
-    world_arg_buffer: Buffer,
-    world_arg_ptr: &'a mut World,
 }
 
 fn create_pipelines(
@@ -69,17 +74,20 @@ fn create_pipelines(
                     Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
                 ),
             );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            use debug_assert_pipeline_function_arguments::*;
+            debug_assert_render_pipeline_function_arguments(
                 &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::Geometry as _ }, Geometry>(
-                &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Fragment,
+                &[
+                    value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
+                    value_arg::<ProjectedSpace>(VertexBufferIndex::Camera as _),
+                    value_arg::<ModelSpace>(VertexBufferIndex::Model as _),
+                    value_arg::<float4x4>(VertexBufferIndex::MatrixModelToWorld as _),
+                    value_arg::<f32>(VertexBufferIndex::PlaneY as _),
+                ],
+                Some(&[
+                    value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
+                    texture_arg(FragTextureIndex::CubeMapTexture as _, MTLTextureType::Cube),
+                ]),
             );
             p.pipeline_state
         },
@@ -97,20 +105,25 @@ fn create_pipelines(
                     Some((&"plane_fragment", FragBufferIndex::LENGTH as _)),
                 ),
             );
-            debug_assert_argument_buffer_size::<{ VertexBufferIndex::World as _ }, World>(
+            use debug_assert_pipeline_function_arguments::*;
+            debug_assert_render_pipeline_function_arguments(
                 &p,
-                FunctionType::Vertex,
-            );
-            debug_assert_argument_buffer_size::<{ FragBufferIndex::World as _ }, World>(
-                &p,
-                FunctionType::Fragment,
+                &[
+                    value_arg::<ProjectedSpace>(VertexBufferIndex::Camera as _),
+                    value_arg::<f32>(VertexBufferIndex::PlaneY as _),
+                ],
+                Some(&[
+                    value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
+                    texture_arg(FragTextureIndex::CubeMapTexture as _, MTLTextureType::Cube),
+                    texture_arg(FragTextureIndex::ModelTexture as _, MTLTextureType::D2),
+                ]),
             );
             p.pipeline_state
         },
     )
 }
 
-impl<'a> RendererDelgate for Delegate<'a> {
+impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
         let executable_name = std::env::args()
             .nth(0)
@@ -210,22 +223,22 @@ impl<'a> RendererDelgate for Delegate<'a> {
                     Some(DEPTH_TEXTURE_FORMAT),
                     Some(&FunctionConstantValues::new()),
                     Some((&"bg_vertex", 0)),
-                    Some((&"bg_fragment", BGFragBufferIndex::LENGTH as _)),
+                    Some((&"bg_fragment", FragBufferIndex::LENGTH as _)),
                 ),
             );
-            debug_assert_argument_buffer_size::<{ BGFragBufferIndex::World as _ }, World>(
+            use debug_assert_pipeline_function_arguments::*;
+            debug_assert_render_pipeline_function_arguments(
                 &p,
-                FunctionType::Fragment,
+                &[],
+                Some(&[
+                    value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
+                    texture_arg(FragTextureIndex::CubeMapTexture as _, MTLTextureType::Cube),
+                ]),
             );
             p
         };
         let shading_mode = ShadingModeSelector::DEFAULT;
         let (model_pipeline, plane_pipeline) = create_pipelines(&device, &library, shading_mode);
-
-        let world_arg_buffer =
-            device.new_buffer(std::mem::size_of::<World>() as _, DEFAULT_RESOURCE_OPTIONS);
-        world_arg_buffer.set_label("World Argument Buffer");
-        let world_arg_ptr = unsafe { &mut *(world_arg_buffer.contents() as *mut World) };
 
         let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
@@ -245,13 +258,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
             * f32x4x4::translate(cx, cy, cz);
 
-        // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
-        // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
-        // (no translation). Since normals are directions (not positions, relative to a
-        // point on a surface), translations are meaningless.
-        world_arg_ptr.matrix_model_to_world = matrix_model_to_world.into();
-        world_arg_ptr.matrix_normal_to_world = matrix_model_to_world.into();
-        world_arg_ptr.plane_y = -0.5 * scale * size[2];
+        let plane_y = -0.5 * scale * size[2];
 
         Self {
             bg_depth_state: {
@@ -267,6 +274,11 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 false,
                 0.,
             ),
+            camera_space: ProjectedSpace {
+                matrix_world_to_projection: f32x4x4::identity(),
+                matrix_screen_to_world: f32x4x4::identity(),
+                position_world: f32x4::default().into(),
+            },
             command_queue: device.new_command_queue(),
             cubemap_texture,
             depth_texture: None,
@@ -283,9 +295,8 @@ impl<'a> RendererDelgate for Delegate<'a> {
             model,
             needs_render: false,
             plane_pipeline,
+            plane_y,
             shading_mode,
-            world_arg_buffer,
-            world_arg_ptr,
             device,
         }
     }
@@ -310,16 +321,23 @@ impl<'a> RendererDelgate for Delegate<'a> {
                 self.model.encode_use_resources(encoder);
                 encoder.set_render_pipeline_state(&self.model_pipeline);
                 encoder.set_depth_stencil_state(&self.model_depth_state);
-                encoder.set_vertex_buffer(
-                    VertexBufferIndex::World as _,
-                    Some(&self.world_arg_buffer),
-                    0,
+                encode_vertex_bytes(encoder, VertexBufferIndex::Camera as _, &self.camera_space);
+                encode_vertex_bytes(
+                    encoder,
+                    VertexBufferIndex::Model as _,
+                    &ModelSpace {
+                        matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+                            * self.matrix_model_to_world,
+                        matrix_normal_to_world: self.matrix_model_to_world.into(),
+                    },
                 );
-                encoder.set_fragment_buffer(
-                    FragBufferIndex::World as _,
-                    Some(&self.world_arg_buffer),
-                    0,
+                encode_vertex_bytes(
+                    encoder,
+                    VertexBufferIndex::MatrixModelToWorld as _,
+                    &self.matrix_model_to_world,
                 );
+                encode_vertex_bytes(encoder, VertexBufferIndex::PlaneY as _, &self.plane_y);
+                encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
                 encoder.set_fragment_texture(
                     FragTextureIndex::CubeMapTexture as _,
                     Some(&self.cubemap_texture),
@@ -341,16 +359,23 @@ impl<'a> RendererDelgate for Delegate<'a> {
             self.model.encode_use_resources(encoder);
             encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.model_depth_state);
-            encoder.set_vertex_buffer(
-                VertexBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
-                0,
+            encode_vertex_bytes(encoder, VertexBufferIndex::Camera as _, &self.camera_space);
+            encode_vertex_bytes(
+                encoder,
+                VertexBufferIndex::Model as _,
+                &ModelSpace {
+                    matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+                        * self.matrix_model_to_world,
+                    matrix_normal_to_world: self.matrix_model_to_world.into(),
+                },
             );
-            encoder.set_fragment_buffer(
-                FragBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
-                0,
+            encode_vertex_bytes(
+                encoder,
+                VertexBufferIndex::MatrixModelToWorld as _,
+                &self.matrix_model_to_world,
             );
+            encode_vertex_bytes(encoder, VertexBufferIndex::PlaneY as _, &self.plane_y);
+            encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
             encoder.set_fragment_texture(
                 FragTextureIndex::CubeMapTexture as _,
                 Some(&self.cubemap_texture),
@@ -372,15 +397,6 @@ impl<'a> RendererDelgate for Delegate<'a> {
             encoder.push_debug_group("BG");
             encoder.set_render_pipeline_state(&self.bg_pipeline_state);
             encoder.set_depth_stencil_state(&self.bg_depth_state);
-            encoder.set_fragment_buffer(
-                BGFragBufferIndex::World as _,
-                Some(&self.world_arg_buffer),
-                0,
-            );
-            encoder.set_fragment_texture(
-                BGFragTextureIndex::CubeMapTexture as _,
-                Some(&self.cubemap_texture),
-            );
             encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 3);
             encoder.pop_debug_group();
         }
@@ -390,18 +406,10 @@ impl<'a> RendererDelgate for Delegate<'a> {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(CameraUpdate {
-            position_world,
-            matrix_screen_to_world,
-            matrix_world_to_projection,
-            ..
-        }) = self.camera.on_event(event)
-        {
-            self.world_arg_ptr.matrix_world_to_projection = matrix_world_to_projection;
-            self.world_arg_ptr.matrix_model_to_projection =
-                matrix_world_to_projection * self.matrix_model_to_world;
-            self.world_arg_ptr.camera_position = position_world.into();
-            self.world_arg_ptr.matrix_screen_to_world = matrix_screen_to_world;
+        if let Some(update) = self.camera.on_event(event) {
+            self.camera_space.matrix_screen_to_world = update.matrix_screen_to_world;
+            self.camera_space.matrix_world_to_projection = update.matrix_world_to_projection;
+            self.camera_space.position_world = update.position_world.into();
             self.needs_render = true;
         }
 
@@ -428,7 +436,7 @@ impl<'a> RendererDelgate for Delegate<'a> {
     }
 }
 
-impl<'a> Delegate<'a> {
+impl Delegate {
     #[inline]
     fn update_textures_size(&mut self, size: f32x2) {
         let desc = TextureDescriptor::new();

@@ -6,42 +6,25 @@
 
 #include "../../metal-shaders/shader_src/bindings/geometry.h"
 #include "../../metal-shaders/shader_src/bindings/macros.h"
+#include "../../metal-shaders/shader_src/bindings/model-space.h"
+#include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
 
 DEF_CONSTANT constexpr unsigned short MIRRORED_INSTANCE_ID = 1;
 
-struct World {
-    float4x4 matrix_model_to_projection;
-    float4x4 matrix_model_to_world;
-    float3x3 matrix_normal_to_world;
-    float4x4 matrix_world_to_projection;
-    float4x4 matrix_screen_to_world;
-    float4   camera_position;
-    float    plane_y;
-};
-
-enum struct BGFragBufferIndex: unsigned int
-{
-    World = 0,
-    LENGTH
-};
-
-enum struct BGFragTextureIndex: unsigned int
-{
-    CubeMapTexture = 0
-};
-
-
 enum struct VertexBufferIndex: unsigned int
 {
-    World = 0,
-    Geometry,
+    Geometry = 0,
+    Camera,
+    Model,
+    MatrixModelToWorld,
+    PlaneY,
     LENGTH
 };
 
 enum struct FragBufferIndex: unsigned int
 {
-    World = 0,
+    Camera = 0,
     LENGTH
 };
 
