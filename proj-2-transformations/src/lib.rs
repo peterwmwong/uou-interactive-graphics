@@ -2,91 +2,58 @@
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 mod shader_bindings;
-use metal_app::{metal::*, metal_types::*, *};
+use metal_app::{components::Camera, metal::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
     path::PathBuf,
     simd::{f32x2, f32x4},
 };
-use tobj::LoadOptions;
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// - Use Model
-// - Use Camera
+const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 struct Delegate {
-    camera_distance_offset: f32,
-    camera_distance: f32,
-    camera_rotation_offset: f32x2,
-    camera_rotation: f32x2,
-    device: Device,
+    camera: Camera<4>,
     command_queue: CommandQueue,
-    mins_maxs: [packed_float4; 2],
-    num_vertices: usize,
+    device: Device,
+    model: Model<{ VertexBufferIndex::Geometry as _ }, NO_MATERIALS_ID>,
+    needs_render: bool,
     render_pipeline: RenderPipelineState,
-    screen_size: f32x2,
-    use_perspective: bool,
-    vertex_buffer_positions: Buffer,
+    vertex_input: VertexInput,
 }
 
 impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
-        let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("common-assets")
-            .join("teapot")
-            .join("teapot.obj");
-        let (mut models, ..) = tobj::load_obj(
-            teapot_file,
-            &LoadOptions {
-                single_index: false,
-                triangulate: true,
-                ignore_points: true,
-                ignore_lines: true,
+        let model = Model::from_file(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("common-assets")
+                .join("teapot")
+                .join("teapot.obj"),
+            &device,
+            |arg: &mut Geometry, geo| {
+                arg.indices = geo.indices_buffer;
+                arg.positions = geo.positions_buffer;
             },
-        )
-        .expect("Failed to load OBJ file");
-
-        let model = models
-            .pop()
-            .expect("Failed to parse model, expecting atleast one model (teapot)");
-        let positions = model.mesh.positions;
-
-        debug_assert_eq!(
-            positions.len() % 3,
-            0,
-            r#"`mesh.positions` should contain triples (3D position)"#
+            NO_MATERIALS_ENCODER,
         );
-
-        let mins_maxs = {
-            let (positions3, ..) = positions.as_chunks::<3>();
-            let mut mins = f32x4::splat(f32::MAX);
-            let mut maxs = f32x4::splat(f32::MIN);
-            for &[x, y, z] in positions3 {
-                let input = f32x4::from_array([x, y, z, 0.0]);
-                mins = mins.min(input);
-                maxs = maxs.max(input);
-            }
-            [mins.into(), maxs.into()]
-        };
+        let &MaxBounds { center, size } = &model.geometry_max_bounds;
+        let half_size = size * f32x4::splat(0.5);
 
         Self {
-            camera_distance_offset: 0.0,
-            camera_distance: INITIAL_CAMERA_DISTANCE,
-            camera_rotation_offset: f32x2::splat(0.0),
-            camera_rotation: f32x2::from_array([-PI / 6.0, 0.0]),
+            camera: Camera::new(
+                INITIAL_CAMERA_DISTANCE,
+                f32x2::from_array([-PI / 6.0, 0.0]),
+                ModifierKeys::empty(),
+                false,
+                0.,
+            ),
             command_queue: device.new_command_queue(),
-            mins_maxs,
-            num_vertices: positions.len() / 3,
+            model,
+            needs_render: false,
             render_pipeline: {
                 let library = device
-                    .new_library_with_data(include_bytes!(concat!(
-                        env!("OUT_DIR"),
-                        "/shaders.metallib"
-                    )))
+                    .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib.");
                 let p = create_render_pipeline(
                     &device,
@@ -104,108 +71,69 @@ impl RendererDelgate for Delegate {
                 debug_assert_render_pipeline_function_arguments(
                     &p,
                     &[
-                        pointer_arg::<packed_float4>(VertexBufferIndex::MaxPositionValue as _),
-                        pointer_arg::<packed_float3>(VertexBufferIndex::Positions as _),
-                        value_arg::<float2>(VertexBufferIndex::ScreenSize as _),
-                        value_arg::<float2>(VertexBufferIndex::CameraRotation as _),
-                        value_arg::<f32>(VertexBufferIndex::CameraDistance as _),
-                        value_arg::<bool>(VertexBufferIndex::UsePerspective as _),
+                        pointer_arg::<VertexInput>(VertexBufferIndex::VertexInput as _),
+                        pointer_arg::<Geometry>(VertexBufferIndex::Geometry as _),
                     ],
                     None,
                 );
                 p.pipeline_state
             },
-            use_perspective: true,
-            vertex_buffer_positions: allocate_new_buffer_with_data(
-                &device,
-                "Vertex Buffer Positions",
-                &positions,
-            ),
-            screen_size: f32x2::splat(0.),
+            vertex_input: VertexInput {
+                mins: (center - half_size).into(),
+                maxs: (center + half_size).into(),
+                use_perspective: true,
+                screen_size: f32x2::default().into(),
+                camera_rotation: f32x2::default().into(),
+                camera_distance: 0.,
+            },
             device,
         }
     }
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        self.needs_render = false;
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer
             .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::MaxPositionValue as _,
-            &self.mins_maxs,
-        );
-        encoder.set_vertex_buffer(
-            VertexBufferIndex::Positions as _,
-            Some(&self.vertex_buffer_positions),
-            0,
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::CameraRotation as _,
-            &(self.camera_rotation + self.camera_rotation_offset),
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::CameraDistance as _,
-            &(self.camera_distance + self.camera_distance_offset),
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::ScreenSize as _,
-            &self.screen_size,
-        );
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::UsePerspective as _,
-            &self.use_perspective,
-        );
+        encoder.set_label("Render Teapot");
         encoder.set_render_pipeline_state(&self.render_pipeline);
-        encoder.draw_primitives(MTLPrimitiveType::Point, 0, self.num_vertices as _);
+        encode_vertex_bytes(
+            &encoder,
+            VertexBufferIndex::VertexInput as _,
+            &self.vertex_input,
+        );
+        self.model
+            .encode_draws_with_primitive_type(encoder, MTLPrimitiveType::Point);
         encoder.end_encoding();
         command_buffer
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        use MouseButton::*;
-        use UserEvent::*;
+        if self.camera.on_event(event).is_some() {
+            self.vertex_input.camera_distance = self.camera.ray.distance_from_origin;
+            self.vertex_input.camera_rotation = self.camera.ray.rotation_xy.into();
+            self.vertex_input.screen_size = self.camera.screen_size.into();
+            self.needs_render = true;
+        }
         match event {
-            MouseDrag {
-                button,
-                drag_amount,
-                ..
-            } => {
-                match button {
-                    Left => {
-                        self.camera_rotation += {
-                            let adjacent = f32x2::splat(self.camera_distance);
-                            let offsets = drag_amount / f32x2::splat(4.);
-                            let ratio = offsets / adjacent;
-                            f32x2::from_array([
-                                ratio[1].atan(), // Rotation on x-axis
-                                ratio[0].atan(), // Rotation on y-axis
-                            ])
-                        }
-                    }
-                    Right => self.camera_distance += -drag_amount[1] / 8.0,
-                }
-            }
-            KeyDown { key_code, .. } => {
+            UserEvent::KeyDown { key_code, .. } => {
                 // "P" Key Code
                 if key_code == 35 {
                     // Toggle between orthographic and perspective
-                    self.use_perspective = !self.use_perspective;
+                    self.vertex_input.use_perspective = !self.vertex_input.use_perspective;
+                    self.needs_render = true;
                 }
-            }
-            WindowFocusedOrResized { size, .. } => {
-                self.screen_size = size;
             }
             _ => {}
         }
+    }
+
+    fn needs_render(&self) -> bool {
+        self.needs_render
     }
 
     fn device(&self) -> &Device {

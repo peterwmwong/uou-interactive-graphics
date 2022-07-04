@@ -113,8 +113,18 @@ Only one of these must be true:
             MTLRenderStages::Vertex | MTLRenderStages::Fragment,
         )
     }
+
     #[inline]
     pub fn encode_draws(&self, encoder: &RenderCommandEncoderRef) {
+        self.encode_draws_with_primitive_type(encoder, MTLPrimitiveType::Triangle);
+    }
+
+    #[inline]
+    pub fn encode_draws_with_primitive_type(
+        &self,
+        encoder: &RenderCommandEncoderRef,
+        primitive_type: MTLPrimitiveType,
+    ) {
         let mut geometry_arg_buffer_offset = 0;
         let materials = self.materials.as_ref();
         for d in &self.draws {
@@ -159,8 +169,7 @@ Only one of these must be true:
             }
             geometry_arg_buffer_offset += self.geometry_buffers.argument_byte_size;
 
-            encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, d.num_indices as _);
-
+            encoder.draw_primitives(primitive_type, 0, d.num_indices as _);
             encoder.pop_debug_group();
         }
     }

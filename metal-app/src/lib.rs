@@ -1,5 +1,6 @@
 #![feature(array_zip)]
 #![feature(pointer_byte_offsets)]
+#![feature(const_pointer_byte_offsets)]
 #![feature(portable_simd)]
 #![feature(slice_as_chunks)]
 

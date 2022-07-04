@@ -49,7 +49,7 @@ impl<'a, T: Sized> Geometry<'a, T> {
     pub(crate) fn new(objects: &'a [tobj::Model], device: &Device) -> Self {
         let mut heap_size = 0;
 
-        // Create a shared buffer (shared between all objects) for each ObjectGeometry member.
+        // Create a shared buffer (shared between all objects).
         // Calculate the size of each buffer...
         let mut indices_buf_length = 0;
         let mut positions_buf_length = 0;

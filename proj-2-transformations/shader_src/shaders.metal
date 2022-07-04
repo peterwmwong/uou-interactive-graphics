@@ -54,20 +54,16 @@ struct VertexOut
 
 // IMPORTANT: Normally you would **NOT** calculate the model-view-projection matrix in the Vertex
 // Shader. For performance, this should be done once (not for every vertex) on the CPU and passed to
-// the Vertex Shader as a constant space buffer. It is done in the Vertex Shader for this project as
-// a personal excercise to become more familar with the Metal Shading Language.
+// the Vertex Shader as a buffer (see subsequent projects). It is done in the Vertex Shader for this
+// project as a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
 main_vertex(         uint            vertex_id        [[vertex_id]],
-            constant packed_float4 * mins_maxs        [[buffer(VertexBufferIndex::MaxPositionValue)]],
-            constant packed_float3 * positions        [[buffer(VertexBufferIndex::Positions)]],
-            constant float2        & screen_size      [[buffer(VertexBufferIndex::ScreenSize)]],
-            constant float2        & camera_rotation  [[buffer(VertexBufferIndex::CameraRotation)]],
-            constant float         & camera_distance  [[buffer(VertexBufferIndex::CameraDistance)]],
-            constant bool          & use_perspective  [[buffer(VertexBufferIndex::UsePerspective)]])
+            constant VertexInput   & in               [[buffer(VertexBufferIndex::VertexInput)]],
+            constant Geometry      & geometry         [[buffer(VertexBufferIndex::Geometry)]])
 {
-    const float4 model_position = float4(positions[vertex_id], 1.0); // Make homogenous coordinate
-    const float4 mins           = mins_maxs[0];
-    const float4 maxs           = mins_maxs[1];
+    const float4 model_position = float4(geometry.positions[geometry.indices[vertex_id]], 1.0); // Make homogenous coordinate
+    const float4 mins           = in.mins;
+    const float4 maxs           = in.maxs;
 
     // The input model file actually orients the z-axis runs along the "bottom" to the "top" of the
     // teapot and the center bottom of the teapot is the origin (0,0,0).
@@ -91,9 +87,9 @@ main_vertex(         uint            vertex_id        [[vertex_id]],
     const float4x4 view_matrix = float4x4_row_major(
         {1, 0, 0, 0},
         {0, 1, 0, 0},
-        {0, 0, 1, camera_distance},
+        {0, 0, 1, in.camera_distance},
         {0, 0, 0, 1}
-    ) * get_rotation_matrix(-camera_rotation);
+    ) * get_rotation_matrix(-in.camera_rotation);
 
     // I think normally you'd just use perspective projection. As such, that would normally be
     // based on FOV (Field Of View degrees: 60, 90, or 120).
@@ -103,7 +99,7 @@ main_vertex(         uint            vertex_id        [[vertex_id]],
     // calculated based on the bounding bounding box (mins, maxs) of the teapot.
     const float n                   = 0.1;
     const float f                   = 1000.0;
-    const float screen_aspect_ratio = screen_size.x / screen_size.y;
+    const float screen_aspect_ratio = in.screen_size.x / in.screen_size.y;
     const float max_bound =
         max(
             max(
@@ -118,7 +114,7 @@ main_vertex(         uint            vertex_id        [[vertex_id]],
     const float b =                       -max_bound / INITIAL_CAMERA_DISTANCE;
     const float t =                        max_bound / INITIAL_CAMERA_DISTANCE;
     float4x4 projection_matrix;
-    if (use_perspective) {
+    if (in.use_perspective) {
         const float4x4 perspective_matrix = float4x4_row_major(
             {n, 0,   0,    0},
             {0, n,   0,    0},
@@ -139,10 +135,10 @@ main_vertex(         uint            vertex_id        [[vertex_id]],
         // widen the view volume x/y components by the same proportion the perspective projection
         // (above) would (divide by the w-component, which is the z-component).
         projection_matrix = get_orthographic_matrix(
-            l * camera_distance,
-            r * camera_distance,
-            b * camera_distance,
-            t * camera_distance,
+            l * in.camera_distance,
+            r * in.camera_distance,
+            b * in.camera_distance,
+            t * in.camera_distance,
             n,
             f
         );
@@ -155,11 +151,11 @@ main_vertex(         uint            vertex_id        [[vertex_id]],
 
         // OPTIONAL: Slight differentiation between points close to the camera from those far away.
         // TODO: Replace 1024.0 with a shader_bindings.h "INITIAL_SCREEN_SIZE"
-        .size = (200.0 * screen_size.y / 1024.0)
-                    / (use_perspective ? projection_position.w : view_position.z),
+        .size = (200.0 * in.screen_size.y / 1024.0)
+                    / (in.use_perspective ? projection_position.w : view_position.z),
 
         // OPTIONAL: Differentiate perspective (green) from orthographic (red).
-        .color = use_perspective ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
+        .color = in.use_perspective ? half4(0, 1, 0, 1) : half4(1, 0, 0, 1)
     };
 }
 

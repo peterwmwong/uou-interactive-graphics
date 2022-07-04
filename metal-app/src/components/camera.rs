@@ -19,12 +19,12 @@ pub struct CameraUpdate {
     pub matrix_world_to_projection: f32x4x4,
 }
 
-pub struct Camera {
-    pub ray: UIRay,
-    screen_size: f32x2,
+pub struct Camera<const DRAG_SCALE: usize = 250> {
+    pub ray: UIRay<DRAG_SCALE>,
+    pub screen_size: f32x2,
 }
 
-impl Camera {
+impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
     #[inline(always)]
     pub const fn new(
         init_distance: f32,
@@ -34,7 +34,7 @@ impl Camera {
         min_distance: f32,
     ) -> Self {
         Self {
-            ray: UIRay {
+            ray: UIRay::<DRAG_SCALE> {
                 distance_from_origin: init_distance,
                 rotation_xy: init_rotation,
                 on_mouse_drag_modifier_keys,

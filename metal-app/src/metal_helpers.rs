@@ -16,7 +16,7 @@ pub const fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usi
 }
 
 #[inline(always)]
-pub fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, byte_offset: usize) -> usize {
+pub const fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, byte_offset: usize) -> usize {
     unsafe {
         let count = src.len();
         std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(byte_offset), count);
@@ -55,6 +55,11 @@ pub fn allocate_new_buffer_with_heap<T: Sized>(
     label: &'static str,
     bytes: usize,
 ) -> (*mut T, Buffer) {
+    debug_assert_eq!(
+        0,
+        bytes % std::mem::size_of::<T>(),
+        "Attempting to heap allocate by byte size that does not match the size of the type"
+    );
     let buf = heap
         .new_buffer(bytes as u64, DEFAULT_RESOURCE_OPTIONS)
         .expect(&format!("Failed to allocate buffer for {label}"));
@@ -63,14 +68,17 @@ pub fn allocate_new_buffer_with_heap<T: Sized>(
 }
 
 #[inline]
-pub fn allocate_new_buffer<T: Sized>(
+pub fn allocate_new_buffer<'a, T: Sized>(
     device: &DeviceRef,
     label: &'static str,
-    bytes: usize,
-) -> (*mut T, Buffer) {
-    let buf = device.new_buffer(bytes as u64, DEFAULT_RESOURCE_OPTIONS);
+    num_elements: usize,
+) -> (&'a mut T, Buffer) {
+    let buf = device.new_buffer(
+        (std::mem::size_of::<T>() * num_elements) as u64,
+        DEFAULT_RESOURCE_OPTIONS,
+    );
     buf.set_label(label);
-    (buf.contents() as *mut T, buf)
+    (unsafe { &mut *(buf.contents() as *mut T) }, buf)
 }
 
 #[inline]
@@ -79,8 +87,7 @@ pub fn allocate_new_buffer_with_data<T: Sized>(
     label: &'static str,
     data: &[T],
 ) -> Buffer {
-    let (contents, buffer) =
-        allocate_new_buffer::<T>(&device, label, std::mem::size_of::<T>() * data.len());
+    let (contents, buffer) = allocate_new_buffer::<T>(&device, label, data.len());
     unsafe {
         std::ptr::copy_nonoverlapping(data.as_ptr(), contents, data.len());
     }

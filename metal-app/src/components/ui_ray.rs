@@ -4,7 +4,7 @@ use std::simd::f32x2;
 pub const ROTATE_MOUSE_BUTTON: MouseButton = MouseButton::Left;
 pub const DISTANCE_MOUSE_BUTTON: MouseButton = MouseButton::Right;
 
-pub struct UIRay {
+pub struct UIRay<const DRAG_SCALE: usize = 250> {
     pub distance_from_origin: f32,
     pub invert_drag: bool,
     pub min_distance: f32,
@@ -12,7 +12,7 @@ pub struct UIRay {
     pub rotation_xy: f32x2,
 }
 
-impl UIRay {
+impl<const DRAG_SCALE: usize> UIRay<DRAG_SCALE> {
     pub fn new(
         on_mouse_drag_modifier_keys: ModifierKeys,
         distance_from_origin: f32,
@@ -66,7 +66,7 @@ impl UIRay {
             self.distance_from_origin,
             self.rotation_xy + {
                 let adjacent = f32x2::splat(self.distance_from_origin);
-                let opposite = drag_amount / f32x2::splat(500.);
+                let opposite = drag_amount / f32x2::splat((DRAG_SCALE * 2) as _);
                 let &[x, y] = (opposite / adjacent).as_array();
                 f32x2::from_array([
                     y.atan(), // Rotation on x-axis
@@ -79,7 +79,8 @@ impl UIRay {
     #[inline]
     fn drag_distance(&mut self, drag_amount: f32x2) {
         self.update(
-            (self.distance_from_origin - drag_amount[1] / 250.).max(self.min_distance),
+            (self.distance_from_origin - drag_amount[1] / (DRAG_SCALE as f32))
+                .max(self.min_distance),
             self.rotation_xy,
         );
     }
