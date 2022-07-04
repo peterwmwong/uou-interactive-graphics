@@ -31,7 +31,7 @@ main_fragment(         VertexOut        in        [[stage_in]],
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (OnlyNormals) return half4(half3(n * float3(1,1,-1)), 1);
 
-    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
+    // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos   = pos_w.xyz / pos_w.w;
 

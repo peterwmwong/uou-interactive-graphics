@@ -10,14 +10,11 @@
 #include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
 
-DEF_CONSTANT constexpr unsigned short MIRRORED_INSTANCE_ID = 1;
-
 enum struct VertexBufferIndex: unsigned int
 {
     Geometry = 0,
     Camera,
     Model,
-    MatrixModelToWorld,
     PlaneY,
     LENGTH
 };
@@ -25,11 +22,13 @@ enum struct VertexBufferIndex: unsigned int
 enum struct FragBufferIndex: unsigned int
 {
     Camera = 0,
+    LightPosition,
+    MatrixEnvironment,
     LENGTH
 };
 
 enum struct FragTextureIndex: unsigned int
 {
-    CubeMapTexture = 0,
+    EnvTexture = 0,
     ModelTexture
 };

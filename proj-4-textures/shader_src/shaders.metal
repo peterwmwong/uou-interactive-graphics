@@ -34,7 +34,7 @@ main_fragment(         VertexOut        in        [[stage_in]],
               constant ProjectedSpace & camera    [[buffer(FragBufferIndex::Camera)]],
               constant float4         & light_pos [[buffer(FragBufferIndex::LightPosition)]])
 {
-    // Calculate the fragment's ProjectedSpace Space position from a Metal Viewport Coordinate.
+    // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
     return shade_phong_blinn(

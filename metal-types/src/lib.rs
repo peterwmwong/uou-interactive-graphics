@@ -11,6 +11,7 @@ pub use rust_bindgen_only_metal_types_list::*;
  See `metal-build/src/vector_type_helpers.rs`.
 ***************************************************************************************************/
 use std::{
+    fmt::Debug,
     ops::{Mul, Sub},
     simd::{f32x2, f32x4, u16x2},
 };
@@ -286,6 +287,24 @@ impl Mul<f32x4x4> for f32x4x4 {
     }
 }
 
+impl Debug for f32x4x4 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str_row = |row: f32x4| {
+            let s = row
+                .as_array()
+                .map(|e| format!("{e:>+10.5}").replace("+", " "))
+                .join(",");
+            format!("[{s}]")
+        };
+        f.debug_tuple("f32x4x4")
+            .field(&str_row(self.row::<0>()))
+            .field(&str_row(self.row::<1>()))
+            .field(&str_row(self.row::<2>()))
+            .field(&str_row(self.row::<3>()))
+            .finish()
+    }
+}
+
 impl Sub<f32x4x4> for f32x4x4 {
     type Output = f32x4x4;
 
@@ -358,15 +377,7 @@ mod test {
 
     mod test_f32x4x4 {
         use super::*;
-        use std::{fmt::Debug, simd::f32x4};
-
-        impl Debug for f32x4x4 {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_struct("float4x4")
-                    .field("columns", &self.columns)
-                    .finish()
-            }
-        }
+        use std::simd::f32x4;
 
         #[test]
         fn test_inverse() {

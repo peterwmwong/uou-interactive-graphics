@@ -37,13 +37,14 @@ struct Delegate {
     device: Device,
     library: Library,
     matrix_model_to_world: f32x4x4,
+    matrix_world_to_mirror_world: f32x4x4,
     mirrored_model_texture: Option<Texture>,
+    mirror_plane_pipeline: RenderPipelineState,
+    mirror_plane_y_world: f32,
     model_depth_state: DepthStencilState,
     model_pipeline: RenderPipelineState,
     model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
     needs_render: bool,
-    plane_pipeline: RenderPipelineState,
-    plane_y: f32,
     shading_mode: ShadingModeSelector,
 }
 
@@ -81,12 +82,12 @@ fn create_pipelines(
                     value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
                     value_arg::<ProjectedSpace>(VertexBufferIndex::Camera as _),
                     value_arg::<ModelSpace>(VertexBufferIndex::Model as _),
-                    value_arg::<float4x4>(VertexBufferIndex::MatrixModelToWorld as _),
-                    value_arg::<f32>(VertexBufferIndex::PlaneY as _),
                 ],
                 Some(&[
                     value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
-                    texture_arg(FragTextureIndex::CubeMapTexture as _, MTLTextureType::Cube),
+                    value_arg::<float4>(FragBufferIndex::LightPosition as _),
+                    value_arg::<float3x3>(FragBufferIndex::MatrixEnvironment as _),
+                    texture_arg(FragTextureIndex::EnvTexture as _, MTLTextureType::Cube),
                 ]),
             );
             p.pipeline_state
@@ -114,7 +115,8 @@ fn create_pipelines(
                 ],
                 Some(&[
                     value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
-                    texture_arg(FragTextureIndex::CubeMapTexture as _, MTLTextureType::Cube),
+                    value_arg::<float4>(FragBufferIndex::LightPosition as _),
+                    texture_arg(FragTextureIndex::EnvTexture as _, MTLTextureType::Cube),
                     texture_arg(FragTextureIndex::ModelTexture as _, MTLTextureType::D2),
                 ]),
             );
@@ -133,7 +135,7 @@ impl RendererDelgate for Delegate {
         ));
 
         // Load Environment Map (Cube Map)
-        let cubemap_texture = {
+        let env_texture = {
             let desc = TextureDescriptor::new();
             desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
             desc.set_texture_type(MTLTextureType::Cube);
@@ -232,13 +234,14 @@ impl RendererDelgate for Delegate {
                 &[],
                 Some(&[
                     value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
-                    texture_arg(FragTextureIndex::CubeMapTexture as _, MTLTextureType::Cube),
+                    texture_arg(FragTextureIndex::EnvTexture as _, MTLTextureType::Cube),
                 ]),
             );
             p
         };
         let shading_mode = ShadingModeSelector::DEFAULT;
-        let (model_pipeline, plane_pipeline) = create_pipelines(&device, &library, shading_mode);
+        let (model_pipeline, mirror_plane_pipeline) =
+            create_pipelines(&device, &library, shading_mode);
 
         let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
@@ -258,7 +261,19 @@ impl RendererDelgate for Delegate {
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
             * f32x4x4::translate(cx, cy, cz);
 
-        let plane_y = -0.5 * scale * size[2];
+        let mirror_plane_y_world = -0.5 * scale * size[2];
+        let matrix_world_to_mirror_world =
+            // 3. Put the object back into world coordinate space (mirror world)
+            f32x4x4::translate(0., mirror_plane_y_world, 0.)
+            // 2. Mirror
+            * f32x4x4::scale(1., -1., 1., 1.)
+            // 1. Move objects into mirror plane coordinate space (aka origin is mirror plane)
+            * f32x4x4::translate(0., -mirror_plane_y_world, 0.);
+
+        // Interesting observation: This transformation is an involutory matrix?
+        // TODO: How does this work? Does this hold up when we rotate the mirror plane?
+        // let matrix_mirror_world_to_world = matrix_world_to_mirror_world.inverse();
+        // assert_eq!(matrix_world_to_mirror_world, matrix_mirror_world_to_world);
 
         Self {
             bg_depth_state: {
@@ -280,11 +295,14 @@ impl RendererDelgate for Delegate {
                 position_world: f32x4::default().into(),
             },
             command_queue: device.new_command_queue(),
-            cubemap_texture,
+            cubemap_texture: env_texture,
             depth_texture: None,
             library,
             matrix_model_to_world,
+            matrix_world_to_mirror_world,
             mirrored_model_texture: None,
+            mirror_plane_pipeline,
+            mirror_plane_y_world,
             model_depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -294,8 +312,6 @@ impl RendererDelgate for Delegate {
             model_pipeline,
             model,
             needs_render: false,
-            plane_pipeline,
-            plane_y,
             shading_mode,
             device,
         }
@@ -309,6 +325,7 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
+        let light_position = f32x4::from_array([0., 1., -1., 1.]);
         {
             let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
                 self.mirrored_model_texture.as_deref(),
@@ -317,33 +334,64 @@ impl RendererDelgate for Delegate {
                     .map(|d| (d, MTLStoreAction::DontCare)),
             ));
             {
+                let mirror_camera_space = ProjectedSpace {
+                    matrix_world_to_projection: self.camera_space.matrix_world_to_projection
+                        * self.matrix_world_to_mirror_world,
+                    // TODO: I'm not sure this is right, shouldn't it be matrix_mirror_world_to_world, not matrix_world_to_mirror_world
+                    //                                                          aaaaaaaaaaaa    bbbbb             bbbbb    aaaaaaaaaaaa
+                    // - I think this only works because matrix_world_to_mirror_world is involution (inverse is the same).
+                    // - `matrix_world_to_projection` (Metal than transforms to screen)
+                    //      world -> mirror world -> projection -> screen
+                    // - Also, does the Fragment Shader need a mirror world or world coordinate?
+                    //      - `matrix_screen_to_world`
+                    //          screen -> projection -> world -> mirror world (current)
+                    //          VS.
+                    //          screen -> projection -> mirror world -> world
+                    matrix_screen_to_world: self.matrix_world_to_mirror_world
+                        * self.camera_space.matrix_screen_to_world,
+                    position_world: self.camera_space.position_world,
+                };
                 encoder.push_debug_group("Model (mirrored)");
                 self.model.encode_use_resources(encoder);
                 encoder.set_render_pipeline_state(&self.model_pipeline);
                 encoder.set_depth_stencil_state(&self.model_depth_state);
-                encode_vertex_bytes(encoder, VertexBufferIndex::Camera as _, &self.camera_space);
+                encode_vertex_bytes(
+                    encoder,
+                    VertexBufferIndex::Camera as _,
+                    &mirror_camera_space,
+                );
                 encode_vertex_bytes(
                     encoder,
                     VertexBufferIndex::Model as _,
                     &ModelSpace {
-                        matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+                        matrix_model_to_projection: mirror_camera_space.matrix_world_to_projection
                             * self.matrix_model_to_world,
-                        matrix_normal_to_world: self.matrix_model_to_world.into(),
+                        matrix_normal_to_world: (self.matrix_world_to_mirror_world
+                            * self.matrix_model_to_world)
+                            .into(),
                     },
                 );
                 encode_vertex_bytes(
                     encoder,
-                    VertexBufferIndex::MatrixModelToWorld as _,
-                    &self.matrix_model_to_world,
+                    VertexBufferIndex::PlaneY as _,
+                    &self.mirror_plane_y_world,
                 );
-                encode_vertex_bytes(encoder, VertexBufferIndex::PlaneY as _, &self.plane_y);
-                encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
+                encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &mirror_camera_space);
+                encode_fragment_bytes(
+                    encoder,
+                    FragBufferIndex::LightPosition as _,
+                    &(self.matrix_world_to_mirror_world * light_position),
+                );
+                encode_fragment_bytes(
+                    encoder,
+                    FragBufferIndex::MatrixEnvironment as _,
+                    &Into::<float3x3>::into(self.matrix_world_to_mirror_world),
+                );
                 encoder.set_fragment_texture(
-                    FragTextureIndex::CubeMapTexture as _,
+                    FragTextureIndex::EnvTexture as _,
                     Some(&self.cubemap_texture),
                 );
-                self.model
-                    .encode_draws_instances(encoder, 1, MIRRORED_INSTANCE_ID as _);
+                self.model.encode_draws(encoder);
                 encoder.pop_debug_group();
             }
             encoder.end_encoding();
@@ -369,15 +417,19 @@ impl RendererDelgate for Delegate {
                     matrix_normal_to_world: self.matrix_model_to_world.into(),
                 },
             );
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::MatrixModelToWorld as _,
-                &self.matrix_model_to_world,
-            );
-            encode_vertex_bytes(encoder, VertexBufferIndex::PlaneY as _, &self.plane_y);
             encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
+            encode_fragment_bytes(
+                encoder,
+                FragBufferIndex::LightPosition as _,
+                &light_position,
+            );
+            encode_fragment_bytes(
+                encoder,
+                FragBufferIndex::MatrixEnvironment as _,
+                &Into::<float3x3>::into(f32x4x4::identity()),
+            );
             encoder.set_fragment_texture(
-                FragTextureIndex::CubeMapTexture as _,
+                FragTextureIndex::EnvTexture as _,
                 Some(&self.cubemap_texture),
             );
             self.model.encode_draws(encoder);
@@ -385,7 +437,12 @@ impl RendererDelgate for Delegate {
         }
         {
             encoder.push_debug_group("Plane");
-            encoder.set_render_pipeline_state(&self.plane_pipeline);
+            encoder.set_render_pipeline_state(&self.mirror_plane_pipeline);
+            encode_vertex_bytes(
+                encoder,
+                VertexBufferIndex::PlaneY as _,
+                &self.mirror_plane_y_world,
+            );
             encoder.set_fragment_texture(
                 FragTextureIndex::ModelTexture as _,
                 self.mirrored_model_texture.as_deref(),
@@ -407,9 +464,10 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
         if let Some(update) = self.camera.on_event(event) {
-            self.camera_space.matrix_screen_to_world = update.matrix_screen_to_world;
             self.camera_space.matrix_world_to_projection = update.matrix_world_to_projection;
+            self.camera_space.matrix_screen_to_world = update.matrix_screen_to_world;
             self.camera_space.position_world = update.position_world.into();
+
             self.needs_render = true;
         }
 
@@ -459,7 +517,7 @@ impl Delegate {
 
     #[inline]
     fn update_mode(&mut self) {
-        (self.model_pipeline, self.plane_pipeline) =
+        (self.model_pipeline, self.mirror_plane_pipeline) =
             create_pipelines(&self.device, &self.library, self.shading_mode);
         self.needs_render = true;
     }

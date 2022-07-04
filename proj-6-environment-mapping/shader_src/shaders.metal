@@ -6,47 +6,30 @@ using namespace metal;
 
 inline half4 shade_mirror(const float4            screen_pos,
                           const float4            camera_pos_f,
+                          const float4            light_pos_f,
                           const float3            normal_f,
                           const float4x4          matrix_screen_to_world,
-                          const texturecube<half> bg_texture,
-                          const bool              is_mirrored) {
-    // TODO: API-wise `is_mirrored` is not great, find a better way to transform the world
-    // (ex. Mirroring). And ponder... (huge bong hit) why?
-    // - For geometry, we've acccomplished this in the main_vertex shader...
-    //   - Hardcoded (but could be generalized) the plane (XZ-plane) the mirror resides on
-    //   - Calculate the reflected coordinate for each vertex/normal
-    // - BUT, 2 other worldly objects are missing in this transform: Light and Environment/Skybox
-    //   - That's what this `is_mirrored` seeks to resolve, last minute transform Light Position and
-    //     Environment Mapping.
-    // - There must be a more maintainable/complete/general way representing a world transformations
-    //   and all the things affecting by it.
-    //   - Is it simply using/updating the matrix_*_to_world transform matrices?
-    //   - Is it introducing a new transform matrix (world_to_world2) that's usually the identity
-    //     matrix.
-    //   - Figure out what does a generalized mirror matrix transform look like (negative scaling?)
-    // - Stepping back for a moment, how common are world transforms?
-    //   - Other than mirror-ing for rendering perfect-ish mirrors, where else are you
-    //     moving/scaling/translating the whole world?
-    //   - Is it mostly camera effects (ex. viewports) and thinking of it in terms of transforming
-    //     the world (although equivalent) is practically harder?
-    const half3 world_transform = half3(1, (is_mirrored ? -1. : 1.), 1);
-
-    // Calculate the fragment's World Space position from a Metal Viewport Coordinate.
+                          // The goal is to transform the environment. When rendering the mirrored
+                          // world, we need to transformed all the objects of the world, including
+                          // the environment (flip the environment texture). Instead of creating a
+                          // separate "mirrored" environment texture, we change the sampling
+                          // direction achieving the same result.
+                          const float3x3          matrix_env,
+                          const texturecube<half> env_texture) {
+    // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = matrix_screen_to_world * float4(screen_pos.xyz, 1);
     const half3  pos        = half3(pos_w.xyz / pos_w.w);
     const half3  camera_pos = half3(camera_pos_f.xyz);
     const half3  camera_dir = normalize(pos - camera_pos.xyz);
     const half3  normal     = half3(normalize(normal_f));
-    const half3  ref        = reflect(camera_dir, normal) * world_transform;
+    const half3  ref        = half3x3(matrix_env) * reflect(camera_dir, normal);
 
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    const half4 bg_color = bg_texture.sample(tx_sampler, float3(ref));
-    // TODO: Bring back the Light component (moveable, rendered light) to proj-6.
-    const half3 light_pos = half3(0, 1, -1) * world_transform;
+    const half4 env_color = env_texture.sample(tx_sampler, float3(ref));
     return shade_phong_blinn(
         {
             .frag_pos     = pos,
-            .light_pos    = light_pos,
+            .light_pos    = half3(light_pos_f.xyz),
             .camera_pos   = camera_pos,
             .normal       = normal,
             .has_ambient  = HasAmbient,
@@ -54,7 +37,7 @@ inline half4 shade_mirror(const float4            screen_pos,
             .has_specular = HasSpecular,
             .only_normals = OnlyNormals,
         },
-        ConstantMaterial(1, bg_color, bg_color, 50, 0.15)
+        ConstantMaterial(1, env_color, env_color, 50, 0.15)
     );
 }
 
@@ -75,13 +58,13 @@ bg_vertex(uint vertex_id [[vertex_id]])
 }
 
 fragment half4
-bg_fragment(         BGVertexOut         in       [[stage_in]],
-            constant ProjectedSpace    & camera   [[buffer(FragBufferIndex::Camera)]],
-                     texturecube<half>   texture  [[texture(FragTextureIndex::CubeMapTexture)]])
+bg_fragment(         BGVertexOut         in          [[stage_in]],
+            constant ProjectedSpace    & camera      [[buffer(FragBufferIndex::Camera)]],
+                     texturecube<half>   env_texture [[texture(FragTextureIndex::EnvTexture)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
     const float4 pos   = camera.matrix_screen_to_world * float4(in.position.xy, 1, 1);
-    const half4  color = texture.sample(tx_sampler, pos.xyz);
+    const half4  color = env_texture.sample(tx_sampler, pos.xyz);
     return color;
 }
 
@@ -89,44 +72,34 @@ struct VertexOut
 {
     float4 position [[position]];
     float3 normal;
-    bool   is_mirrored;
 };
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Figure out the transform necessary to push through as a ProjectedSpace/ModelSpace
-// - Get rid of matrx_model_to_world and plan_y
 vertex VertexOut
 main_vertex(         uint             vertex_id             [[vertex_id]],
-                     uint             inst_id               [[instance_id]],
             constant Geometry       & geometry              [[buffer(VertexBufferIndex::Geometry)]],
             constant ProjectedSpace & camera                [[buffer(VertexBufferIndex::Camera)]],
-            constant ModelSpace     & model                 [[buffer(VertexBufferIndex::Model)]],
-            constant float4x4       & matrix_model_to_world [[buffer(VertexBufferIndex::MatrixModelToWorld)]],
-            constant float          & plane_y               [[buffer(VertexBufferIndex::PlaneY)]])
+            constant ModelSpace     & model                 [[buffer(VertexBufferIndex::Model)]])
 {
-    const uint idx = geometry.indices[vertex_id];
-    const bool is_mirrored = inst_id == MIRRORED_INSTANCE_ID;
-    float4 pos = float4(geometry.positions[idx], 1.0);
-    float3 normal = model.matrix_normal_to_world * float3(geometry.normals[idx]);
-    if (is_mirrored) {
-        const float3 pos_world = (matrix_model_to_world * pos).xyz + float3(0, -(2.0 * plane_y), 0);
-        const float3 refl = normalize(float3(pos_world.x, 0.0, pos_world.z));
-        pos = camera.matrix_world_to_projection * float4(reflect(-pos_world.xyz, refl), 1.0);
-        normal = reflect(-normal, refl);
-    } else {
-        pos = model.matrix_model_to_projection * pos;
-    }
-    return { .position = pos, .normal = normal, is_mirrored };
+    const uint idx      = geometry.indices[vertex_id];
+    const float4 pos    = model.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
+    const float3 normal = model.matrix_normal_to_world     * float3(geometry.normals[idx]);
+    return { .position = pos, .normal = normal };
 }
 
 fragment half4
-main_fragment(         VertexOut           in         [[stage_in]],
-              constant ProjectedSpace    & camera     [[buffer(FragBufferIndex::Camera)]],
-                       texturecube<half>   bg_texture [[texture(FragTextureIndex::CubeMapTexture)]])
+main_fragment(         VertexOut           in          [[stage_in]],
+              constant ProjectedSpace    & camera      [[buffer(FragBufferIndex::Camera)]],
+              constant float4            & light_pos   [[buffer(FragBufferIndex::LightPosition)]],
+              constant float3x3          & matrix_env  [[buffer(FragBufferIndex::MatrixEnvironment)]],
+                       texturecube<half>   env_texture [[texture(FragTextureIndex::EnvTexture)]])
 {
-    return shade_mirror(in.position, camera.position_world, in.normal, camera.matrix_screen_to_world, bg_texture, in.is_mirrored);
+    return shade_mirror(in.position,
+                        camera.position_world,
+                        light_pos,
+                        in.normal,
+                        camera.matrix_screen_to_world,
+                        matrix_env,
+                        env_texture);
 };
 
 struct PlaneVertexOut
@@ -156,10 +129,12 @@ plane_vertex(         uint             vertex_id [[vertex_id]],
 }
 
 fragment half4
-plane_fragment(        PlaneVertexOut      in                     [[stage_in]],
-              constant ProjectedSpace    & camera                 [[buffer(FragBufferIndex::Camera)]],
-                       texturecube<half>   bg_texture             [[texture(FragTextureIndex::CubeMapTexture)]],
-                       texture2d<half>     mirrored_model_texture [[texture(FragTextureIndex::ModelTexture)]])
+plane_fragment(        PlaneVertexOut            in                    [[stage_in]],
+              constant ProjectedSpace          & camera                [[buffer(FragBufferIndex::Camera)]],
+              constant float4                  & light_pos             [[buffer(FragBufferIndex::LightPosition)]],
+                       texturecube<half>         env_texture           [[texture(FragTextureIndex::EnvTexture)]],
+                       texture2d<half,
+                                 access::read>  mirrored_model_texture [[texture(FragTextureIndex::ModelTexture)]])
 {
     // To render the mirrored model (ex. teapot, sphere, yoda) on the plane, the
     // `mirrored_model_texture` is the model-only contents of the mirror. If the texel doesn't have
@@ -170,14 +145,14 @@ plane_fragment(        PlaneVertexOut      in                     [[stage_in]],
     // `mirrored_model_texture`. I suspect in most cases (and this case) this would be slower and
     // alot more work for the GPU. With the mirrored texture only containing the model, all the
     // pixels outside of the model are saved from executing a fragment shader.
-    half4 mirror_color = mirrored_model_texture.read(uint2(in.position.xy), 0);
+    const half4 mirror_color = mirrored_model_texture.read(uint2(in.position.xy), 0);
     if (mirror_color.a > 0.h) {
         // Super arbitrary, "feels right, probably wrong", darkening the mirrored contents.
         // Maybe what I really want is ambient occlusion on the mirrored plane close to the model...
-        const constexpr half4 darken = half4(half3(0.8), 1);
-        return mirror_color * darken;
+        return mix(mirror_color, half4(0.2), 0.5);
     } else {
-        return shade_mirror(in.position, camera.position_world, in.normal, camera.matrix_screen_to_world, bg_texture, false);
+        const float3x3 identity = float3x3(1);
+        return shade_mirror(in.position, camera.position_world, light_pos, in.normal, camera.matrix_screen_to_world, identity, env_texture);
     }
 };
 
