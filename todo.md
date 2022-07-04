@@ -181,7 +181,6 @@
 
 ## proj-6
 
-- Remove is_mirrored, include mirroring into matrix transformations for mirrored rendering.
 - Optimize
     - Reduce environment cube texture loading the Metal 3 MTLIO
     - Reduce render passes
