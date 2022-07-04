@@ -63,7 +63,10 @@ impl<'a> MaterialSource<'a> {
                 assert_eq!(
                     info.color_type,
                     png::ColorType::Rgba,
-                    "Unexpected PNG color format, expected RGBA"
+                    r#"Unexpected PNG color format, expected RGBA.
+Images with RGB color format (no alpha), can be preprocessed by running:
+> cargo run --bin png-add-alpha [path to image]
+"#
                 );
                 (
                     info.width as _,
