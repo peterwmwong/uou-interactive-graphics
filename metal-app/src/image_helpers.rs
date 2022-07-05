@@ -6,10 +6,8 @@ pub fn read_png_pixel_bytes_into<P: AsRef<Path>>(
     path_to_png: P,
     mut buffer: &mut Vec<u8>,
 ) -> (usize, (u32, u32)) {
-    let mut decoder =
+    let decoder =
         png::Decoder::new(fs::File::open(&path_to_png).expect("Could not open input PNG file."));
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
-
     let mut reader = decoder.read_info().expect("Could not read input PNG file.");
     let info = reader.info();
     assert!(

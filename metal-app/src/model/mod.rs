@@ -2,9 +2,9 @@ mod geometry;
 mod materials;
 
 use crate::metal::*;
-pub use geometry::GeometryToEncode;
-pub use geometry::MaxBounds;
+use crate::time::debug_time;
 use geometry::{DrawInfo, Geometry, GeometryBuffers};
+pub use geometry::{GeometryToEncode, MaxBounds};
 pub use materials::MaterialToEncode;
 use materials::{MaterialResults, Materials};
 use std::any::TypeId;
@@ -44,16 +44,18 @@ impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFE
         encode_material_arg: EM,
     ) -> Self {
         let obj_file_ref = obj_file.as_ref();
-        let (models, materials) = tobj::load_obj(
-            obj_file_ref,
-            &LoadOptions {
-                single_index: true,
-                triangulate: true,
-                ignore_points: true,
-                ignore_lines: true,
-            },
-        )
-        .expect("Failed to load OBJ file");
+        let (models, materials) = debug_time("Model - Load OBJ", || {
+            tobj::load_obj(
+                obj_file_ref,
+                &LoadOptions {
+                    single_index: true,
+                    triangulate: true,
+                    ignore_points: true,
+                    ignore_lines: true,
+                },
+            )
+            .expect("Failed to load OBJ file")
+        });
 
         let materials = materials.expect("Failed to load materials data");
         let material_file_dir = PathBuf::from(
@@ -77,9 +79,11 @@ Only one of these must be true:
             if FRAGMENT_MATERIAL_ARG_BUFFER_ID == NO_MATERIALS_ID || materials.is_empty() {
                 None
             } else {
-                Some(Materials::new(device, &material_file_dir, &materials))
+                Some(debug_time("Model - Size Material", || {
+                    Materials::new(device, &material_file_dir, &materials)
+                }))
             };
-        let mut geometry = Geometry::new(&models, device);
+        let mut geometry = debug_time("Model - Size Geometry", || Geometry::new(&models, device));
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
@@ -87,15 +91,19 @@ Only one of these must be true:
         desc.set_storage_mode(MTLStorageMode::Shared);
         let material_heap_size = materials.as_ref().map_or(0, |m| m.heap_size());
         desc.set_size((material_heap_size + geometry.heap_size()) as _);
-        let heap = device.new_heap(&desc);
+        let heap = debug_time("Model - Allocate Model Heap", || device.new_heap(&desc));
         heap.set_label("Model Heap");
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
-        let materials = materials
-            .as_mut()
-            .map(|m| m.allocate_and_encode(&heap, encode_material_arg));
-        let geometry_buffers = geometry.allocate_and_encode(&heap, encode_geometry_arg);
+        let materials = debug_time("Model - Load Material textures", || {
+            materials
+                .as_mut()
+                .map(|m| m.allocate_and_encode(&heap, encode_material_arg))
+        });
+        let geometry_buffers = debug_time("Model - Load Geometry", || {
+            geometry.allocate_and_encode(&heap, encode_geometry_arg)
+        });
 
         Self {
             heap,

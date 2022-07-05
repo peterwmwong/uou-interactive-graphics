@@ -17,6 +17,7 @@ mod metal_helpers;
 mod model;
 mod objc_helpers;
 mod renderer;
+mod time;
 
 pub use application::launch_application;
 pub use metal;
@@ -25,3 +26,4 @@ pub use metal_types;
 pub use model::*;
 pub use objc_helpers::*;
 pub use renderer::*;
+pub use time::*;

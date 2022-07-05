@@ -28,19 +28,12 @@ pub const fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, byte_offset: usi
 pub fn debug_assert_buffers_equal(a: &Buffer, b: &Buffer) {
     #[cfg(debug_assertions)]
     {
-        let a_length = a.length();
-        let b_length = b.length();
-        debug_assert_eq!(a_length, b_length, "Buffer lengths are not equal");
-
-        let a_contents = a.contents() as *const u8;
-        let b_contents = b.contents() as *const u8;
-        for i in 0..a_length {
-            unsafe {
-                let a_val = *(a_contents.add(i as _));
-                let b_val = *(b_contents.add(i as _));
-                debug_assert_eq!(a_val, b_val, "Byte {i} is not equal.");
-            }
-        }
+        debug_assert_eq!(a.length(), b.length(), "Buffer lengths are not equal");
+        let a_contents =
+            unsafe { std::slice::from_raw_parts(a.contents() as *const u8, a.length() as _) };
+        let b_contents =
+            unsafe { std::slice::from_raw_parts(b.contents() as *const u8, b.length() as _) };
+        assert_eq!(a_contents, b_contents, "Buffer contents are not equal");
     }
 }
 

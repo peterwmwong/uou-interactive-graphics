@@ -151,44 +151,45 @@ impl RendererDelgate for Delegate {
                 .join("assets")
                 .join("cubemap");
             let mut buffer = vec![];
-            for (face_index, filename) in [
-                "cubemap_posx.png",
-                "cubemap_negx.png",
-                "cubemap_posy.png",
-                "cubemap_negy.png",
-                "cubemap_posz.png",
-                "cubemap_negz.png",
-            ]
-            .iter()
-            .enumerate()
-            {
-                let (bytes, (width, height)) = image_helpers::read_png_pixel_bytes_into(
-                    cubemap_path.join(filename),
-                    &mut buffer,
-                );
-
-                assert_eq!(width, CUBEMAP_TEXTURE_WIDTH);
-                assert_eq!(height, CUBEMAP_TEXTURE_HEIGHT);
-                assert_eq!(
-                    bytes, CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
-                    "Unexpected number of bytes read for cube map texture"
-                );
-                texture.replace_region_in_slice(
-                    MTLRegion {
-                        origin: MTLOrigin { x: 0, y: 0, z: 0 },
-                        size: MTLSize {
-                            width: CUBEMAP_TEXTURE_WIDTH as _,
-                            height: CUBEMAP_TEXTURE_WIDTH as _,
-                            depth: 1,
+            debug_time("proj6 - Load Environment Cube Texture", || {
+                for (face_index, filename) in [
+                    "cubemap_posx.png",
+                    "cubemap_negx.png",
+                    "cubemap_posy.png",
+                    "cubemap_negy.png",
+                    "cubemap_posz.png",
+                    "cubemap_negz.png",
+                ]
+                .iter()
+                .enumerate()
+                {
+                    let (bytes, (width, height)) = image_helpers::read_png_pixel_bytes_into(
+                        cubemap_path.join(filename),
+                        &mut buffer,
+                    );
+                    assert_eq!(width, CUBEMAP_TEXTURE_WIDTH);
+                    assert_eq!(height, CUBEMAP_TEXTURE_HEIGHT);
+                    assert_eq!(
+                        bytes, CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
+                        "Unexpected number of bytes read for cube map texture"
+                    );
+                    texture.replace_region_in_slice(
+                        MTLRegion {
+                            origin: MTLOrigin { x: 0, y: 0, z: 0 },
+                            size: MTLSize {
+                                width: CUBEMAP_TEXTURE_WIDTH as _,
+                                height: CUBEMAP_TEXTURE_WIDTH as _,
+                                depth: 1,
+                            },
                         },
-                    },
-                    0,
-                    face_index as _,
-                    buffer.as_ptr() as _,
-                    CUBEMAP_TEXTURE_BYTES_PER_ROW as _,
-                    CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
-                );
-            }
+                        0,
+                        face_index as _,
+                        buffer.as_ptr() as _,
+                        CUBEMAP_TEXTURE_BYTES_PER_ROW as _,
+                        CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
+                    );
+                }
+            });
             texture
         };
 
