@@ -5,6 +5,7 @@ edition = "2021"
 
 [build-dependencies]
 asset-compiler = { path = "../asset-compiler" }
+build-hash = { path = "../build-hash" }
 metal-build = { path = "../metal-build" }
 
 [dependencies]
