@@ -3,7 +3,6 @@ mod shader_bindings;
 
 use metal_app::{
     components::{Camera, ShadingModeSelector},
-    image_helpers,
     metal::*,
     metal_types::*,
     *,
@@ -16,11 +15,6 @@ use std::{
     simd::{f32x2, f32x4},
 };
 
-const CUBEMAP_TEXTURE_BYTES_PER_PIXEL: u32 = 4; // Assumed to be 4-component (ex. RGBA)
-const CUBEMAP_TEXTURE_WIDTH: u32 = 2048;
-const CUBEMAP_TEXTURE_HEIGHT: u32 = CUBEMAP_TEXTURE_WIDTH;
-const CUBEMAP_TEXTURE_BYTES_PER_ROW: u32 = CUBEMAP_TEXTURE_WIDTH * CUBEMAP_TEXTURE_BYTES_PER_PIXEL;
-const CUBEMAP_TEXTURE_BYTES_PER_FACE: u32 = CUBEMAP_TEXTURE_HEIGHT * CUBEMAP_TEXTURE_BYTES_PER_ROW;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -134,64 +128,16 @@ impl RendererDelgate for Delegate {
         ));
 
         // Load Environment Map (Cube Map)
-        let env_texture = {
-            let desc = TextureDescriptor::new();
-            desc.set_pixel_format(MTLPixelFormat::RGBA8Unorm);
-            desc.set_texture_type(MTLTextureType::Cube);
-            desc.set_compression_type(MTLTextureCompressionType::Lossless);
-            desc.set_resource_options(DEFAULT_RESOURCE_OPTIONS);
-            desc.set_usage(MTLTextureUsage::ShaderRead);
-            // TODO: Remove hardcoded values, use PNG dimensions
-            desc.set_width(CUBEMAP_TEXTURE_WIDTH as _);
-            desc.set_height(CUBEMAP_TEXTURE_HEIGHT as _);
-            desc.set_depth(1);
-
-            let texture = device.new_texture(&desc);
-            let cubemap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("assets")
-                .join("cubemap");
-            let mut buffer = vec![];
-            debug_time("proj6 - Load Environment Cube Texture", || {
-                for (face_index, filename) in [
-                    "cubemap_posx.png",
-                    "cubemap_negx.png",
-                    "cubemap_posy.png",
-                    "cubemap_negy.png",
-                    "cubemap_posz.png",
-                    "cubemap_negz.png",
-                ]
-                .iter()
-                .enumerate()
-                {
-                    let (bytes, (width, height)) = image_helpers::read_png_pixel_bytes_into(
-                        cubemap_path.join(filename),
-                        &mut buffer,
-                    );
-                    assert_eq!(width, CUBEMAP_TEXTURE_WIDTH);
-                    assert_eq!(height, CUBEMAP_TEXTURE_HEIGHT);
-                    assert_eq!(
-                        bytes, CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
-                        "Unexpected number of bytes read for cube map texture"
-                    );
-                    texture.replace_region_in_slice(
-                        MTLRegion {
-                            origin: MTLOrigin { x: 0, y: 0, z: 0 },
-                            size: MTLSize {
-                                width: CUBEMAP_TEXTURE_WIDTH as _,
-                                height: CUBEMAP_TEXTURE_WIDTH as _,
-                                depth: 1,
-                            },
-                        },
-                        0,
-                        face_index as _,
-                        buffer.as_ptr() as _,
-                        CUBEMAP_TEXTURE_BYTES_PER_ROW as _,
-                        CUBEMAP_TEXTURE_BYTES_PER_FACE as _,
-                    );
-                }
-            });
-            texture
-        };
+        let env_texture = debug_time("proj6 - Load Environment Cube Texture", || {
+            asset_compiler::cube_texture::load_cube_texture_asset_dir(
+                &device,
+                &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("..")
+                    .join("proj-6-environment-mapping")
+                    .join("assets")
+                    .join("cubemap.asset"),
+            )
+        });
 
         let model_file = PathBuf::from(model_file_path);
         let model = Model::from_file(
@@ -333,6 +279,18 @@ impl RendererDelgate for Delegate {
                     .as_ref()
                     .map(|d| (d, MTLStoreAction::DontCare)),
             ));
+            // TODO: START HERE
+            // TODO: START HERE
+            // TODO: START HERE
+            // Perf: Instead of a separate mirrored_model_texture and multiple passes... why not just
+            // 1 pass and only render to drawable (no extra texture)
+            // 1. Draw mirrored model
+            // 2. Draw plane (mirror)
+            //    - Can we use the depth buffer/test to only render the parts of plane without the mirrored model?
+            //    - Can we use the same fragment shader as drawing the model
+            //    - Or even better (?), can we use the `../common-assets/plane.obj` model?
+            // 3. Draw model
+            // 4. Draw environment
             {
                 let mirror_camera_space = ProjectedSpace {
                     matrix_world_to_projection: self.camera_space.matrix_world_to_projection

@@ -622,6 +622,7 @@ dependencies = [
 name = "proj-6-environment-mapping"
 version = "0.1.0"
 dependencies = [
+ "asset-compiler",
  "metal-app",
  "metal-build",
  "png",

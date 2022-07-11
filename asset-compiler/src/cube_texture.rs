@@ -1,18 +1,20 @@
 use metal::*;
 use std::{mem::MaybeUninit, path::Path};
 
-const BYTES_PER_PIXELS: u8 = 4; // RGBA
+const BYTES_PER_PIXELS: u64 = 4; // RGBA
 const COMPRESSION_METHOD: MTLIOCompressionMethod = MTLIOCompressionMethod::lz4;
 const CUBE_ASSET_DIR_FILENAMES: [&'static str; 6] =
     ["posx", "negx", "posy", "negy", "posz", "negz"];
 const CUBE_ASSET_DIR_METADATA: &'static str = "metadata.info";
+const CUBE_TEXTURE_DEPTH: u64 = 1;
 const SUPPORTED_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::RGBA8Unorm;
 const SUPPORTED_INPUT_PIXEL_FORMAT: png::ColorType = png::ColorType::Rgba;
 
-fn load_image_bytes_from_png<P: AsRef<Path>>(image_path: P) -> (Vec<u8>, (u64, u64)) {
-    let decoder = png::Decoder::new(
-        std::fs::File::open(&image_path).expect("Could not open input PNG file."),
-    );
+fn load_image_bytes_from_png<P: AsRef<Path>>(image_path: P) -> (Vec<u8>, (usize, usize)) {
+    let decoder = png::Decoder::new(std::fs::File::open(&image_path).expect(&format!(
+        "Could not open input PNG file ({:?}).",
+        image_path.as_ref()
+    )));
     let mut reader = decoder
         .read_info()
         .expect("Failed to decode PNG information");
@@ -24,7 +26,7 @@ fn load_image_bytes_from_png<P: AsRef<Path>>(image_path: P) -> (Vec<u8>, (u64, u
     let (width, height) = (info.width, info.height);
     let mut buf = vec![0; reader.output_buffer_size()];
     reader.next_frame(&mut buf).expect(&format!(
-        "Failed to load image data into buffer {:?}",
+        "Failed to load image data ({:?}) into buffer.",
         image_path.as_ref()
     ));
     (buf, (width as _, height as _))
@@ -34,7 +36,7 @@ pub fn create_cube_texture_asset_dir<P: AsRef<Path> + Send, P2: AsRef<Path> + Se
     target_dir: P,
     cube_face_files: &[P2; 6],
 ) {
-    let mut all_face_sizes: [std::mem::MaybeUninit<(u64, u64)>; 6] =
+    let mut all_face_sizes: [std::mem::MaybeUninit<(usize, usize)>; 6] =
         std::mem::MaybeUninit::uninit_array();
     std::thread::scope(|s| {
         for ((src_file, dest_file), face_size) in cube_face_files
@@ -72,12 +74,9 @@ pub fn create_cube_texture_asset_dir<P: AsRef<Path> + Send, P2: AsRef<Path> + Se
     let mut cur_height = 0;
     for (width, height) in unsafe { MaybeUninit::array_assume_init(all_face_sizes) } {
         assert!(
-            (cur_width == 0 && width > 0) || (cur_width == width),
-            "Width is invalid"
-        );
-        assert!(
-            (cur_height == 0 && height > 0) || (cur_height == height),
-            "Height is invalid"
+            ((cur_width == 0 && width > 0) || (cur_width == width))
+                && ((cur_height == 0 && height > 0) || (cur_height == height)),
+            "Width and Height of each cube face texture must be the same"
         );
         cur_width = width;
         cur_height = height;
@@ -117,6 +116,7 @@ fn encode_load_cube_face_texture<P: AsRef<Path>>(
         )
         .expect("Failed to get IO file handle");
     let (width, height) = (width as u64, height as u64);
+    let source_bytes_per_row = width * BYTES_PER_PIXELS;
     command_buffer.load_texture(
         cube_texture,
         face as _,
@@ -124,10 +124,10 @@ fn encode_load_cube_face_texture<P: AsRef<Path>>(
         MTLSize {
             width,
             height,
-            depth: 1,
+            depth: CUBE_TEXTURE_DEPTH,
         },
-        width * (BYTES_PER_PIXELS as u64),
-        height * width * (BYTES_PER_PIXELS as u64),
+        source_bytes_per_row,
+        height * source_bytes_per_row,
         MTLOrigin { x: 0, y: 0, z: 0 },
         &handle,
         0,
@@ -165,13 +165,14 @@ pub fn load_cube_texture_asset_dir<P: AsRef<Path>>(device: &Device, cube_asset_d
         .expect("Failed to create IO Command Queue");
     let cube_texture = {
         let desc = TextureDescriptor::new();
-        desc.set_pixel_format(SUPPORTED_PIXEL_FORMAT);
+        desc.set_pixel_format(pixel_format);
         desc.set_texture_type(MTLTextureType::Cube);
-        desc.set_resource_options(MTLResourceOptions::StorageModeShared);
+        desc.set_resource_options(
+            MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
+        );
         desc.set_usage(MTLTextureUsage::ShaderRead);
         desc.set_width(width as _);
         desc.set_height(height as _);
-        desc.set_depth(1);
         device.new_texture(&desc)
     };
 
@@ -193,7 +194,7 @@ pub fn load_cube_texture_asset_dir<P: AsRef<Path>>(device: &Device, cube_asset_d
     let command_buffers = unsafe { MaybeUninit::array_assume_init(command_buffers) };
     for command_buffer in command_buffers {
         command_buffer.wait_until_completed();
-        debug_assert_eq!(
+        assert_eq!(
             command_buffer.status(),
             MTLIOStatus::complete,
             "Failed to load texture for face."
@@ -274,6 +275,7 @@ mod test {
                 #[derive(Clone, Copy)]
                 struct SendTexture<'a>(&'a TextureRef);
                 impl<'a> SendTexture<'a> {
+                    #[inline]
                     pub fn get_bytes_in_slice(
                         &self,
                         bytes: *mut std::ffi::c_void,
@@ -292,6 +294,7 @@ mod test {
                             slice,
                         )
                     }
+                    #[inline]
                     pub fn size(&self) -> MTLSize {
                         MTLSize {
                             width: self.0.width(),

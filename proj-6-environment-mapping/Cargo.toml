@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [build-dependencies]
+asset-compiler = { path = "../asset-compiler" }
 metal-build = { path = "../metal-build" }
 
 [dependencies]
+asset-compiler = { path = "../asset-compiler" }
 metal-app = { path = "../metal-app" }
 png = "0.17.5"
