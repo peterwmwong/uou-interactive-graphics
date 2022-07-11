@@ -84,7 +84,11 @@ I'm trying to learn new stuff on top of new stuff.
         - [Forked with some Metal 3 additions](https://github.com/gfx-rs/metal-rs/compare/master...peterwmwong:metal3)
     - Metal 3 techniques used
         - [Bindless Argument buffers](https://developer.apple.com/videos/play/wwdc2022/10101/)
-        - Coming soon: [Faster Resource Loading with MTLIO](https://developer.apple.com/videos/play/wwdc2022/10104/)
+        - [Faster Resource Loading with MTLIO](https://developer.apple.com/videos/play/wwdc2022/10104/)
+            - [asset-compiler crate](./asset-compiler/)
+                - Cube Textures (ex. [Project 6: Environment Mapping](./proj-6-environment-mapping/))
+                    - Build/compile time, cube face textures are compiled into a directory of `lz4` compressed textures using Metal 3's [MTLIO Compression Context](https://developer.apple.com/documentation/metal/3951235-mtlioflushanddestroycompressionc)
+                    - Run time, cube faces are loaded into a cube texture using Metal 3's [MTLIO Command Buffer](https://developer.apple.com/documentation/metal/resource_loading)
         - Coming soon: [Offline Native Shader Compilation/Loading](https://developer.apple.com/videos/play/wwdc2022/10102/)
 
 # Common Project Architecture
