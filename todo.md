@@ -1,3 +1,9 @@
+# asset-compiler
+
+- Model asset
+    - Geometry
+    - Materials
+
 # metal-shaders
 
 - Testing

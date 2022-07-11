@@ -1,5 +1,7 @@
 [workspace]
 members = [
+    "asset-compiler",
+    "build-hash",
     "metal-app",
     "metal-build",
     "metal-shaders",

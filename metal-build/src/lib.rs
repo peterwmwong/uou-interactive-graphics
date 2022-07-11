@@ -1,5 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,38 +13,33 @@ pub fn build() {
 fn generate_rust_shader_bindings() {
     let shader_src_dir = PathBuf::from("shader_src");
     let shader_bindings_header_file = shader_src_dir.join("shader_bindings.h");
-    let rust_bindgen_only_vector_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
+    let rust_bindgen_only_metal_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
         .join("..")
         .join("metal-types")
         .join("src")
         .join("rust_bindgen_only_metal_types.h");
 
-    // TODO: Rename to shader_bindings_h_hash
-    let cached_hash_path = shader_src_dir.join("shader_bindings_h_hash");
-    let current_hash = hash_shader_src([
-        &shader_bindings_header_file,
-        &rust_bindgen_only_vector_types_header_file,
-    ]);
-    if let Some(old_hash) = read_cached_shader_src_hash(&cached_hash_path) {
-        if old_hash == current_hash {
-            return;
-        }
-    }
+    build_hash::build_hash(
+        shader_src_dir.join("shader_bindings_h_hash"),
+        &[
+            &shader_bindings_header_file,
+            &rust_bindgen_only_metal_types_header_file,
+        ],
+        || {
+            let shader_bindings_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("src")
+                .join("shader_bindings.rs");
+            {
+                let mut shader_bindings_file = fs::File::options()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&shader_bindings_path)
+            .expect("Could not create shader_bindings.rs containing Rust bindings for types in shader_src/shader_bindings.h");
 
-    let shader_bindings_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("src")
-        .join("shader_bindings.rs");
-    {
-        let mut shader_bindings_file = fs::File::options()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&shader_bindings_path)
-        .expect("Could not create shader_bindings.rs containing Rust bindings for types in shader_src/shader_bindings.h");
-
-        shader_bindings_file
-            .write(
-                r#"#![allow(deref_nullptr, non_upper_case_globals, non_snake_case)]
+                shader_bindings_file
+                    .write(
+                        r#"#![allow(deref_nullptr, non_upper_case_globals, non_snake_case)]
 /**************************************************************************************************
  GENERATED FILE. DO NOT MODIFY.
 
@@ -57,53 +50,33 @@ fn generate_rust_shader_bindings() {
 #[allow(unused_imports)]
 use metal_app::metal_types::*;
 "#
-                .as_bytes(),
-            )
-            .unwrap();
+                        .as_bytes(),
+                    )
+                    .unwrap();
 
-        let mut builder = bindgen::Builder::default()
-            .header(rust_bindgen_only_vector_types_header_file.to_string_lossy())
-            .header(shader_bindings_header_file.to_string_lossy())
-            .clang_arg("-xc++")
-            .clang_arg("-std=c++17")
-            .derive_eq(true)
-            .default_enum_style(bindgen::EnumVariation::Rust {
-                non_exhaustive: false,
-            })
-            .derive_debug(false)
-            .no_debug("*")
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks));
-        for block_item in metal_types::TYPES {
-            builder = builder.blocklist_type(block_item);
-        }
-        builder
-            .generate()
-            .expect("Unable to generate bindings")
-            .write(Box::new(&shader_bindings_file))
-            .expect("Unable to write shader_bindings.rs file");
-    }
-
-    save_shader_src_hash(current_hash, &cached_hash_path);
-}
-
-fn hash_shader_src<const N: usize>(paths_to_hash: [&PathBuf; N]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    for path in paths_to_hash {
-        fs::read(path).unwrap().hash(&mut hasher);
-        println!("cargo:rerun-if-changed={}", path.to_string_lossy());
-    }
-    hasher.finish()
-}
-
-fn read_cached_shader_src_hash(cached_hash_path: &PathBuf) -> Option<u64> {
-    if let Ok(hash) = fs::read(cached_hash_path) {
-        return Some(u64::from_ne_bytes(hash.try_into().unwrap()));
-    }
-    None
-}
-
-fn save_shader_src_hash(hash: u64, cached_hash_path: &PathBuf) {
-    fs::write(cached_hash_path, hash.to_ne_bytes()).unwrap();
+                let mut builder = bindgen::Builder::default()
+                    .header(rust_bindgen_only_metal_types_header_file.to_string_lossy())
+                    .header(shader_bindings_header_file.to_string_lossy())
+                    .clang_arg("-xc++")
+                    .clang_arg("-std=c++17")
+                    .derive_eq(true)
+                    .default_enum_style(bindgen::EnumVariation::Rust {
+                        non_exhaustive: false,
+                    })
+                    .derive_debug(false)
+                    .no_debug("*")
+                    .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+                for block_item in metal_types::TYPES {
+                    builder = builder.blocklist_type(block_item);
+                }
+                builder
+                    .generate()
+                    .expect("Unable to generate bindings")
+                    .write(Box::new(&shader_bindings_file))
+                    .expect("Unable to write shader_bindings.rs file");
+            }
+        },
+    );
 }
 
 fn compile_shaders() {

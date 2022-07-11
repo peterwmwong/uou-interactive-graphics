@@ -35,6 +35,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asset-compiler"
+version = "0.1.0"
+dependencies = [
+ "metal",
+ "png",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -85,6 +93,10 @@ name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
+
+[[package]]
+name = "build-hash"
+version = "0.1.0"
 
 [[package]]
 name = "cc"
@@ -405,7 +417,7 @@ checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 [[package]]
 name = "metal"
 version = "0.23.1"
-source = "git+https://github.com/peterwmwong/metal-rs.git?rev=c793d21626972ab9036e1563fb9d265ee4afdaeb#c793d21626972ab9036e1563fb9d265ee4afdaeb"
+source = "git+https://github.com/peterwmwong/metal-rs.git?rev=808cba3b6791ad674b9882793fe141bcb3911b98#808cba3b6791ad674b9882793fe141bcb3911b98"
 dependencies = [
  "bitflags",
  "block",
@@ -438,6 +450,7 @@ name = "metal-build"
 version = "0.1.0"
 dependencies = [
  "bindgen",
+ "build-hash",
  "metal-types",
 ]
 
@@ -453,6 +466,7 @@ name = "metal-types"
 version = "0.1.0"
 dependencies = [
  "bindgen",
+ "build-hash",
 ]
 
 [[package]]
@@ -614,6 +628,8 @@ dependencies = [
 name = "proj-6-environment-mapping"
 version = "0.1.0"
 dependencies = [
+ "asset-compiler",
+ "build-hash",
  "metal-app",
  "metal-build",
  "png",
