@@ -7,3 +7,4 @@ edition = "2021"
 
 [build-dependencies]
 bindgen = "0.60.1"
+build-hash = { path = "../build-hash" }

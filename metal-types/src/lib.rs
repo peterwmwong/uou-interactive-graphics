@@ -1,14 +1,14 @@
 #![feature(array_zip)]
 #![feature(portable_simd)]
-mod rust_bindgen_only_metal_type_bindings;
+mod rust_bindgen_only_metal_types;
 mod rust_bindgen_only_metal_types_list;
 
-pub use rust_bindgen_only_metal_type_bindings::*;
+pub use rust_bindgen_only_metal_types::*;
 pub use rust_bindgen_only_metal_types_list::*;
 
 /**************************************************************************************************
- Helper methods and trait implementations make it easier to write and read vector types from Metal.
- See `metal-build/src/vector_type_helpers.rs`.
+ Helper methods and trait implementations make it easier to write and read Metal types.
+ See `metal-types/src/rust_bindgen_only_metal_types.rs`.
 ***************************************************************************************************/
 use std::{
     fmt::Debug,
