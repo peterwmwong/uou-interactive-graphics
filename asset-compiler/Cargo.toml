@@ -1,0 +1,11 @@
+[package]
+name = "asset-compiler"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+metal = { git = "https://github.com/peterwmwong/metal-rs.git", rev = "808cba3b6791ad674b9882793fe141bcb3911b98" }
+png = "0.17.5"
