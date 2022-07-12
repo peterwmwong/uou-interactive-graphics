@@ -237,8 +237,7 @@ pub enum VertexBufferIndex {
     Geometry = 0,
     Camera = 1,
     Model = 2,
-    PlaneY = 3,
-    LENGTH = 4,
+    LENGTH = 3,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
@@ -246,11 +245,11 @@ pub enum FragBufferIndex {
     Camera = 0,
     LightPosition = 1,
     MatrixEnvironment = 2,
-    LENGTH = 3,
+    Darken = 3,
+    LENGTH = 4,
 }
 #[repr(u32)]
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub enum FragTextureIndex {
     EnvTexture = 0,
-    ModelTexture = 1,
 }

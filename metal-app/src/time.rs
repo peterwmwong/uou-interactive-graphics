@@ -1,10 +1,9 @@
 use std::time::Instant;
 
-const MICROS_PER_MILLI: u128 = 1000;
-
 pub fn debug_time<T>(label: &'static str, f: impl FnOnce() -> T) -> T {
     #[cfg(debug_assertions)]
     {
+        const MICROS_PER_MILLI: u128 = 1000;
         let now = Instant::now();
         let r = f();
         let elapsed = now.elapsed();

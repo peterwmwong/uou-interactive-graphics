@@ -123,6 +123,29 @@ pub fn new_render_pipeline_descriptor(
     vertex_func_name_num_imm_buffers: Option<(&str, usize)>,
     frag_func_name_num_imm_buffers: Option<(&str, usize)>,
 ) -> RenderPipelineDescriptor {
+    new_render_pipeline_descriptor_with_stencil(
+        label,
+        library,
+        color_attachment_format_blending,
+        depth_attachment_format,
+        None,
+        func_constants,
+        vertex_func_name_num_imm_buffers,
+        frag_func_name_num_imm_buffers,
+    )
+}
+
+#[inline]
+pub fn new_render_pipeline_descriptor_with_stencil(
+    label: &str,
+    library: &Library,
+    color_attachment_format_blending: Option<(MTLPixelFormat, bool)>,
+    depth_attachment_format: Option<MTLPixelFormat>,
+    stencil_attachment_format: Option<MTLPixelFormat>,
+    func_constants: Option<&FunctionConstantValues>,
+    vertex_func_name_num_imm_buffers: Option<(&str, usize)>,
+    frag_func_name_num_imm_buffers: Option<(&str, usize)>,
+) -> RenderPipelineDescriptor {
     let pipeline_desc = RenderPipelineDescriptor::new();
     pipeline_desc.set_label(label);
 
@@ -137,6 +160,9 @@ pub fn new_render_pipeline_descriptor(
 
     if let Some(depth_pixel_format) = depth_attachment_format {
         pipeline_desc.set_depth_attachment_pixel_format(depth_pixel_format);
+    }
+    if let Some(stencil_pixel_format) = stencil_attachment_format {
+        pipeline_desc.set_stencil_attachment_pixel_format(stencil_pixel_format);
     }
 
     let set_buffers_immutable = |buffers: Option<&PipelineBufferDescriptorArrayRef>, num: usize| {
@@ -199,25 +225,51 @@ pub fn new_render_pass_descriptor<'a, 'b, 'c>(
     render_target: Option<&'a TextureRef>,
     depth_texture: Option<(&'b Texture, MTLStoreAction)>,
 ) -> &'c RenderPassDescriptorRef {
+    new_render_pass_descriptor_with_stencil(
+        render_target.map(|t| (t, MTLLoadAction::Clear, MTLStoreAction::Store)),
+        depth_texture.map(|(t, s)| (t, 1., MTLLoadAction::Clear, s)),
+        None,
+    )
+}
+
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Make everyone use this variant, rename this to new_render_pass_descriptor and kill previous new_render_pass_descriptor.
+#[inline]
+pub fn new_render_pass_descriptor_with_stencil<'a, 'b, 'c, 'd>(
+    render_target: Option<(&'a TextureRef, MTLLoadAction, MTLStoreAction)>,
+    depth: Option<(&'b Texture, f32, MTLLoadAction, MTLStoreAction)>,
+    stencil: Option<(&'d Texture, u32, MTLLoadAction, MTLStoreAction)>,
+) -> &'c RenderPassDescriptorRef {
     let desc = RenderPassDescriptor::new();
-    if let Some(render_target) = render_target {
+    if let Some((render_target, load_action, store_action)) = render_target {
         let a = desc
             .color_attachments()
             .object_at(0)
             .expect("Failed to access color attachment on render pass descriptor");
         a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
-        a.set_load_action(MTLLoadAction::Clear);
-        a.set_store_action(MTLStoreAction::Store);
+        a.set_load_action(load_action);
+        a.set_store_action(store_action);
         a.set_texture(Some(render_target));
     }
-    if let Some((depth_texture, store_action)) = depth_texture {
+    if let Some((depth_texture, clear_depth, load_action, store_action)) = depth {
         let a = desc
             .depth_attachment()
-            .expect("Failed to access depth/stencil attachment on render pass descriptor");
-        a.set_clear_depth(1.);
-        a.set_load_action(MTLLoadAction::Clear);
+            .expect("Failed to access depth attachment on render pass descriptor");
+        a.set_clear_depth(clear_depth as f64);
+        a.set_load_action(load_action);
         a.set_store_action(store_action);
         a.set_texture(Some(depth_texture));
+    }
+    if let Some((stencil_texture, clear_value, load_action, store_action)) = stencil {
+        let a = desc
+            .stencil_attachment()
+            .expect("Failed to access stencil attachment on render pass descriptor");
+        a.set_clear_stencil(clear_value);
+        a.set_load_action(load_action);
+        a.set_store_action(store_action);
+        a.set_texture(Some(stencil_texture));
     }
     desc
 }
@@ -256,6 +308,8 @@ where
     result.unwrap_unchecked()
 }
 
+// TODO: Consider putting this under #[cfg(debug_assertions)]
+// - This would force callers to also wrap calls with #[cfg(debug_assertions)]
 pub mod debug_assert_pipeline_function_arguments {
     use super::*;
 

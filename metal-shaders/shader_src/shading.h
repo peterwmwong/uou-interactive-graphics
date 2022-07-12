@@ -61,7 +61,7 @@ struct ShadePhongBlinParams {
 
 template<typename T>
 inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
-                               const T material) {
+                                     T                    material) {
     /*
     ================================================================
     Rendering Equation: Ambient + Geometry Term (Diffuse + Specular)
@@ -101,7 +101,7 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     const half hn = dot(h, n);
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
-    const half ln = max(dot(l, n), 0.h);
+    const half ln = dot(l, n);
 
     const half Ia = material.ambient_amount();
     // Diffuse/Specular Light Intensity of 1.0 for camera facing surfaces, otherwise 0.0.
@@ -112,17 +112,26 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     const half Il = step(0.h, dot(c, n)) * (1. - Ia);
 
     half4 color = 0;
-    if (p.has_specular) {
-        const half4 Ks = material.specular_color();
-        color += Il * pow(hn * Ks, material.specular_shineness());
-    }
-    if (p.has_ambient) {
-        const half4 Ka = material.ambient_color();
-        color += Ia * Ka;
-    }
-    if (p.has_diffuse) {
-        const half4 Kd = material.diffuse_color();
-        color += Il * ln * Kd;
+
+    // Performance: Avoid possible texture accesses through material when we know there's not
+    // enough to make "difference" (EPISILON).
+    // - Project 6 Environment Mapping
+    //      - >6% decreased texture reads
+    //      - >15% decreased time spent in the fragment shader
+    const constexpr half EPISILON = 0.05;
+    if (Il > EPISILON && ln > EPISILON) {
+        if (p.has_specular) {
+            const half4 Ks = material.specular_color();
+            color += Il * pow(hn * Ks, material.specular_shineness());
+        }
+        if (p.has_ambient) {
+            const half4 Ka = material.ambient_color();
+            color += Ia * Ka;
+        }
+        if (p.has_diffuse) {
+            const half4 Kd = material.diffuse_color();
+            color += Il * ln * Kd;
+        }
     }
     return color;
 }

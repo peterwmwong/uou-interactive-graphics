@@ -15,7 +15,6 @@ enum struct VertexBufferIndex: unsigned int
     Geometry = 0,
     Camera,
     Model,
-    PlaneY,
     LENGTH
 };
 
@@ -24,11 +23,11 @@ enum struct FragBufferIndex: unsigned int
     Camera = 0,
     LightPosition,
     MatrixEnvironment,
+    Darken,
     LENGTH
 };
 
 enum struct FragTextureIndex: unsigned int
 {
-    EnvTexture = 0,
-    ModelTexture
+    EnvTexture = 0
 };
