@@ -110,8 +110,13 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     //      - ceil(saturate(v))
     //      - trunc(fma(v, .5h, 1.h))
     const half Il = step(0.h, dot(c, n)) * (1. - Ia);
+    const half Id = Il * ln;
 
     half4 color = 0;
+    if (p.has_ambient) {
+        const half4 Ka = material.ambient_color();
+        color += Ia * Ka;
+    }
 
     // Performance: Avoid possible texture accesses through material when we know there's not
     // enough to make "difference" (EPISILON).
@@ -119,18 +124,16 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     //      - >6% decreased texture reads
     //      - >15% decreased time spent in the fragment shader
     const constexpr half EPISILON = 0.05;
-    if (Il > EPISILON || ln > EPISILON) {
-        if (p.has_specular) {
+    if (p.has_specular) {
+        if (Il > EPISILON) {
             const half4 Ks = material.specular_color();
             color += Il * pow(hn * Ks, material.specular_shineness());
         }
-        if (p.has_ambient) {
-            const half4 Ka = material.ambient_color();
-            color += Ia * Ka;
-        }
-        if (p.has_diffuse) {
+    }
+    if (p.has_diffuse) {
+        if (Id > EPISILON) {
             const half4 Kd = material.diffuse_color();
-            color += Il * ln * Kd;
+            color += Id * Kd;
         }
     }
     return color;

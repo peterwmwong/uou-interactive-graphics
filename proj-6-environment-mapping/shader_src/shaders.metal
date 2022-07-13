@@ -72,7 +72,7 @@ main_fragment(         VertexOut           in          [[stage_in]],
         inline half4 diffuse_color()            { return color(); }
         inline half4 specular_color()           { return color(); }
         inline half  specular_shineness() const { return 50;      }
-        inline half  ambient_amount() const     { return 0.15;    }
+        inline half  ambient_amount() const     { return 0.35;    }
     };
 
     return mix(
