@@ -43,38 +43,8 @@ main_fragment(         VertexOut           in          [[stage_in]],
     const half3  normal     = half3(normalize(in.normal));
     const half3  ref        = half3x3(matrix_env) * reflect(camera_dir, normal);
 
-    // Performance: Reduce texture sampling (and overall shader time), by only sampling when needed.
-    // If `shade_phong_blinn()` determines there is not enough light intensity (ex. fragments that
-    // are back facing or facing away from light), none of the material methods will be called.
-    struct CachedEnvTextureMaterial {
-        const texturecube<half> t;
-        const float3            tx_coord;
-              half4             sampled;
-
-        inline CachedEnvTextureMaterial(const texturecube<half> t,
-                                 const float3            tx_coord):
-            t(t),
-            tx_coord(tx_coord),
-            sampled(half4(-1)){}
-
-        inline constexpr const struct sampler s() const {
-            constexpr struct sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-            return tx_sampler;
-        }
-
-        inline half4 color() {
-            if (sampled.r < 0) {
-                sampled = t.sample(s(), tx_coord);
-            }
-            return sampled;
-        }
-        inline half4 ambient_color()            { return color(); }
-        inline half4 diffuse_color()            { return color(); }
-        inline half4 specular_color()           { return color(); }
-        inline half  specular_shineness() const { return 50;      }
-        inline half  ambient_amount() const     { return 0.35;    }
-    };
-
+    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
+    const half4 color       = env_texture.sample(tx_sampler, float3(ref));
     return mix(
         shade_phong_blinn(
             {
@@ -87,11 +57,11 @@ main_fragment(         VertexOut           in          [[stage_in]],
                 .has_specular = HasSpecular,
                 .only_normals = OnlyNormals,
             },
-            CachedEnvTextureMaterial(env_texture, float3(ref))
+            ConstantMaterial(color, color, color, 50, 0.5)
         ),
         // Super arbitrary, "feels right, probably wrong", darkening the mirrored model.
         // Maybe what I really want is ambient occlusion on the mirrored plane close to the model...
-        half4(0.2),
+        half4(0.1),
         darken
     );
 };
