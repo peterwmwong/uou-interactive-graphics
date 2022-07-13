@@ -311,7 +311,8 @@ impl RendererDelgate for Delegate {
                 None,
                 self.shadow_map_texture
                     .as_ref()
-                    .map(|d| (d, MTLStoreAction::Store)),
+                    .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::Store)),
+                None,
             ));
             encoder.set_label("Shadow Map");
             encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
@@ -337,10 +338,16 @@ impl RendererDelgate for Delegate {
         // Render Plane
         {
             let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-                Some(render_target),
+                Some((
+                    render_target,
+                    (0., 0., 0., 0.),
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                )),
                 self.depth_texture
                     .as_ref()
-                    .map(|d| (d, MTLStoreAction::DontCare)),
+                    .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
+                None,
             ));
             encoder.set_label("Plane and Light");
             {

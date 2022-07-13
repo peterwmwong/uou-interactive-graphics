@@ -45,7 +45,12 @@ main_fragment(         VertexOut                 in        [[stage_in]],
                               border_color::opaque_white,
                               compare_func::less_equal,
                               filter::linear);
-    const bool is_shadow = shadow_tx.sample_compare(sampler, pos_light.xy, pos_light.z) < 1;
+
+    // Used when rendering the light, no shadow map texture is bound (null) allowing the light to be
+    // lit ambiently.
+    const bool is_shadow = is_null_texture(shadow_tx)
+                                ? false
+                                : shadow_tx.sample_compare(sampler, pos_light.xy, pos_light.z) < 1;
 
     return shade_phong_blinn(
         {

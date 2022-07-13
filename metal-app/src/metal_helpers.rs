@@ -221,34 +221,23 @@ pub fn create_render_pipeline(
 }
 
 #[inline]
-pub fn new_render_pass_descriptor<'a, 'b, 'c>(
-    render_target: Option<&'a TextureRef>,
-    depth_texture: Option<(&'b Texture, MTLStoreAction)>,
-) -> &'c RenderPassDescriptorRef {
-    new_render_pass_descriptor_with_stencil(
-        render_target.map(|t| (t, MTLLoadAction::Clear, MTLStoreAction::Store)),
-        depth_texture.map(|(t, s)| (t, 1., MTLLoadAction::Clear, s)),
-        None,
-    )
-}
-
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Make everyone use this variant, rename this to new_render_pass_descriptor and kill previous new_render_pass_descriptor.
-#[inline]
-pub fn new_render_pass_descriptor_with_stencil<'a, 'b, 'c, 'd>(
-    render_target: Option<(&'a TextureRef, MTLLoadAction, MTLStoreAction)>,
+pub fn new_render_pass_descriptor<'a, 'b, 'c, 'd>(
+    color: Option<(
+        &'a TextureRef,
+        (f32, f32, f32, f32),
+        MTLLoadAction,
+        MTLStoreAction,
+    )>,
     depth: Option<(&'b Texture, f32, MTLLoadAction, MTLStoreAction)>,
     stencil: Option<(&'d Texture, u32, MTLLoadAction, MTLStoreAction)>,
 ) -> &'c RenderPassDescriptorRef {
     let desc = RenderPassDescriptor::new();
-    if let Some((render_target, load_action, store_action)) = render_target {
+    if let Some((render_target, (r, g, b, alpha), load_action, store_action)) = color {
         let a = desc
             .color_attachments()
             .object_at(0)
             .expect("Failed to access color attachment on render pass descriptor");
-        a.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
+        a.set_clear_color(MTLClearColor::new(r as _, g as _, b as _, alpha as _));
         a.set_load_action(load_action);
         a.set_store_action(store_action);
         a.set_texture(Some(render_target));

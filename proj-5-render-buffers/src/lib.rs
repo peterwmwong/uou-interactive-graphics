@@ -47,8 +47,16 @@ impl RendererDelgate for CheckerboardDelegate {
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
-        let encoder = command_buffer
-            .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some((
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )),
+            None,
+            None,
+        ));
         // Render Plane
         {
             encoder.push_debug_group("Checkerboard");
@@ -162,8 +170,16 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                 .new_command_buffer_with_unretained_references()
         };
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer
-            .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some((
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )),
+            None,
+            None,
+        ));
         // Render Plane
         {
             encoder.push_debug_group("Plane");

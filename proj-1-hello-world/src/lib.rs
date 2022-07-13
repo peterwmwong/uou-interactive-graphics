@@ -27,22 +27,22 @@ impl RendererDelgate for Delegate {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder({
-            let desc = RenderPassDescriptor::new();
-            let attachment = desc
-                .color_attachments()
-                .object_at(0)
-                .expect("Failed to access color attachment on render pass descriptor");
-            attachment.set_texture(Some(render_target));
-            attachment.set_load_action(MTLLoadAction::Clear);
             let rads = self.now.elapsed().as_secs_f32() * std::f32::consts::PI;
-            attachment.set_clear_color(MTLClearColor::new(
-                (rads / 2.0).cos().abs() as f64,
-                (rads / 3.0).cos().abs() as f64,
-                (rads / 4.0).cos().abs() as f64,
-                0.0,
-            ));
-            attachment.set_store_action(MTLStoreAction::Store);
-            desc
+            new_render_pass_descriptor(
+                Some((
+                    render_target,
+                    (
+                        (rads / 2.0).cos().abs(),
+                        (rads / 3.0).cos().abs(),
+                        (rads / 4.0).cos().abs(),
+                        0.,
+                    ),
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                )),
+                None,
+                None,
+            )
         });
         encoder.end_encoding();
         command_buffer

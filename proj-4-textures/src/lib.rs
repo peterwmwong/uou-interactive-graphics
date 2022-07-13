@@ -216,10 +216,16 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-            Some(render_target),
+            Some((
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )),
             self.depth_texture
                 .as_ref()
-                .map(|d| (d, MTLStoreAction::DontCare)),
+                .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
+            None,
         ));
         // Render Model
         {

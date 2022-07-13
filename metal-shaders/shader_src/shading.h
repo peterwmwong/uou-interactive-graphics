@@ -119,7 +119,7 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     //      - >6% decreased texture reads
     //      - >15% decreased time spent in the fragment shader
     const constexpr half EPISILON = 0.05;
-    if (Il > EPISILON && ln > EPISILON) {
+    if (Il > EPISILON || ln > EPISILON) {
         if (p.has_specular) {
             const half4 Ks = material.specular_color();
             color += Il * pow(hn * Ks, material.specular_shineness());

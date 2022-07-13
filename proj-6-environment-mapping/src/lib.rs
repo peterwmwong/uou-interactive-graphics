@@ -290,16 +290,20 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder =
-            command_buffer.new_render_command_encoder(new_render_pass_descriptor_with_stencil(
-                Some((render_target, MTLLoadAction::Clear, MTLStoreAction::Store)),
-                self.depth_texture
-                    .as_ref()
-                    .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
-                self.stencil_texture
-                    .as_ref()
-                    .map(|d| (d, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare)),
-            ));
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some((
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )),
+            self.depth_texture
+                .as_ref()
+                .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
+            self.stencil_texture
+                .as_ref()
+                .map(|d| (d, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare)),
+        ));
         self.model.encode_use_resources(encoder);
         self.mirror_plane_model.encode_use_resources(encoder);
         {

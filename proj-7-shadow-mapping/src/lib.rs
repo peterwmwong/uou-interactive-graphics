@@ -307,7 +307,8 @@ impl RendererDelgate for Delegate {
                 None,
                 self.shadow_map_texture
                     .as_ref()
-                    .map(|s| (s, MTLStoreAction::Store)),
+                    .map(|s| (s, 1., MTLLoadAction::Clear, MTLStoreAction::Store)),
+                None,
             ));
             encoder.set_label("Render Shadow Map");
             encoder.push_debug_group("Shadow Map (Light 1)");
@@ -323,18 +324,21 @@ impl RendererDelgate for Delegate {
         // Render Models
         {
             let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-                Some(render_target),
+                Some((
+                    render_target,
+                    (0., 0., 0., 0.),
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                )),
                 self.depth_texture
                     .as_ref()
-                    .map(|d| (d, MTLStoreAction::DontCare)),
+                    .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
+                None,
             ));
             encoder.set_label("Render Models");
-            let mut models = [
-                &mut self.model,
-                &mut self.model_light,
-                &mut self.model_plane,
-            ];
-            models.iter().for_each(|m| m.encode_use_resources(encoder));
+            self.model_light.encode_use_resources(encoder);
+            self.model.encode_use_resources(encoder);
+            self.model_plane.encode_use_resources(encoder);
             encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.depth_state);
             encode_fragment_bytes::<ProjectedSpace>(
@@ -347,14 +351,22 @@ impl RendererDelgate for Delegate {
                 FragBufferIndex::LightSpace as _,
                 &self.light_space,
             );
+
+            // Purposely omit binding the shadow map texture when rendering light, so it not in
+            // shadow.
+            encoder.set_fragment_texture(FragTextureIndex::ShadowMap as _, None);
+            let matrix_world_to_projection = self.camera_space.matrix_world_to_projection;
+            self.model_light
+                .encode_render(encoder, matrix_world_to_projection);
+
             encoder.set_fragment_texture(
                 FragTextureIndex::ShadowMap as _,
                 self.shadow_map_texture.as_deref(),
             );
-            let matrix_world_to_projection = self.camera_space.matrix_world_to_projection;
-            models
-                .iter_mut()
-                .for_each(|m| m.encode_render(encoder, matrix_world_to_projection));
+            self.model
+                .encode_render(encoder, matrix_world_to_projection);
+            self.model_plane
+                .encode_render(encoder, matrix_world_to_projection);
             encoder.end_encoding();
         }
         command_buffer

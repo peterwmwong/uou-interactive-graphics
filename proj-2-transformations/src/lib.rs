@@ -95,8 +95,16 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer
-            .new_render_command_encoder(new_render_pass_descriptor(Some(render_target), None));
+        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
+            Some((
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )),
+            None,
+            None,
+        ));
         encoder.set_label("Render Teapot");
         encoder.set_render_pipeline_state(&self.render_pipeline);
         encode_vertex_bytes(
