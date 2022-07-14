@@ -169,17 +169,6 @@
 
 # metal-build
 
-- BUG: Changes in `metal-shaders/shader_src` does not cause recompilation of project shaders
-    - Currently, we only hash a projects shader files `proj-*/shader_src/*`
-    - We need to hash **all** dependencies (including `metal-shaders/shader_src/*`)
-    - Options:
-        1. Hash everything in `metal-shaders/shader_src/`
-            - Super simple, but will hash more than necessary (false positives)
-        2. Use tooling to determine all dependencies
-            - Clang has the `-M` option to spit out dependencies
-                - Never tried it, but sounds like what we want "given this *.metal file, list the file dependencies"
-                - Assuming `xcrun metal` is actually, under the covers, `clang` (ish?) enough to support this option.
-
 # metal-types
 
 # xcode-project
