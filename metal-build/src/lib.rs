@@ -29,17 +29,16 @@ fn generate_rust_shader_bindings() {
             let shader_bindings_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
                 .join("src")
                 .join("shader_bindings.rs");
-            {
-                let mut shader_bindings_file = fs::File::options()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&shader_bindings_path)
-            .expect("Could not create shader_bindings.rs containing Rust bindings for types in shader_src/shader_bindings.h");
+            let mut shader_bindings_file = fs::File::options()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(&shader_bindings_path)
+                .expect("Could not create shader_bindings.rs containing Rust bindings for types in shader_src/shader_bindings.h");
 
-                shader_bindings_file
-                    .write(
-                        r#"#![allow(deref_nullptr, non_upper_case_globals, non_snake_case)]
+            shader_bindings_file
+                .write(
+                    r#"#![allow(deref_nullptr, non_upper_case_globals, non_snake_case)]
 /**************************************************************************************************
  GENERATED FILE. DO NOT MODIFY.
 
@@ -50,31 +49,30 @@ fn generate_rust_shader_bindings() {
 #[allow(unused_imports)]
 use metal_app::metal_types::*;
 "#
-                        .as_bytes(),
-                    )
-                    .unwrap();
+                    .as_bytes(),
+                )
+                .unwrap();
 
-                let mut builder = bindgen::Builder::default()
-                    .header(rust_bindgen_only_metal_types_header_file.to_string_lossy())
-                    .header(shader_bindings_header_file.to_string_lossy())
-                    .clang_arg("-xc++")
-                    .clang_arg("-std=c++17")
-                    .derive_eq(true)
-                    .default_enum_style(bindgen::EnumVariation::Rust {
-                        non_exhaustive: false,
-                    })
-                    .derive_debug(false)
-                    .no_debug("*")
-                    .parse_callbacks(Box::new(bindgen::CargoCallbacks));
-                for block_item in metal_types::TYPES {
-                    builder = builder.blocklist_type(block_item);
-                }
-                builder
-                    .generate()
-                    .expect("Unable to generate bindings")
-                    .write(Box::new(&shader_bindings_file))
-                    .expect("Unable to write shader_bindings.rs file");
+            let mut builder = bindgen::Builder::default()
+                .header(rust_bindgen_only_metal_types_header_file.to_string_lossy())
+                .header(shader_bindings_header_file.to_string_lossy())
+                .clang_arg("-xc++")
+                .clang_arg("-std=c++17")
+                .derive_eq(true)
+                .default_enum_style(bindgen::EnumVariation::Rust {
+                    non_exhaustive: false,
+                })
+                .derive_debug(false)
+                .no_debug("*")
+                .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+            for block_item in metal_types::TYPES {
+                builder = builder.blocklist_type(block_item);
             }
+            builder
+                .generate()
+                .expect("Unable to generate bindings")
+                .write(Box::new(&shader_bindings_file))
+                .expect("Unable to write shader_bindings.rs file");
         },
     );
 }
