@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 use std::{env, fs};
 
 const METAL_BUILD_MANIFEST_DIR: &'static str = env!("CARGO_MANIFEST_DIR");
@@ -79,12 +79,47 @@ use metal_app::metal_types::*;
     );
 }
 
-fn compile_shaders() {
-    let shader_src_dir = PathBuf::from("shader_src");
-    println!(
-        "cargo:rerun-if-changed={}",
-        shader_src_dir.to_string_lossy()
+fn get_shader_deps(shader_path: &str) -> Vec<PathBuf> {
+    let Output { stdout, .. } = run_command(
+        Command::new("xcrun")
+            .args(&[
+                "-sdk",
+                "macosx",
+                "metal",
+                "-std=metal3.0",
+                shader_path,
+                "-MM",
+            ])
+            .env_clear(),
     );
+    let mut deps = vec![];
+    for l in std::str::from_utf8(&stdout)
+        .expect("Failed to read dependencies output")
+        .lines()
+        .filter(|l| l.starts_with("  ") && !l.contains("include/metal/module.modulemap"))
+    {
+        let dep = l.trim_end_matches(" \\").trim_start_matches(' ');
+        let dep = PathBuf::from(dep).canonicalize().expect(&format!(
+            "Failed to canonicalize path to dependency {dep:?}"
+        ));
+        if !deps.contains(&dep) {
+            deps.push(dep);
+        }
+    }
+    deps
+}
+
+fn compile_shaders() {
+    let metal_shaders_file = PathBuf::from("shader_src")
+        .join("shaders.metal")
+        .canonicalize()
+        .expect("Failed to canonicalize path to shaders.metal")
+        .to_string_lossy()
+        .to_string();
+    println!("{metal_shaders_file}");
+    for dep in get_shader_deps(&metal_shaders_file) {
+        println!("cargo:rerun-if-changed={}", dep.to_string_lossy());
+    }
 
     // Compile Metal Shaders into the following:
     // - shaders.air         Metal IR (AIR) used to create Metal binary (metallib)
@@ -120,7 +155,8 @@ fn compile_shaders() {
         "-MF",
         &tmp_deps_path,
         // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        "./shader_src/shaders.metal",
+        "-std=metal3.0",
+        &metal_shaders_file,
         "-o",
         &shaders_air_path,
     ]));
@@ -148,16 +184,62 @@ fn compile_shaders() {
     ]));
 }
 
-fn run_command(command: &mut Command) {
-    let output = command.spawn().unwrap().wait_with_output().unwrap();
-    if !output.status.success() {
+fn run_command(command: &mut Command) -> Output {
+    let out = command
+        .output()
+        .expect(&format!("Failed to run command {command:?}"));
+    if !out.status.success() {
         panic!(
             r#"
-stdout: {}
-stderr: {}
-"#,
-            String::from_utf8(output.stdout).unwrap(),
-            String::from_utf8(output.stderr).unwrap()
+    stdout: {}
+    stderr: {}
+    "#,
+            String::from_utf8(out.stdout).unwrap(),
+            String::from_utf8(out.stderr).unwrap()
         );
+    }
+    out
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test() {
+        let shader_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("test_shader_src")
+            .canonicalize()
+            .expect("Failed to canonicalize path to test_shader_src directory");
+        let shader_file = shader_dir.join("shaders.metal");
+        let mut deps: Vec<PathBuf> = get_shader_deps(&shader_file.to_string_lossy());
+        deps.sort();
+        let deps: Vec<String> = deps
+            .into_iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+
+        let mut expected = [
+            "../../metal-shaders/shader_src/bindings/material.h",
+            "../../metal-shaders/shader_src/bindings/macros.h",
+            "../../metal-shaders/shader_src/bindings/model-space.h",
+            "../../metal-shaders/shader_src/bindings/projected-space.h",
+            "../../metal-shaders/shader_src/bindings/shading-mode.h",
+            "../../metal-shaders/shader_src/bindings/geometry.h",
+            "../../metal-shaders/shader_src/shading.h",
+            "shaders.metal",
+            "shader_bindings.h",
+        ]
+        .map(|s| {
+            shader_dir
+                .join(s)
+                .canonicalize()
+                .expect("Failed to canonicalize expected dependency")
+                .to_string_lossy()
+                .to_string()
+        });
+        expected.sort();
+
+        assert_eq!(&deps, &expected);
     }
 }
