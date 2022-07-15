@@ -1,5 +1,0 @@
-#include "../../metal-shaders/shader_src/bindings/geometry.h"
-#include "../../metal-shaders/shader_src/bindings/material.h"
-#include "../../metal-shaders/shader_src/bindings/model-space.h"
-#include "../../metal-shaders/shader_src/bindings/projected-space.h"
-#include "../../metal-shaders/shader_src/bindings/shading-mode.h"

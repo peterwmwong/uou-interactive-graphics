@@ -1,3 +1,5 @@
+mod shader_function_parser;
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -207,8 +209,9 @@ mod test {
     fn test() {
         let shader_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("test_shader_src")
+            .join("deps")
             .canonicalize()
-            .expect("Failed to canonicalize path to test_shader_src directory");
+            .expect("Failed to canonicalize path to test_shader_src/deps directory");
         let shader_file = shader_dir.join("shaders.metal");
         let mut deps: Vec<PathBuf> = get_shader_deps(&shader_file.to_string_lossy());
         deps.sort();
@@ -218,13 +221,13 @@ mod test {
             .collect();
 
         let mut expected = [
-            "../../metal-shaders/shader_src/bindings/material.h",
-            "../../metal-shaders/shader_src/bindings/macros.h",
-            "../../metal-shaders/shader_src/bindings/model-space.h",
-            "../../metal-shaders/shader_src/bindings/projected-space.h",
-            "../../metal-shaders/shader_src/bindings/shading-mode.h",
-            "../../metal-shaders/shader_src/bindings/geometry.h",
-            "../../metal-shaders/shader_src/shading.h",
+            "../../../metal-shaders/shader_src/bindings/material.h",
+            "../../../metal-shaders/shader_src/bindings/macros.h",
+            "../../../metal-shaders/shader_src/bindings/model-space.h",
+            "../../../metal-shaders/shader_src/bindings/projected-space.h",
+            "../../../metal-shaders/shader_src/bindings/shading-mode.h",
+            "../../../metal-shaders/shader_src/bindings/geometry.h",
+            "../../../metal-shaders/shader_src/shading.h",
             "shaders.metal",
             "shader_bindings.h",
         ]

@@ -1,4 +1,5 @@
 #![feature(array_zip)]
+#![feature(generic_associated_types)]
 #![feature(pointer_byte_offsets)]
 #![feature(const_pointer_byte_offsets)]
 #![feature(portable_simd)]
@@ -16,6 +17,7 @@ pub mod math_helpers;
 mod metal_helpers;
 mod model;
 mod objc_helpers;
+pub mod render_pipeline;
 mod renderer;
 mod time;
 

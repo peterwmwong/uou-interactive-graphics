@@ -215,6 +215,20 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
+        // p.new_render_pass_descriptor(
+        //     [(
+        //         render_target,
+        //         (0., 0., 0., 0.),
+        //         MTLLoadAction::Clear,
+        //         MTLStoreAction::Store,
+        //     )],
+        //     (
+        //         &self.depth_texture.unwrap(),
+        //         1.,
+        //         MTLLoadAction::Clear,
+        //         MTLStoreAction::DontCare,
+        //     ),
+        // );
         let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
             Some((
                 render_target,
@@ -229,6 +243,55 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         ));
         // Render Model
         {
+            // p.setup(
+            //     encoder,
+            //     main_vertex::Args {
+            //         model: Bind::bytes(&ModelSpace {
+            //             matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+            //                 * self.matrix_model_to_world,
+            //             // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
+            //             // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
+            //             // (no translation). Since normals are directions (not positions, relative to a
+            //             // point on a surface), translations are meaningless.
+            //             matrix_normal_to_world: self.matrix_model_to_world.into(),
+            //         }),
+            //         ..main_verterx::Args::None
+            //     },
+            //     main_fragment::Args {
+            //         camera: Bind::bytes(&self.camera_space),
+            //         light_pos: Bind::bytes(&self.light_position),
+            //         ..main_fragment::Args::None
+            //     }, // Optionally: main_fragment::Args::None
+            // );
+            // for (i, draw) in self.model.draws_iter().enumerate() {
+            //     encoder.push_debug_group(draw.obj_name);
+            //     p.update(
+            //         encoder,
+            //         main_vertex::Args {
+            //             geometry: if i == 0 {
+            //                 Bind::buffer(&draw.geometry_arg_buffer)
+            //             } else {
+            //                 Bind::buffer_offset(draw.geometry_arg_buffer_offset)
+            //             },
+            //             ..main_vertex::Args::None
+            //         },
+            //         main_fragment::Args {
+            //             material: if i == 0 {
+            //                 Bind::buffer(&draw.material_arg_buffer)
+            //             } else {
+            //                 Bind::buffer_offset(draw.material_arg_buffer_offset)
+            //             },
+            //             ..main_fragment::Args::None
+            //         },
+            //     );
+            //     encoder.draw_primitives_instanced_base_instance(
+            //         primitive_type,
+            //         0,
+            //         draw.vertex_count,
+            //         instance_count,
+            //         base_instance,
+            //     );
+            // }
             encoder.push_debug_group("Model");
             encoder.set_render_pipeline_state(&self.model_pipeline);
             encoder.set_depth_stencil_state(&self.depth_state);
@@ -236,7 +299,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             encode_vertex_bytes(
                 encoder,
                 VertexBufferIndex::Model as _,
-                &(ModelSpace {
+                &ModelSpace {
                     matrix_model_to_projection: self.camera_space.matrix_world_to_projection
                         * self.matrix_model_to_world,
                     // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
@@ -244,7 +307,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                     // (no translation). Since normals are directions (not positions, relative to a
                     // point on a surface), translations are meaningless.
                     matrix_normal_to_world: self.matrix_model_to_world.into(),
-                }),
+                },
             );
             encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
             encode_fragment_bytes(
