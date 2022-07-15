@@ -1,81 +1,207 @@
 use metal::{
-    CommandBufferRef, MTLClearColor, MTLLoadAction, MTLStoreAction, RenderCommandEncoderRef,
-    RenderPassDescriptor, RenderPassDescriptorRef, TextureRef,
+    Buffer, CommandBufferRef, DeviceRef, HeapRef, LibraryRef, MTLClearColor, MTLLoadAction,
+    MTLPixelFormat, MTLResourceOptions, MTLStoreAction, RenderCommandEncoderRef,
+    RenderPassColorAttachmentDescriptorRef, RenderPassDescriptor, RenderPassDescriptorRef,
+    RenderPipelineColorAttachmentDescriptorRef, RenderPipelineDescriptor,
+    RenderPipelineDescriptorRef, RenderPipelineState, TextureRef,
 };
 use std::marker::PhantomData;
 
-pub mod bind {
-    use crate::{encode_fragment_bytes, encode_vertex_bytes};
-    use metal::{BufferRef, RenderCommandEncoderRef};
+pub trait MetalBufferAllocator {
+    fn with_capacity<T: Sized>(&self, capacity: usize, options: MTLResourceOptions) -> Buffer;
+}
 
-    pub trait Bind {
-        fn encode_fragment(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef);
-        fn encode_vertex(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef);
+impl MetalBufferAllocator for &DeviceRef {
+    fn with_capacity<T: Sized>(&self, capacity: usize, options: MTLResourceOptions) -> Buffer {
+        self.new_buffer((std::mem::size_of::<T>() * capacity) as _, options)
     }
+}
 
-    pub struct BindBytes<'a, T: Sized>(&'a T);
-    impl<'a, T: Sized> Bind for BindBytes<'a, T> {
-        #[inline]
-        fn encode_fragment(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef) {
-            encode_fragment_bytes(encoder, buffer_index as _, &self.0);
-        }
-
-        #[inline]
-        fn encode_vertex(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef) {
-            encode_vertex_bytes(encoder, buffer_index as _, &self.0);
-        }
+impl MetalBufferAllocator for &HeapRef {
+    fn with_capacity<T: Sized>(&self, capacity: usize, options: MTLResourceOptions) -> Buffer {
+        self.new_buffer((std::mem::size_of::<T>() * capacity) as _, options)
+            .expect("Failed to heap allocate buffer")
     }
+}
 
-    pub struct BindBufferAndOffset<'a>(&'a BufferRef, u32);
-    impl<'a> Bind for BindBufferAndOffset<'a> {
-        #[inline]
-        fn encode_fragment(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef) {
-            encoder.set_fragment_buffer(buffer_index as _, Some(self.0), self.1 as _);
-        }
+// TODO: Consider a TypedTexture
 
-        #[inline]
-        fn encode_vertex(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef) {
-            encoder.set_vertex_buffer(buffer_index as _, Some(self.0), self.1 as _);
-        }
-    }
+// TODO: Move into it's own file
+pub struct TypedBuffer<T: Sized> {
+    buffer: Buffer,
+    _type: PhantomData<T>,
+}
 
-    pub struct BindBufferOffset(u32);
-    impl Bind for BindBufferOffset {
-        #[inline]
-        fn encode_fragment(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef) {
-            encoder.set_fragment_buffer_offset(buffer_index as _, self.0 as _);
-        }
-
-        #[inline]
-        fn encode_vertex(&self, buffer_index: usize, encoder: &RenderCommandEncoderRef) {
-            encoder.set_vertex_buffer_offset(buffer_index as _, self.0 as _);
+impl<T: Sized> TypedBuffer<T> {
+    #[inline]
+    fn with_capacity<A: MetalBufferAllocator>(
+        allocator: A,
+        capacity: usize,
+        options: MTLResourceOptions,
+    ) -> Self {
+        let buffer = allocator.with_capacity::<T>(capacity, options);
+        Self {
+            buffer,
+            _type: PhantomData,
         }
     }
 
-    pub fn bytes<'a, T: Sized>(v: &'a T) -> impl Bind + 'a {
-        BindBytes(v)
+    #[inline]
+    fn from_data<A: MetalBufferAllocator>(
+        allocator: A,
+        data: &[T],
+        options: MTLResourceOptions,
+    ) -> Self {
+        let tb = Self::with_capacity(allocator, data.len(), options);
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), tb.buffer.contents() as *mut T, data.len())
+        };
+        tb
     }
-    pub fn buffer<'a>(b: &'a BufferRef) -> BindBufferAndOffset<'a> {
-        BindBufferAndOffset(b, 0)
+    // TODO: Add update_data or get_mut function
+}
+
+pub enum BindMany<'a, T: Sized> {
+    Bytes(&'a [T]),
+    BufferAndOffset(&'a TypedBuffer<T>, usize),
+    BufferOffset(usize),
+}
+pub enum BindOne<'a, T: Sized> {
+    Bytes(&'a T),
+    BufferAndOffset(&'a TypedBuffer<T>, usize),
+    BufferOffset(usize),
+}
+impl<'a, T: Sized> BindMany<'a, T> {
+    #[inline]
+    fn encode_for_vertex<'b>(&self, buffer_index: usize, encoder: &'b RenderCommandEncoderRef) {
+        match self {
+            &BindMany::Bytes(v) => encoder.set_vertex_bytes(
+                buffer_index as _,
+                (std::mem::size_of::<T>() * v.len()) as _,
+                v.as_ptr() as *const _,
+            ),
+            &BindMany::BufferAndOffset(tb, o) => {
+                encoder.set_vertex_buffer(buffer_index as _, Some(&tb.buffer), o as _)
+            }
+            &BindMany::BufferOffset(o) => {
+                encoder.set_vertex_buffer_offset(buffer_index as _, o as _)
+            }
+        }
     }
-    pub fn buffer_and_offset<'a>(b: &'a BufferRef, o: u32) -> impl Bind + 'a {
-        BindBufferAndOffset(b, o)
+    #[inline]
+    fn encode_for_fragment<'b>(&self, buffer_index: usize, encoder: &'b RenderCommandEncoderRef) {
+        match self {
+            &BindMany::Bytes(v) => encoder.set_fragment_bytes(
+                buffer_index as _,
+                (std::mem::size_of::<T>() * v.len()) as _,
+                v.as_ptr() as *const _,
+            ),
+            &BindMany::BufferAndOffset(tb, o) => {
+                encoder.set_fragment_buffer(buffer_index as _, Some(&tb.buffer), o as _)
+            }
+            &BindMany::BufferOffset(o) => {
+                encoder.set_fragment_buffer_offset(buffer_index as _, o as _)
+            }
+        }
     }
-    pub fn buffer_offset(o: u32) -> impl Bind {
-        BindBufferOffset(o)
+}
+impl<'a, T: Sized> BindOne<'a, T> {
+    #[inline]
+    fn encode_for_vertex<'b>(&self, buffer_index: usize, encoder: &'b RenderCommandEncoderRef) {
+        match self {
+            &BindOne::Bytes(v) => encoder.set_vertex_bytes(
+                buffer_index as _,
+                std::mem::size_of::<T>() as _,
+                (v as *const T) as _,
+            ),
+            &BindOne::BufferAndOffset(tb, o) => {
+                encoder.set_vertex_buffer(buffer_index as _, Some(&tb.buffer), o as _)
+            }
+            &BindOne::BufferOffset(o) => {
+                encoder.set_vertex_buffer_offset(buffer_index as _, o as _)
+            }
+        }
+    }
+    #[inline]
+    fn encode_for_fragment<'b>(&self, buffer_index: usize, encoder: &'b RenderCommandEncoderRef) {
+        match self {
+            &BindOne::Bytes(v) => encoder.set_fragment_bytes(
+                buffer_index as _,
+                std::mem::size_of::<T>() as _,
+                (v as *const T) as _,
+            ),
+            &BindOne::BufferAndOffset(tb, o) => {
+                encoder.set_fragment_buffer(buffer_index as _, Some(&tb.buffer), o as _)
+            }
+            &BindOne::BufferOffset(o) => {
+                encoder.set_fragment_buffer_offset(buffer_index as _, o as _)
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum BlendMode {
+    NoBlend,
+    Blend, // TODO: Add all the ways to color blend (source/destination alpha/rgb, blend factor, operation, etc.)
+}
+
+type ColorAttachementPipelineDesc = (MTLPixelFormat, BlendMode);
+type ColorAttachementRenderPassDesc<'a> = (
+    &'a TextureRef,
+    (f32, f32, f32, f32),
+    MTLLoadAction,
+    MTLStoreAction,
+);
+
+pub struct ColorAttachement;
+impl ColorAttachement {
+    #[inline]
+    fn setup_pipeline_attachment<'a>(
+        desc: ColorAttachementPipelineDesc,
+        pass: &RenderPipelineColorAttachmentDescriptorRef,
+    ) {
+        let (pixel_format, blend_mode) = desc;
+        pass.set_pixel_format(pixel_format);
+        pass.set_blending_enabled(matches!(blend_mode, BlendMode::Blend));
+    }
+
+    #[inline]
+    fn setup_render_pass_attachment<'a>(
+        desc: ColorAttachementRenderPassDesc<'a>,
+        a: &RenderPassColorAttachmentDescriptorRef,
+    ) {
+        let (render_target, (r, g, b, alpha), load_action, store_action) = desc;
+        a.set_clear_color(MTLClearColor::new(r as _, g as _, b as _, alpha as _));
+        a.set_load_action(load_action);
+        a.set_store_action(store_action);
+        a.set_texture(Some(render_target));
     }
 }
 
 pub trait DepthAttachmentKind {
     type RenderPassDesc<'a>;
 
-    fn setup_attachment<'a>(_desc: Self::RenderPassDesc<'a>, _pass: &RenderPassDescriptorRef) {}
+    #[inline]
+    fn setup_pipeline_attachment(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
+    #[inline]
+    fn setup_render_pass_attachment<'a>(
+        _desc: Self::RenderPassDesc<'a>,
+        _pass: &RenderPassDescriptorRef,
+    ) {
+    }
 }
-pub struct HasDepth();
+pub struct HasDepth(MTLPixelFormat);
 impl DepthAttachmentKind for HasDepth {
     type RenderPassDesc<'a> = (&'a TextureRef, f32, MTLLoadAction, MTLStoreAction);
 
-    fn setup_attachment<'a>(
+    #[inline]
+    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
+        pipeline_descriptor.set_depth_attachment_pixel_format(self.0);
+    }
+
+    #[inline]
+    fn setup_render_pass_attachment<'a>(
         (texture, clear_depth, load_action, store_action): Self::RenderPassDesc<'a>,
         desc: &RenderPassDescriptorRef,
     ) {
@@ -96,13 +222,23 @@ impl DepthAttachmentKind for NoDepth {
 pub trait StencilAttachmentKind {
     type RenderPassDesc<'a>;
 
-    fn setup_attachment<'a>(_desc: Self::RenderPassDesc<'a>, _pass: &RenderPassDescriptorRef) {}
+    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef);
+    fn setup_render_pass_attachment<'a>(
+        desc: Self::RenderPassDesc<'a>,
+        pass: &RenderPassDescriptorRef,
+    );
 }
-pub struct HasStencil;
+pub struct HasStencil(MTLPixelFormat);
 impl StencilAttachmentKind for HasStencil {
     type RenderPassDesc<'a> = (&'a TextureRef, u32, MTLLoadAction, MTLStoreAction);
 
-    fn setup_attachment<'a>(
+    #[inline]
+    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
+        pipeline_descriptor.set_stencil_attachment_pixel_format(self.0);
+    }
+
+    #[inline]
+    fn setup_render_pass_attachment<'a>(
         (texture, clear_value, load_action, store_action): Self::RenderPassDesc<'a>,
         desc: &RenderPassDescriptorRef,
     ) {
@@ -118,53 +254,151 @@ impl StencilAttachmentKind for HasStencil {
 pub struct NoStencil;
 impl StencilAttachmentKind for NoStencil {
     type RenderPassDesc<'a> = NoStencil;
+
+    #[inline]
+    fn setup_pipeline_attachment(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
+
+    #[inline]
+    fn setup_render_pass_attachment<'a>(
+        _desc: Self::RenderPassDesc<'a>,
+        _pass: &RenderPassDescriptorRef,
+    ) {
+    }
 }
 
-pub trait ShaderArgs {
-    fn encode_vertex_args<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef);
-    fn encode_fragment_args<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef);
+pub trait VertexShaderBinds {
+    fn encode_vertex_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef);
 }
 
-pub struct NoShaderArgs;
-impl ShaderArgs for NoShaderArgs {
+pub trait FragmentShaderBinds {
+    fn encode_fragment_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef);
+}
+
+pub struct NoBinds;
+impl VertexShaderBinds for NoBinds {
     #[inline]
-    fn encode_vertex_args<'a, 'b>(&'a self, _encoder: &'b RenderCommandEncoderRef) {}
+    fn encode_vertex_binds<'a, 'b>(&'a self, _encoder: &'b RenderCommandEncoderRef) {}
+}
+impl FragmentShaderBinds for NoBinds {
     #[inline]
-    fn encode_fragment_args<'a, 'b>(&'a self, _encoder: &'b RenderCommandEncoderRef) {}
+    fn encode_fragment_binds<'a, 'b>(&'a self, _encoder: &'b RenderCommandEncoderRef) {}
+}
+
+pub trait VertexShader {
+    type Binds<'a>: VertexShaderBinds;
+
+    #[inline]
+    fn setup_pipeline_vertex_function(
+        &self,
+        lib: &LibraryRef,
+        pipeline_desc: &RenderPipelineDescriptorRef,
+    ) {
+        let func = lib
+            .get_function(Self::function_name(), None)
+            .expect("Failed to get vertex function from library");
+        pipeline_desc.set_vertex_function(Some(&func));
+    }
+
+    fn function_name() -> &'static str;
+}
+
+pub trait FragmentShader {
+    type Binds<'a>: FragmentShaderBinds;
+
+    #[inline]
+    fn setup_pipeline_fragment_function(
+        &self,
+        lib: &LibraryRef,
+        pipeline_desc: &RenderPipelineDescriptorRef,
+    ) {
+        let func = lib
+            .get_function(Self::function_name(), None)
+            .expect("Failed to get vertex function from library");
+        pipeline_desc.set_fragment_function(Some(&func));
+    }
+
+    fn function_name() -> &'static str;
+}
+
+pub struct NoFragmentShader;
+impl FragmentShader for NoFragmentShader {
+    type Binds<'a> = NoBinds;
+
+    #[inline]
+    fn setup_pipeline_fragment_function(
+        &self,
+        _lib: &LibraryRef,
+        _pipeline_desc: &RenderPipelineDescriptorRef,
+    ) {
+    }
+
+    #[inline]
+    fn function_name() -> &'static str {
+        ""
+    }
 }
 
 pub struct RenderPipeline<
-    VA: ShaderArgs = NoShaderArgs,
-    FA: ShaderArgs = NoShaderArgs,
-    D: DepthAttachmentKind = NoDepth,
-    S: StencilAttachmentKind = NoStencil,
-    const NUM_COLOR_ATTACHMENTS: usize = 1,
+    const NUM_COLOR_ATTACHMENTS: usize,
+    VS: VertexShader,
+    FS: FragmentShader,
+    D: DepthAttachmentKind,
+    S: StencilAttachmentKind,
 > {
+    pipeline: RenderPipelineState,
     _depth_kind: PhantomData<D>,
     _stencil_kind: PhantomData<S>,
-    _vertex_args: PhantomData<VA>,
-    _fragment_args: PhantomData<FA>,
+    _vertex_fn: PhantomData<VS>,
+    _fragment_fn: PhantomData<FS>,
 }
 
-type RenderPassColorAttachment<'a> = (
-    &'a TextureRef,
-    (f32, f32, f32, f32),
-    MTLLoadAction,
-    MTLStoreAction,
-);
-
 impl<
-        VA: ShaderArgs,
-        FA: ShaderArgs,
+        const NUM_COLOR_ATTACHMENTS: usize,
+        VS: VertexShader,
+        FS: FragmentShader,
         D: DepthAttachmentKind,
         S: StencilAttachmentKind,
-        const NUM_COLOR_ATTACHMENTS: usize,
-    > RenderPipeline<VA, FA, D, S, NUM_COLOR_ATTACHMENTS>
+    > RenderPipeline<NUM_COLOR_ATTACHMENTS, VS, FS, D, S>
 {
-    pub fn new() -> Self {
+    pub fn new(
+        label: &str,
+        device: &DeviceRef,
+        library: &LibraryRef,
+        colors: [ColorAttachementPipelineDesc; NUM_COLOR_ATTACHMENTS],
+        vertex_fn: VS,
+        fragment_fn: FS,
+        depth_kind: D,
+        stencil_kind: S,
+    ) -> Self {
+        let pipeline_desc = RenderPipelineDescriptor::new();
+        pipeline_desc.set_label(label);
+
+        for i in 0..NUM_COLOR_ATTACHMENTS {
+            let desc = pipeline_desc
+                .color_attachments()
+                .object_at(i as u64)
+                .expect("Failed to access color attachment on pipeline descriptor");
+            ColorAttachement::setup_pipeline_attachment(colors[i], &desc);
+        }
+        depth_kind.setup_pipeline_attachment(&pipeline_desc);
+        stencil_kind.setup_pipeline_attachment(&pipeline_desc);
+
+        // TODO: Set vertex/fragment shader buffer arguments as immutable, where appropriate.
+        vertex_fn.setup_pipeline_vertex_function(library, &pipeline_desc);
+        fragment_fn.setup_pipeline_fragment_function(library, &pipeline_desc);
+
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // TODO: START HERE 2
+        // Add back non-release profile bind checking
+
+        let pipeline = device
+            .new_render_pipeline_state(&pipeline_desc)
+            .expect("Failed to create pipeline state");
         Self {
-            _vertex_args: PhantomData,
-            _fragment_args: PhantomData,
+            pipeline,
+            _vertex_fn: PhantomData,
+            _fragment_fn: PhantomData,
             _depth_kind: PhantomData,
             _stencil_kind: PhantomData,
         }
@@ -173,103 +407,122 @@ impl<
     pub fn new_render_command_encoder<'a, 'b, 'c>(
         &self,
         command_buffer: &'a CommandBufferRef,
-        color_attachments: [RenderPassColorAttachment; NUM_COLOR_ATTACHMENTS],
+        color_attachments: [ColorAttachementRenderPassDesc; NUM_COLOR_ATTACHMENTS],
         depth_attachment: D::RenderPassDesc<'b>,
         stencil_attachment: S::RenderPassDesc<'c>,
     ) -> &'a RenderCommandEncoderRef {
         let desc = RenderPassDescriptor::new();
         for i in 0..NUM_COLOR_ATTACHMENTS {
-            let (render_target, (r, g, b, alpha), load_action, store_action) = color_attachments[i];
+            let c = color_attachments[i];
             let a = desc
                 .color_attachments()
                 .object_at(i as _)
                 .expect("Failed to access color attachment on render pass descriptor");
-            a.set_clear_color(MTLClearColor::new(r as _, g as _, b as _, alpha as _));
-            a.set_load_action(load_action);
-            a.set_store_action(store_action);
-            a.set_texture(Some(render_target));
+            ColorAttachement::setup_render_pass_attachment(c, a);
         }
-        D::setup_attachment(depth_attachment, desc);
-        S::setup_attachment(stencil_attachment, desc);
+        D::setup_render_pass_attachment(depth_attachment, desc);
+        S::setup_render_pass_attachment(stencil_attachment, desc);
         command_buffer.new_render_command_encoder(desc)
     }
 
-    pub fn setup(&self, encoder: &RenderCommandEncoderRef, vertex_args: VA, fragment_args: FA) {
-        vertex_args.encode_vertex_args(encoder);
-        fragment_args.encode_fragment_args(encoder);
+    pub fn setup<'a, 'b, 'c>(
+        &'a self,
+        encoder: &RenderCommandEncoderRef,
+        vertex_binds: VS::Binds<'b>,
+        fragment_binds: FS::Binds<'c>,
+    ) {
+        vertex_binds.encode_vertex_binds(encoder);
+        fragment_binds.encode_fragment_binds(encoder);
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use metal::{Device, MTLResourceOptions, TextureDescriptor};
+    use metal::{Device, TextureDescriptor};
+    use metal_types::float4;
+    use std::simd::f32x4;
 
-    // Assumed to be generated by metal-build (shader_function_parser/generate_shader_args)
-    struct VertexArgs1<'a> {
-        v_arg1: &'a (dyn bind::Bind + 'a),
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // DOOOO ITTTT! Parse. Shader. Functions.
+
+    // Assumed to be generated by metal-build (shader_function_parser/generate_shader_binds)
+    struct Vertex1Binds<'a> {
+        v_bind1: BindMany<'a, f32>,
     }
-    impl<'c> ShaderArgs for VertexArgs1<'c> {
+    impl<'c> VertexShaderBinds for Vertex1Binds<'c> {
         #[inline]
-        fn encode_vertex_args<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {
-            self.v_arg1.encode_vertex(0, encoder);
+        fn encode_vertex_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {
+            self.v_bind1.encode_for_vertex(0, encoder);
         }
+    }
+    struct Vertex1;
+    impl VertexShader for Vertex1 {
+        type Binds<'a> = Vertex1Binds<'a>;
+
         #[inline]
-        fn encode_fragment_args<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {
-            self.v_arg1.encode_fragment(0, encoder);
+        fn function_name() -> &'static str {
+            "vertex1"
         }
     }
 
-    // pub trait ShaderArgs2<const N: usize> {
-    //     fn binds(&self) -> [(usize, &dyn bind::Bind); N];
-    // }
-    // impl<'a> ShaderArgs2<1> for VertexArgs1<'a> {
-    //     fn binds(&self) -> [(usize, &dyn bind::Bind); 1] {
-    //         [(0, self.v_arg1)]
-    //     }
-    // }
-
-    // Assumed to be generated by metal-build (shader_function_parser/generate_shader_args)
-    struct FragArgs1<'a> {
-        f_arg1: &'a dyn bind::Bind,
+    // Assumed to be generated by metal-build (shader_function_parser/generate_shader_binds)
+    struct Frag1Binds<'a> {
+        f_bind1: BindOne<'a, float4>,
     }
-    impl<'c> ShaderArgs for FragArgs1<'c> {
+    impl<'c> FragmentShaderBinds for Frag1Binds<'c> {
         #[inline]
-        fn encode_vertex_args<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {
-            self.f_arg1.encode_vertex(0, encoder);
+        fn encode_fragment_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {
+            self.f_bind1.encode_for_fragment(0, encoder);
         }
+    }
+    struct Fragment1;
+    impl FragmentShader for Fragment1 {
+        type Binds<'a> = Frag1Binds<'a>;
+
         #[inline]
-        fn encode_fragment_args<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {
-            self.f_arg1.encode_fragment(0, encoder);
+        fn function_name() -> &'static str {
+            "fragment1"
         }
     }
 
     // #[test]
     fn test() {
         let device = Device::system_default().expect("Failed to get Metal Device");
+        let lib = device.new_default_library();
         let command_queue = device.new_command_queue();
         let command_buffer = command_queue.new_command_buffer();
+
         let texture = device.new_texture(&TextureDescriptor::new());
-        let arg_buffer = device.new_buffer(4, MTLResourceOptions::StorageModeManaged);
+        let color1 = &texture;
+        let color2 = &texture;
+        let depth = &texture;
+        let stencil = &texture;
+
+        let f32_buffer = TypedBuffer::<f32>::with_capacity(
+            &device as &DeviceRef,
+            1,
+            MTLResourceOptions::StorageModeManaged,
+        );
+        let float4_buffer = TypedBuffer::<float4>::with_capacity(
+            &device as &DeviceRef,
+            1,
+            MTLResourceOptions::StorageModeManaged,
+        );
 
         {
-            let p: RenderPipeline = RenderPipeline::new();
-            let color1 = &texture;
-            p.new_render_command_encoder(
-                command_buffer,
-                [(
-                    color1,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::Store,
-                )],
+            let p = RenderPipeline::new(
+                "Test",
+                &device,
+                &lib,
+                [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                Vertex1,
+                Fragment1,
                 NoDepth,
                 NoStencil,
             );
-        }
-        {
-            let p = RenderPipeline::<VertexArgs1>::new();
-            let color1 = &texture;
             let encoder = p.new_render_command_encoder(
                 command_buffer,
                 [(
@@ -283,93 +536,38 @@ mod test {
             );
             p.setup(
                 encoder,
-                VertexArgs1 {
-                    v_arg1: &bind::buffer(&arg_buffer),
+                Vertex1Binds {
+                    v_bind1: BindMany::Bytes(&[0.]),
                 },
-                NoShaderArgs,
+                Frag1Binds {
+                    f_bind1: BindOne::Bytes(&f32x4::splat(1.).into()),
+                },
+            );
+
+            p.setup(
+                encoder,
+                Vertex1Binds {
+                    v_bind1: BindMany::BufferAndOffset(&f32_buffer, 0),
+                },
+                Frag1Binds {
+                    f_bind1: BindOne::BufferAndOffset(&float4_buffer, 0),
+                },
             );
         }
         {
-            let p = RenderPipeline::<VertexArgs1, FragArgs1>::new();
-            let color1 = &texture;
-            let encoder = p.new_render_command_encoder(
-                command_buffer,
-                [(
-                    color1,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::Store,
-                )],
+            let p = RenderPipeline::new(
+                "Test",
+                &device,
+                &lib,
+                [
+                    (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
+                    (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
+                ],
+                Vertex1,
+                Fragment1,
                 NoDepth,
                 NoStencil,
             );
-            p.setup(
-                encoder,
-                VertexArgs1 {
-                    v_arg1: &bind::buffer(&arg_buffer),
-                },
-                FragArgs1 {
-                    f_arg1: &bind::buffer(&arg_buffer),
-                },
-            );
-        }
-        {
-            let p = RenderPipeline::<VertexArgs1, FragArgs1, HasDepth>::new();
-            let color1 = &texture;
-            let depth = &texture;
-            let encoder = p.new_render_command_encoder(
-                command_buffer,
-                [(
-                    color1,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::Store,
-                )],
-                (&depth, 0., MTLLoadAction::Clear, MTLStoreAction::DontCare),
-                NoStencil,
-            );
-            p.setup(
-                encoder,
-                VertexArgs1 {
-                    v_arg1: &bind::buffer(&arg_buffer),
-                },
-                FragArgs1 {
-                    f_arg1: &bind::buffer(&arg_buffer),
-                },
-            );
-        }
-        {
-            let p = RenderPipeline::<VertexArgs1, FragArgs1, HasDepth, HasStencil>::new();
-            let color1 = &texture;
-            let depth = &texture;
-            let stencil = &texture;
-            let encoder = p.new_render_command_encoder(
-                command_buffer,
-                [(
-                    color1,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::Store,
-                )],
-                (&depth, 0., MTLLoadAction::Clear, MTLStoreAction::DontCare),
-                (&stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
-            );
-            p.setup(
-                encoder,
-                VertexArgs1 {
-                    v_arg1: &bind::buffer(&arg_buffer),
-                },
-                FragArgs1 {
-                    f_arg1: &bind::buffer(&arg_buffer),
-                },
-            );
-        }
-        {
-            let p = RenderPipeline::<VertexArgs1, FragArgs1, HasDepth, HasStencil, 2>::new();
-            let color1 = &texture;
-            let color2 = &texture;
-            let depth = &texture;
-            let stencil = &texture;
             let encoder = p.new_render_command_encoder(
                 command_buffer,
                 [
@@ -381,22 +579,52 @@ mod test {
                     ),
                     (
                         color2,
-                        (1., 1., 1., 1.),
+                        (0., 0., 0., 0.),
                         MTLLoadAction::Clear,
-                        MTLStoreAction::DontCare,
+                        MTLStoreAction::Store,
                     ),
                 ],
-                (&depth, 0., MTLLoadAction::Clear, MTLStoreAction::DontCare),
-                (&stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
+                NoDepth,
+                NoStencil,
             );
             p.setup(
                 encoder,
-                VertexArgs1 {
-                    v_arg1: &bind::buffer(&arg_buffer),
+                Vertex1Binds {
+                    v_bind1: BindMany::Bytes(&[0.]),
                 },
-                FragArgs1 {
-                    f_arg1: &bind::buffer(&arg_buffer),
+                Frag1Binds {
+                    f_bind1: BindOne::Bytes(&f32x4::splat(1.).into()),
                 },
+            );
+        }
+        {
+            let p = RenderPipeline::new(
+                "Test",
+                &device,
+                &lib,
+                [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                Vertex1,
+                NoFragmentShader,
+                HasDepth(MTLPixelFormat::Depth16Unorm),
+                HasStencil(MTLPixelFormat::Stencil8),
+            );
+            let encoder = p.new_render_command_encoder(
+                command_buffer,
+                [(
+                    color1,
+                    (0., 0., 0., 0.),
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                )],
+                (depth, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
+                (stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
+            );
+            p.setup(
+                encoder,
+                Vertex1Binds {
+                    v_bind1: BindMany::Bytes(&[0.]),
+                },
+                NoBinds,
             );
         }
     }
