@@ -1,4 +1,4 @@
-#include "shading.h"
+#include "./shading.h"
 
 [[fragment]]
 half4 test_shade_phong_blinn_with_constant_material() {
