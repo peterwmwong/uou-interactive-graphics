@@ -1,4 +1,6 @@
-mod shader_function_parser;
+#![feature(assert_matches)]
+mod generate_shader_function_bindings;
+mod parse_shader_function;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -39,7 +41,7 @@ fn generate_rust_shader_bindings() {
                 .expect("Could not create shader_bindings.rs containing Rust bindings for types in shader_src/shader_bindings.h");
 
             shader_bindings_file
-                .write(
+                .write_all(
                     r#"#![allow(deref_nullptr, non_upper_case_globals, non_snake_case)]
 /**************************************************************************************************
  GENERATED FILE. DO NOT MODIFY.
@@ -53,7 +55,7 @@ use metal_app::metal_types::*;
 "#
                     .as_bytes(),
                 )
-                .unwrap();
+                .expect("Unable to write shader_bindings.rs file (shader function bindings)");
 
             let mut builder = bindgen::Builder::default()
                 .header(rust_bindgen_only_metal_types_header_file.to_string_lossy())

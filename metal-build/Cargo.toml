@@ -9,3 +9,4 @@ edition = "2021"
 bindgen = "0.60.1"
 build-hash = { path = "../build-hash" }
 metal-types = { path = "../metal-types" }
+regex = "1.6"
