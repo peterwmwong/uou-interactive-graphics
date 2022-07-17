@@ -478,7 +478,7 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
                 );
 
                 /*
-                struct MyStruct {
+                struct TestStruct {
                     float one;
                 };
 
@@ -490,8 +490,8 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
                     device   float3 *        buf2      [[buffer(2)]],
                     device   float3 &        buf3      [[buffer(3)]],
                             texture2d<half> tex1      [[texture(1)]],
-                    constant MyStruct &      buf5      [[buffer(5)]],
-                    constant MyStruct *      buf4      [[buffer(4)]]
+                    constant TestStruct &      buf5      [[buffer(5)]],
+                    constant TestStruct *      buf4      [[buffer(4)]]
                 ) { return 0; }
                 */
                 test(
@@ -501,7 +501,7 @@ TranslationUnitDecl 0x1210302e8 <<invalid sloc>> <invalid sloc>
 | `-BuiltinType 0x121030f20 '__metal_intersection_query_t'
 |-ImportDecl 0x1210748f0 <<built-in>:1:1> col:1 implicit metal_types
 |-UsingDirectiveDecl 0x121131f50 <line:3:1, col:17> col:17 Namespace 0x1210749f0 'metal'
-|-FunctionDecl 0x1211513b8 <line:15:1, line:24:15> line:15:8 test 'float4 (const constant float *, const constant float2 &, uint, device float3 *, device float3 &, texture2d<half>, const constant MyStruct &, const constant MyStruct *)'
+|-FunctionDecl 0x1211513b8 <line:15:1, line:24:15> line:15:8 test 'float4 (const constant float *, const constant float2 &, uint, device float3 *, device float3 &, texture2d<half>, const constant TestStruct &, const constant TestStruct *)'
 | |-ParmVarDecl 0x121132470 <line:16:5, col:30> col:30 buf0 'const constant float *'
 | | `-MetalBufferIndexAttr 0x1211324d0 <col:42, col:50>
 | |   `-IntegerLiteral 0x1211323f0 <col:49> 'int' 0
@@ -519,10 +519,10 @@ TranslationUnitDecl 0x1210302e8 <<invalid sloc>> <invalid sloc>
 | |-ParmVarDecl 0x121150dc8 <line:21:14, col:30> col:30 tex1 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
 | | `-MetalTextureIndexAttr 0x121150e28 <col:42, col:51>
 | |   `-IntegerLiteral 0x121150d78 <col:50> 'int' 1
-| |-ParmVarDecl 0x121150ee8 <line:22:5, col:30> col:30 buf5 'const constant MyStruct &'
+| |-ParmVarDecl 0x121150ee8 <line:22:5, col:30> col:30 buf5 'const constant TestStruct &'
 | | `-MetalBufferIndexAttr 0x121150f48 <col:42, col:50>
 | |   `-IntegerLiteral 0x121150e70 <col:49> 'int' 5
-| |-ParmVarDecl 0x1211510f8 <line:23:5, col:30> col:30 buf4 'const constant MyStruct *'
+| |-ParmVarDecl 0x1211510f8 <line:23:5, col:30> col:30 buf4 'const constant TestStruct *'
 | | `-MetalBufferIndexAttr 0x121151158 <col:42, col:50>
 | |   `-IntegerLiteral 0x1211510a0 <col:49> 'int' 4
 | |-CompoundStmt 0x121283140 <line:24:3, col:15>
@@ -542,8 +542,8 @@ TranslationUnitDecl 0x1210302e8 <<invalid sloc>> <invalid sloc>
                                 ShaderFunctionBind::Buffer { index: 2, name: "buf2".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::Many, immutable: false },
                                 ShaderFunctionBind::Buffer { index: 3, name: "buf3".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::One, immutable: false },
                                 ShaderFunctionBind::Texture { index: 1, name: "tex1".to_owned() },
-                                ShaderFunctionBind::Buffer { index: 5, name: "buf5".to_owned(), data_type: "MyStruct".to_owned(), bind_type: BindType::One, immutable: true },
-                                ShaderFunctionBind::Buffer { index: 4, name: "buf4".to_owned(), data_type: "MyStruct".to_owned(), bind_type: BindType::Many, immutable: true },
+                                ShaderFunctionBind::Buffer { index: 5, name: "buf5".to_owned(), data_type: "TestStruct".to_owned(), bind_type: BindType::One, immutable: true },
+                                ShaderFunctionBind::Buffer { index: 4, name: "buf4".to_owned(), data_type: "TestStruct".to_owned(), bind_type: BindType::Many, immutable: true },
                             ],
                             shader_type: ShaderType::Vertex,
                         }
@@ -690,11 +690,112 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
 
         #[test]
         fn test() {
-            let expected = vec![ShaderFunction {
-                fn_name: "v_no_args_position_only_return".to_owned(),
-                binds: vec![],
-                shader_type: ShaderType::Vertex,
-            }];
+            let expected = vec![
+                ShaderFunction {
+                    fn_name: "test_vertex".to_owned(),
+                    binds: vec![
+                        ShaderFunctionBind::Buffer {
+                            index: 0,
+                            name: "buf0".to_owned(),
+                            data_type: "float".to_owned(),
+                            bind_type: BindType::Many,
+                            immutable: true,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 1,
+                            name: "buf1".to_owned(),
+                            data_type: "float2".to_owned(),
+                            bind_type: BindType::One,
+                            immutable: true,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 2,
+                            name: "buf2".to_owned(),
+                            data_type: "float3".to_owned(),
+                            bind_type: BindType::Many,
+                            immutable: false,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 3,
+                            name: "buf3".to_owned(),
+                            data_type: "float3".to_owned(),
+                            bind_type: BindType::One,
+                            immutable: false,
+                        },
+                        ShaderFunctionBind::Texture {
+                            index: 1,
+                            name: "tex1".to_owned(),
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 5,
+                            name: "buf5".to_owned(),
+                            data_type: "TestStruct".to_owned(),
+                            bind_type: BindType::One,
+                            immutable: true,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 4,
+                            name: "buf4".to_owned(),
+                            data_type: "TestStruct".to_owned(),
+                            bind_type: BindType::Many,
+                            immutable: true,
+                        },
+                    ],
+                    shader_type: ShaderType::Vertex,
+                },
+                ShaderFunction {
+                    fn_name: "test_fragment".to_owned(),
+                    binds: vec![
+                        ShaderFunctionBind::Buffer {
+                            index: 0,
+                            name: "buf0".to_owned(),
+                            data_type: "float".to_owned(),
+                            bind_type: BindType::Many,
+                            immutable: true,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 1,
+                            name: "buf1".to_owned(),
+                            data_type: "float2".to_owned(),
+                            bind_type: BindType::One,
+                            immutable: true,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 2,
+                            name: "buf2".to_owned(),
+                            data_type: "float3".to_owned(),
+                            bind_type: BindType::Many,
+                            immutable: false,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 3,
+                            name: "buf3".to_owned(),
+                            data_type: "float3".to_owned(),
+                            bind_type: BindType::One,
+                            immutable: false,
+                        },
+                        ShaderFunctionBind::Texture {
+                            index: 1,
+                            name: "tex1".to_owned(),
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 5,
+                            name: "buf5".to_owned(),
+                            data_type: "TestStruct".to_owned(),
+                            bind_type: BindType::One,
+                            immutable: true,
+                        },
+                        ShaderFunctionBind::Buffer {
+                            index: 4,
+                            name: "buf4".to_owned(),
+                            data_type: "TestStruct".to_owned(),
+                            bind_type: BindType::Many,
+                            immutable: true,
+                        },
+                    ],
+                    shader_type: ShaderType::Fragment,
+                },
+            ];
 
             let shader_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("test_shader_src")

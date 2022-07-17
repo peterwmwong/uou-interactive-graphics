@@ -13,6 +13,7 @@
     "triggerTaskOnSave.tasks": {
         "metal-compile-and-emit-asm": [
             "metal-shaders/shader_src/*",
+            "metal-build/test_shader_src/**",
             "proj-*/shader_src/*",
         ]
     },
