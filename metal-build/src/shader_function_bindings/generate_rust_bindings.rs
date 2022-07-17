@@ -3,9 +3,26 @@ use super::{
     parse_metal_ast::{parse_shader_functions_from_reader, ShaderFunction, ShaderFunctionBind},
 };
 use std::{
+    borrow::Cow,
     io::{Read, Write},
     path::Path,
 };
+
+const RUST_KEYWORDS: &[&'static str] = &[
+    "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for",
+    "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
+    "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use", "where",
+    "while", "async", "await", "dyn", "abstract", "become", "box", "do", "final", "macro",
+    "override", "priv", "typeof", "unsized", "virtual", "yield", "try",
+];
+
+fn escape_name(name: &str) -> Cow<str> {
+    if RUST_KEYWORDS.contains(&name) {
+        Cow::Owned(format!("r#{name}").to_owned())
+    } else {
+        Cow::Borrowed(name)
+    }
+}
 
 pub fn generate_shader_function_bindings<P: AsRef<Path>, W: Write>(shader_file: P, writer: &mut W) {
     generate_metal_ast(shader_file, |stdout| {
@@ -23,9 +40,9 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
             .expect("Unable to write shader_bindings.rs file (shader function bindings)");
     };
     w(r#"
-/**************************************************************************************************
- Shader function generations
-***************************************************************************************************/
+/****************
+ Shader functions
+*****************/
 "#);
     for ShaderFunction {
         fn_name,
@@ -34,8 +51,10 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
     } in parse_shader_functions_from_reader(shader_file_reader)
     {
         use ShaderFunctionBind::*;
+        let rust_shader_name = escape_name(&fn_name);
         w(&format!(
             r#"
+#[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'a> {{"#
         ));
         // TODO: Consider to code generation trait to make this more readable...
@@ -55,15 +74,17 @@ pub struct {fn_name}_binds<'a> {{"#
                     // TODO: Implement marking buffers as immutible
                     immutable: _,
                 } => {
+                    let rust_shader_bind_name = escape_name(&name);
                     w(&format!(
                         r#"
-    {name}: Bind{bind_type}<'a, {index}, {data_type}>,"#
+    {rust_shader_bind_name}: Bind{bind_type}<'a, {index}, {data_type}>,"#
                     ));
                 }
                 Texture { name, index } => {
+                    let rust_shader_bind_name = escape_name(&name);
                     w(&format!(
                         r#"
-    {name}: BindTexture<'a, {index}>,"#
+    {rust_shader_bind_name}: BindTexture<'a, {index}>,"#
                     ));
                 }
             }
@@ -74,7 +95,7 @@ pub struct {fn_name}_binds<'a> {{"#
             r#"
 }}
 
-pub impl<'c> {shader_type_titlecase}ShaderBinds for {fn_name}_binds<'c> {{
+impl<'c> {shader_type_titlecase}ShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
     fn encode_{shader_type_lowercase}_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{"#
         ));
@@ -87,10 +108,13 @@ pub impl<'c> {shader_type_titlecase}ShaderBinds for {fn_name}_binds<'c> {{
         //         });
         for bind in &binds {
             match bind {
-                Buffer { name, .. } | Texture { name, .. } => w(&format!(
-                    r#"
-        self.{name}.encode_for_{shader_type_lowercase}(encoder);"#
-                )),
+                Buffer { name, .. } | Texture { name, .. } => {
+                    let rust_shader_bind_name = escape_name(&name);
+                    w(&format!(
+                        r#"
+        self.{rust_shader_bind_name}.encode_for_{shader_type_lowercase}(encoder);"#
+                    ))
+                }
             }
         }
         w(&format!(
@@ -98,8 +122,9 @@ pub impl<'c> {shader_type_titlecase}ShaderBinds for {fn_name}_binds<'c> {{
     }}
 }}
 
-struct {fn_name};
-impl {shader_type_titlecase}Shader for {fn_name} {{
+#[allow(non_camel_case_types)]
+struct {rust_shader_name};
+impl {shader_type_titlecase}Shader for {rust_shader_name} {{
     type Binds<'a> = {fn_name}_binds<'a>;
 
     #[inline]
@@ -122,10 +147,11 @@ mod test {
         fn test() {
             let expected = &format!(
                 r#"
-/**************************************************************************************************
- Shader function generations
-***************************************************************************************************/
+/****************
+ Shader functions
+*****************/
 
+#[allow(non_camel_case_types)]
 pub struct test_vertex_binds<'a> {{
     buf0: BindMany<'a, 0, float>,
     buf1: BindOne<'a, 1, float2>,
@@ -136,7 +162,7 @@ pub struct test_vertex_binds<'a> {{
     buf4: BindMany<'a, 4, TestStruct>,
 }}
 
-pub impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
+impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
     #[inline]
     fn encode_vertex_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
         self.buf0.encode_for_vertex(encoder);
@@ -149,6 +175,7 @@ pub impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
     }}
 }}
 
+#[allow(non_camel_case_types)]
 struct test_vertex;
 impl VertexShader for test_vertex {{
     type Binds<'a> = test_vertex_binds<'a>;
@@ -157,6 +184,7 @@ impl VertexShader for test_vertex {{
     fn function_name() -> &'static str {{ "test_vertex" }}
 }}
 
+#[allow(non_camel_case_types)]
 pub struct test_fragment_binds<'a> {{
     buf0: BindMany<'a, 0, float>,
     buf1: BindOne<'a, 1, float2>,
@@ -167,7 +195,7 @@ pub struct test_fragment_binds<'a> {{
     buf4: BindMany<'a, 4, TestStruct>,
 }}
 
-pub impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
+impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
     #[inline]
     fn encode_fragment_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
         self.buf0.encode_for_fragment(encoder);
@@ -180,6 +208,7 @@ pub impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
     }}
 }}
 
+#[allow(non_camel_case_types)]
 struct test_fragment;
 impl FragmentShader for test_fragment {{
     type Binds<'a> = test_fragment_binds<'a>;
@@ -278,9 +307,19 @@ impl FragmentShader for test_fragment {{
                     bind_type: BindType::One,
                     immutable: true,
                 },
+                Setup {
+                    fn_name: RUST_KEYWORDS[0],
+                    bind_name: "in",
+                    multiplicity: "&",
+                    address_space: "const constant",
+                    data_type: "float4x4",
+                    bind_index: 3,
+                    bind_type: BindType::One,
+                    immutable: true,
+                },
             ] {
                 test(
-            format!("\
+                    format!("\
 TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x14d874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x14d830f20 '__metal_intersection_query_t'
@@ -298,36 +337,42 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 | `-MetalVertexAttr 0x13da41330 <line:11:3>
 `-<undeserialized declarations>
 ").as_bytes(),
-        &format!(r#"
-/**************************************************************************************************
- Shader function generations
-***************************************************************************************************/
+                    {
+                        let rust_shader_name = escape_name(fn_name);
+                        let rust_shader_bind_name = escape_name(bind_name);
+                        &format!(r#"
+/****************
+ Shader functions
+*****************/
 
+#[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'a> {{
-    {bind_name}: Bind{bind_type}<'a, {bind_index}, {data_type}>,
+    {rust_shader_bind_name}: Bind{bind_type}<'a, {bind_index}, {data_type}>,
 }}
 
-pub impl<'c> VertexShaderBinds for {fn_name}_binds<'c> {{
+impl<'c> VertexShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
     fn encode_vertex_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
-        self.{bind_name}.encode_for_vertex(encoder);
+        self.{rust_shader_bind_name}.encode_for_vertex(encoder);
     }}
 }}
 
-struct {fn_name};
-impl VertexShader for {fn_name} {{
+#[allow(non_camel_case_types)]
+struct {rust_shader_name};
+impl VertexShader for {rust_shader_name} {{
     type Binds<'a> = {fn_name}_binds<'a>;
 
     #[inline]
     fn function_name() -> &'static str {{ "{fn_name}" }}
 }}
-"#),
-            );
+"#)
+                        }
+                );
             }
         }
 
         #[test]
-        fn fdtest_bind_texture() {
+        fn test_bind_texture() {
             let fn_name = "test7";
             let bind_name = "buf_e";
             let bind_index = 5;
@@ -351,21 +396,23 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 `-<undeserialized declarations>
 ").as_bytes(),
             &format!(r#"
-/**************************************************************************************************
- Shader function generations
-***************************************************************************************************/
+/****************
+ Shader functions
+*****************/
 
+#[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'a> {{
     {bind_name}: BindTexture<'a, {bind_index}>,
 }}
 
-pub impl<'c> FragmentShaderBinds for {fn_name}_binds<'c> {{
+impl<'c> FragmentShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
     fn encode_fragment_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
         self.{bind_name}.encode_for_fragment(encoder);
     }}
 }}
 
+#[allow(non_camel_case_types)]
 struct {fn_name};
 impl FragmentShader for {fn_name} {{
     type Binds<'a> = {fn_name}_binds<'a>;

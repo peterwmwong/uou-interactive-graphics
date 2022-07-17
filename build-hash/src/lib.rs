@@ -28,9 +28,9 @@ fn save_hash<P: AsRef<Path>>(hash: u64, cached_hash_path: P) {
     std::fs::write(cached_hash_path.as_ref(), hash.to_ne_bytes()).unwrap();
 }
 
-pub fn build_hash<P: AsRef<Path>, P2: AsRef<Path>, F: FnOnce()>(
+pub fn build_hash<P: AsRef<Path>, F: FnOnce()>(
     cached_hash_path: P,
-    paths_to_hash: &[P2],
+    paths_to_hash: &[&dyn AsRef<Path>],
     f: F,
 ) {
     let current_hash = hash_files(paths_to_hash);

@@ -73,7 +73,7 @@ pub enum BindOne<'a, const BUFFER_INDEX: u64, T: Sized> {
 }
 impl<'a, const BUFFER_INDEX: u64, T: Sized> BindMany<'a, BUFFER_INDEX, T> {
     #[inline]
-    fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+    pub fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
         match self {
             &BindMany::Bytes(v) => encoder.set_vertex_bytes(
                 BUFFER_INDEX,
@@ -87,7 +87,7 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized> BindMany<'a, BUFFER_INDEX, T> {
         }
     }
     #[inline]
-    fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+    pub fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
         match self {
             &BindMany::Bytes(v) => encoder.set_fragment_bytes(
                 BUFFER_INDEX,
@@ -103,7 +103,7 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized> BindMany<'a, BUFFER_INDEX, T> {
 }
 impl<'a, const BUFFER_INDEX: u64, T: Sized> BindOne<'a, BUFFER_INDEX, T> {
     #[inline]
-    fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+    pub fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
         match self {
             &BindOne::Bytes(v) => encoder.set_vertex_bytes(
                 BUFFER_INDEX,
@@ -117,7 +117,7 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized> BindOne<'a, BUFFER_INDEX, T> {
         }
     }
     #[inline]
-    fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+    pub fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
         match self {
             &BindOne::Bytes(v) => encoder.set_fragment_bytes(
                 BUFFER_INDEX,
@@ -135,12 +135,12 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized> BindOne<'a, BUFFER_INDEX, T> {
 pub struct BindTexture<'a, const TEXTURE_INDEX: u64>(&'a Texture);
 impl<'a, const TEXTURE_INDEX: u64> BindTexture<'a, TEXTURE_INDEX> {
     #[inline]
-    fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+    pub fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
         encoder.set_vertex_texture(TEXTURE_INDEX, Some(self.0));
     }
 
     #[inline]
-    fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+    pub fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
         encoder.set_fragment_texture(TEXTURE_INDEX, Some(self.0));
     }
 

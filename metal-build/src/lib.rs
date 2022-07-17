@@ -9,11 +9,15 @@ use std::{env, fs};
 const METAL_BUILD_MANIFEST_DIR: &'static str = env!("CARGO_MANIFEST_DIR");
 
 pub fn build() {
-    generate_rust_shader_bindings();
-    compile_shaders();
+    let metal_shaders_file = PathBuf::from("shader_src")
+        .join("shaders.metal")
+        .canonicalize()
+        .expect("Failed to canonicalize path to shaders.metal");
+    compile_shaders(&metal_shaders_file);
+    generate_rust_shader_bindings(&metal_shaders_file);
 }
 
-fn generate_rust_shader_bindings() {
+fn generate_rust_shader_bindings<P: AsRef<Path>>(metal_shaders_file: P) {
     let shader_src_dir = PathBuf::from("shader_src");
     let shader_bindings_header_file = shader_src_dir.join("shader_bindings.h");
     let rust_bindgen_only_metal_types_header_file = Path::new(METAL_BUILD_MANIFEST_DIR)
@@ -27,6 +31,7 @@ fn generate_rust_shader_bindings() {
         &[
             &shader_bindings_header_file,
             &rust_bindgen_only_metal_types_header_file,
+            &metal_shaders_file,
         ],
         || {
             let shader_bindings_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -50,7 +55,7 @@ fn generate_rust_shader_bindings() {
  Structs and Enums are generated based on `shader_src/shader_bindings.h`.
 ***************************************************************************************************/
 #[allow(unused_imports)]
-use metal_app::metal_types::*;
+use metal_app::{metal::*, metal_types::*, render_pipeline::*};
 "#
                     .as_bytes(),
                 )
@@ -76,6 +81,10 @@ use metal_app::metal_types::*;
                 .expect("Unable to generate bindings")
                 .write(Box::new(&shader_bindings_file))
                 .expect("Unable to write shader_bindings.rs file");
+            shader_function_bindings::generate_shader_function_bindings(
+                &metal_shaders_file,
+                &mut shader_bindings_file,
+            );
         },
     );
 }
@@ -110,14 +119,8 @@ fn get_shader_deps(shader_path: &str) -> Vec<PathBuf> {
     deps
 }
 
-fn compile_shaders() {
-    let metal_shaders_file = PathBuf::from("shader_src")
-        .join("shaders.metal")
-        .canonicalize()
-        .expect("Failed to canonicalize path to shaders.metal")
-        .to_string_lossy()
-        .to_string();
-    println!("{metal_shaders_file}");
+fn compile_shaders<P: AsRef<Path>>(metal_shaders_file: P) {
+    let metal_shaders_file = metal_shaders_file.as_ref().to_string_lossy();
     for dep in get_shader_deps(&metal_shaders_file) {
         println!("cargo:rerun-if-changed={}", dep.to_string_lossy());
     }

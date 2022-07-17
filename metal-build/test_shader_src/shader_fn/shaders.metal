@@ -16,7 +16,9 @@ float4 test_vertex(
              texture2d<half> tex1      [[texture(1)]],
     constant TestStruct &    buf5      [[buffer(5)]],
     constant TestStruct *    buf4      [[buffer(4)]]
-) { return 0; }
+) {
+    return float4(buf1, buf2[0].x, buf4->one);
+}
 
 
 [[fragment]]
@@ -30,4 +32,6 @@ float4 test_fragment(
     constant TestStruct &    buf5      [[buffer(5)]],
     constant TestStruct *    buf4      [[buffer(4)]],
              float4          position  [[position]]
-) { return 0; }
+) {
+    return float4(buf1, buf2[0].x, buf4->one);;
+}
