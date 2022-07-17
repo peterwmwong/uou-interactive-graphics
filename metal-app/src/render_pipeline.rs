@@ -3,7 +3,7 @@ use metal::{
     MTLPixelFormat, MTLResourceOptions, MTLStoreAction, RenderCommandEncoderRef,
     RenderPassColorAttachmentDescriptorRef, RenderPassDescriptor, RenderPassDescriptorRef,
     RenderPipelineColorAttachmentDescriptorRef, RenderPipelineDescriptor,
-    RenderPipelineDescriptorRef, RenderPipelineState, TextureRef,
+    RenderPipelineDescriptorRef, RenderPipelineState, Texture, TextureRef,
 };
 use std::marker::PhantomData;
 
@@ -130,6 +130,38 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized> BindOne<'a, BUFFER_INDEX, T> {
             &BindOne::BufferOffset(o) => encoder.set_fragment_buffer_offset(BUFFER_INDEX, o as _),
         }
     }
+}
+
+pub struct BindTexture<'a, const TEXTURE_INDEX: u64>(&'a Texture);
+impl<'a, const TEXTURE_INDEX: u64> BindTexture<'a, TEXTURE_INDEX> {
+    #[inline]
+    fn encode_for_vertex<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+        encoder.set_vertex_texture(TEXTURE_INDEX, Some(self.0));
+    }
+
+    #[inline]
+    fn encode_for_fragment<'b>(&self, encoder: &'b RenderCommandEncoderRef) {
+        encoder.set_fragment_texture(TEXTURE_INDEX, Some(self.0));
+    }
+
+    // TODO: Figure out a way to make this work.
+    // - How do we type ??? (texture index const generic)
+    // - Do we have to remove the generic and have the caller store texture index for this work? :/
+    //
+    // #[inline]
+    // fn encode_many_for_vertex<'b, 'c>(
+    //     encoder: &'b RenderCommandEncoderRef,
+    //     start_index: usize,
+    //     binds: &[BindTexture<'c, ???>],
+    // ) {
+    //     encoder.set_vertex_textures(
+    //         start_index as _,
+    //         &binds
+    //             .iter()
+    //             .map(|a| Some(a.0.deref()))
+    //             .collect::<Vec<Option<&TextureRef>>>(),
+    //     );
+    // }
 }
 
 #[derive(Copy, Clone)]

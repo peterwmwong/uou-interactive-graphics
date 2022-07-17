@@ -1,6 +1,5 @@
 #![feature(assert_matches)]
-mod generate_shader_function_bindings;
-mod parse_shader_function;
+mod shader_function_bindings;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};

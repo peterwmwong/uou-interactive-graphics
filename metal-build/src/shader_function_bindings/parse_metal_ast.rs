@@ -1,11 +1,10 @@
+use super::generate_metal_ast::generate_metal_ast;
+use regex::{Captures, Regex};
 use std::{
     fmt::Display,
     io::{BufRead, BufReader, Read},
     path::Path,
-    process::{Command, Stdio},
 };
-
-use regex::{Captures, Regex};
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -28,7 +27,7 @@ impl Display for BindType {
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub(crate) enum ShaderFunctionBind {
+pub enum ShaderFunctionBind {
     Buffer {
         index: u8,
         name: String,
@@ -89,10 +88,9 @@ impl ShaderType {
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ShaderFunction {
-    pub(crate) fn_name: String,
-    pub(crate) binds: Vec<ShaderFunctionBind>,
-    // pub(crate) bind_textures: Vec<ShaderFunctionBind>,
-    pub(crate) shader_type: ShaderType,
+    pub fn_name: String,
+    pub binds: Vec<ShaderFunctionBind>,
+    pub shader_type: ShaderType,
 }
 
 impl ShaderFunction {
@@ -106,34 +104,18 @@ impl ShaderFunction {
 }
 
 pub fn parse_shader_functions<P: AsRef<Path>>(shader_file: P) -> Vec<ShaderFunction> {
-    let mut cmd = Command::new("xcrun")
-        .args(&[
-            "-sdk",
-            "macosx",
-            "metal",
-            "-std=metal3.0",
-            &shader_file.as_ref().to_string_lossy(),
-            "-Xclang",
-            "-ast-dump",
-            "-fsyntax-only",
-            "-fno-color-diagnostics",
-        ])
-        .env_clear()
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn metal command");
-    let stdout = cmd
-        .stdout
-        .as_mut()
-        .expect("Failed to access metal command output");
-    let shader_fns = parse_shader_functions_from_reader(stdout);
-    cmd.wait().unwrap();
-    shader_fns
+    generate_metal_ast(shader_file, |stdout| {
+        parse_shader_functions_from_reader(stdout)
+    })
 }
 
 /*
 Parses shader function information (shader type, function name, arguments, etc.) from Metal (Clang)
 AST.
+
+IMPORTANT: Assumes valid AST! Passing an invalid AST has undefined behavior.
+- Assumed to be called **AFTER** shader compilation (Metal AIR/Native), which would have failed if
+  your shaders were bad for whatever reason (ex. invalid syntax, invalid buffer index, etc.).
 
 This function's input is expected to be the Metal (Clang) output when running something like...
 
@@ -417,6 +399,12 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
                 ("MetalVertexAttr", ShaderType::Vertex),
                 ("MetalFragmentAttr", ShaderType::Fragment),
             ] {
+                /*
+                [[vertex]]
+                float4 test() {
+                    return 0;
+                }
+                */
                 test(format!("\
 TranslationUnitDecl 0x11f0302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x12802c460 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
@@ -806,16 +794,6 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
             let actual = parse_shader_functions(shader_file);
 
             assert_eq!(actual, expected);
-        }
-
-        #[test]
-        fn test_shader_with_errors() {
-            // TODO: Read from stderr to find out if there are any errors and abort if any.
-            // Example Input Snippets:
-            //     [[vertex]] [[fragment]] float4 my_fn() {}
-            //     [[vertex]] void my_fn() {}
-            //     [[vertex]] float4 my_fn(float4 no_address_space_woopsies) {}
-            todo!();
         }
     }
 }
