@@ -1,5 +1,4 @@
 use std::{
-    assert_matches::debug_assert_matches,
     fmt::Display,
     io::{BufRead, BufReader, Read},
     path::Path,
@@ -163,14 +162,17 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
     .unwrap();
 
     // Example: | |-ParmVarDecl 0x14a132638 <line:10:5, col:29> col:29 yolo 'const constant packed_float4 *'
-    let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x\w+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+(?P<invalid> invalid)? (?P<name>\w+) '(?P<address_space>const constant|device) (metal::)?(?P<data_type>[\w]+) (?P<multiplicity>[*&])'").unwrap();
+    // Example: | |-ParmVarDecl 0x116879d78 <line:7:5, col:21> col:21 tex0 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
+    let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x\w+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+(?P<invalid> invalid)? (?P<name>\w+) '(?P<address_space>const constant |device |\w+[\w:<>, ]+':')(metal::)?(?P<data_type>[\w:<>, ]+)(?P<multiplicity> [*&]|)'").unwrap();
 
     // Example: | | `-MetalBufferIndexAttr 0x14a132698 <col:36, col:44>
-    let rx_fn_param_metal_buffer_index_attr =
-        Regex::new(r"^\| \| (?P<last_child>[`|])-MetalBufferIndexAttr ").unwrap();
+    let rx_fn_param_metal_buffer_texture_index_attr = Regex::new(
+        r"^\| \| (?P<last_child>[`|])-Metal(?P<buffer_or_texture>Buffer|Texture)IndexAttr ",
+    )
+    .unwrap();
 
     // Example: | |   `-IntegerLiteral 0x14a132570 <col:43> 'int' 0
-    let rx_fn_param_metal_buffer_index_attr_value = Regex::new(
+    let rx_fn_param_metal_buffer_texture_index_attr_value = Regex::new(
         r"^\| \|   (?P<last_child>[`|])-IntegerLiteral 0x\w+ <(line|col)(:\d+)+> 'int' (?P<index>\d+)",
     )
     .unwrap();
@@ -183,6 +185,30 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
     // Example: | `-
     let rx_fn_last_child = Regex::new(r"^\| `-").unwrap();
 
+    const BUFFER_ADDRESS_SPACE_CONSTANT: &'static str = "const constant ";
+    const BUFFER_ADDRESS_SPACE_DEVICE: &'static str = "device ";
+    const BUFFER_ADDRESS_SPACES: [&'static str; 2] =
+        [BUFFER_ADDRESS_SPACE_CONSTANT, BUFFER_ADDRESS_SPACE_DEVICE];
+
+    // Metal Shading Language Specification - "2.9 Textures"
+    // https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+    const TEXTURE_DATA_TYPES: [&'static str; 15] = [
+        "texture1d",
+        "texture1d_array",
+        "texture2d",
+        "texture2d_array",
+        "texture3d",
+        "texturecube",
+        "texturecube_array",
+        "texture2d_ms",
+        "texture2d_ms_array",
+        "depth2d",
+        "depth2d_array",
+        "depthcube",
+        "depthcube_array",
+        "depth2d_ms",
+        "depth2d_ms_array",
+    ];
     enum FunctionChild {
         Last,
         NotLast,
@@ -204,7 +230,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
         FindingFunctionDeclaration,
         Function(ShaderFunction),
         Param(ShaderFunction, ShaderFunctionBind, FunctionChild),
-        ParamBuffer(ShaderFunction, ShaderFunctionBind, FunctionChild),
+        ParamBufferTexture(ShaderFunction, ShaderFunctionBind, FunctionChild),
     }
     let mut shader_fns = vec![];
     let mut parse_next_state = |state: State, l: String| {
@@ -221,35 +247,62 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                     // TODO: Implement, this should determine immutability of buffers (render pipeline creation).
                     let address_space = &c["address_space"];
                     let name = &c["name"];
-                    let data_type = &c["data_type"];
                     let multiplicity = &c["multiplicity"];
-                    return State::Param(
-                        fun,
-                        ShaderFunctionBind::Buffer {
-                            index: u8::MAX,
-                            name: name.to_owned(),
-                            data_type: data_type.to_owned(),
-                            bind_type: if multiplicity == "*" {
-                                BindType::Many
-                            } else {
-                                debug_assert_eq!(
-                                    multiplicity, "&",
-                                    "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
-                                );
-                                BindType::One
+                    let data_type = &c["data_type"];
+
+                    // Unfortunately, Clang's AST "ParmVarDecl" line doesn't contain enough
+                    // information to know definitively whether the function param is a bindable
+                    // buffer or texture. We guess based on address_space and data type.
+
+                    // TODO: Consider defering choosing ShaderFunctionBind type.
+                    // - Instead of State::Param() holding a ShaderFunctionBind, maybe it should
+                    //   hold struct/tuple containing address_space, name, multiplicity, data_type
+                    // - The subsequent state `State::ParamBufferTexture` will know definitively
+                    if BUFFER_ADDRESS_SPACES.contains(&address_space) {
+                        return State::Param(
+                            fun,
+                            ShaderFunctionBind::Buffer {
+                                index: u8::MAX,
+                                name: name.to_owned(),
+                                data_type: data_type.to_owned(),
+                                bind_type: if multiplicity == " *" {
+                                    BindType::Many
+                                } else {
+                                    debug_assert_eq!(
+                                        multiplicity, " &",
+                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
+                                    );
+                                    BindType::One
+                                },
+                                immutable: if address_space == BUFFER_ADDRESS_SPACE_CONSTANT {
+                                    true
+                                } else {
+                                    debug_assert_eq!(
+                                        address_space, BUFFER_ADDRESS_SPACE_DEVICE,
+                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
+                                    );
+                                    false
+                                },
                             },
-                            immutable: if address_space == "const constant" {
-                                true
-                            } else {
-                                debug_assert_eq!(
-                                    address_space, "device",
-                                    "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
-                                );
-                                false
+                            FunctionChild::parse(&c),
+                        );
+                    } else if TEXTURE_DATA_TYPES
+                        .iter()
+                        .find(|&&texture_type| data_type.starts_with(texture_type))
+                        .is_some()
+                    {
+                        return State::Param(
+                            fun,
+                            ShaderFunctionBind::Texture {
+                                index: u8::MAX,
+                                name: name.to_owned(),
                             },
-                        },
-                        FunctionChild::parse(&c),
-                    );
+                            FunctionChild::parse(&c),
+                        );
+                    };
+                    // Otherwise, assumed not to be bindable.
+                    // - Function Input Attributes (ex. vertex_id)
+                    // - Function is *not* a shader function
                 } else if let Some(c) = rx_fn_metal_shader_type_attr.captures(&l) {
                     let shader_type = &c["shader_type"];
                     match shader_type {
@@ -269,39 +322,38 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                 return State::Function(fun);
             }
             State::Param(fun, bind, fun_last_child) => {
-                if let Some(c) = rx_fn_param_metal_buffer_index_attr.captures(&l) {
+                if let Some(c) = rx_fn_param_metal_buffer_texture_index_attr.captures(&l) {
                     debug_assert!(
                         FunctionChild::is_last_child(&c),
                         "Unsupported: Multiple function param attributes."
                     );
-                    return State::ParamBuffer(fun, bind, fun_last_child);
+                    return State::ParamBufferTexture(fun, bind, fun_last_child);
                 }
                 panic!("Unexpected function param information ({l})");
             }
-            State::ParamBuffer(mut fun, bind, fun_last_child) => {
-                if let Some(c) = rx_fn_param_metal_buffer_index_attr_value.captures(&l) {
+            State::ParamBufferTexture(mut fun, bind, fun_last_child) => {
+                use ShaderFunctionBind::*;
+                if let Some(c) = rx_fn_param_metal_buffer_texture_index_attr_value.captures(&l) {
                     debug_assert!(FunctionChild::is_last_child(&c), "Unexpected function param buffer attribute information to follow (why is this not the last child?)");
-                    debug_assert_matches!(bind, ShaderFunctionBind::Buffer { .. }, "Unexpected bind ({bind:?}). State::ParamBuffer expects bind to be ShaderFunctionBind::Buffer?");
-
                     let index = c["index"].parse::<u8>().expect(&format!(
                         "Failed to parse function param buffer attribute index value ({l})"
                     ));
-                    if let ShaderFunctionBind::Buffer {
-                        name,
-                        data_type,
-                        bind_type,
-                        immutable,
-                        ..
-                    } = bind
-                    {
-                        fun.binds.push(ShaderFunctionBind::Buffer {
+                    fun.binds.push(match bind {
+                        Buffer {
+                            name,
+                            data_type,
+                            bind_type,
+                            immutable,
+                            ..
+                        } => Buffer {
                             index,
                             name,
                             data_type,
                             bind_type,
                             immutable,
-                        });
-                    }
+                        },
+                        Texture { name, .. } => Texture { index, name },
+                    });
                     match fun_last_child {
                         FunctionChild::Last => {
                             shader_fns.push(fun);
@@ -338,6 +390,39 @@ mod test {
             let actual = parse_shader_functions_from_reader(input);
 
             assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_non_binds() {
+            /*
+            [[vertex]]
+            float4 test(uint vertex_id [[vertex_id]]) {
+                return 0;
+            }
+            */
+            test(format!("\
+TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x14c874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x14c830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x14c874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-UsingDirectiveDecl 0x14c931f50 <line:3:1, col:17> col:17 Namespace 0x14c8749f0 'metal'
+|-FunctionDecl 0x14c932498 <line:6:1, line:8:15> line:6:8 test 'float4 (uint)'
+| |-ParmVarDecl 0x14c932338 <line:7:5, col:10> col:10 vertex_id 'uint':'unsigned int'
+| | `-MetalVertexIdAttr 0x14c932398 <col:22>
+| |-CompoundStmt 0x14c932600 <line:8:3, col:15>
+| | `-ReturnStmt 0x14c9325e8 <col:5, col:12>
+| |   `-ImplicitCastExpr 0x14c9325d0 <col:12> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x14c9325b8 <col:12> 'float' <IntegralToFloating>
+| |       `-IntegerLiteral 0x14c932598 <col:12> 'int' 0
+| `-MetalVertexAttr 0x14c932540 <line:5:3>
+`-<undeserialized declarations>
+").as_bytes(),
+                [ShaderFunction {
+                    fn_name: "test".to_owned(),
+                    binds: vec![],
+                    shader_type: ShaderType::Vertex,
+                }]
+            );
         }
 
         #[test]
@@ -413,45 +498,53 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 
                 [[vertex]]
                 float4 test(
-                    constant float  * buf0 [[buffer(0)]],
-                    constant float2 & buf1 [[buffer(1)]],
-                    device   float3 * buf2 [[buffer(2)]],
-                    device   float3 & buf3 [[buffer(3)]],
-                    constant MyStruct & buf5 [[buffer(5)]],
-                    constant MyStruct * buf4 [[buffer(4)]]
+                    constant float  *        buf0      [[buffer(0)]],
+                    constant float2 &        buf1      [[buffer(1)]],
+                            uint            vertex_id [[vertex_id]],
+                    device   float3 *        buf2      [[buffer(2)]],
+                    device   float3 &        buf3      [[buffer(3)]],
+                            texture2d<half> tex1      [[texture(1)]],
+                    constant MyStruct &      buf5      [[buffer(5)]],
+                    constant MyStruct *      buf4      [[buffer(4)]]
                 ) { return 0; }
-                 */
+                */
                 test(
                     b"\
-TranslationUnitDecl 0x13a0302e8 <<invalid sloc>> <invalid sloc>
-|-ImportDecl 0x13a074928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
-|-UsingDirectiveDecl 0x13a839f50 <line:3:1, col:17> col:17 Namespace 0x13a0749f0 'metal'
-| `-FieldDecl 0x13a83a1a0 <line:12:5, col:11> col:11 one 'float'
-|-FunctionDecl 0x13a854758 <line:16:1, line:23:15> line:16:8 test 'float4 (const constant float *, const constant float2 &, device float3 *, device float3 &, const constant MyStruct &, const constant MyStruct *)'
-| |-ParmVarDecl 0x13a83a470 <line:17:5, col:23> col:23 buf0 'const constant float *'
-| | `-MetalBufferIndexAttr 0x13a83a4d0 <col:30, col:38>
-| |   `-IntegerLiteral 0x13a83a3f0 <col:37> 'int' 0
-| |-ParmVarDecl 0x13a83a7a8 <line:18:5, col:23> col:23 buf1 'const constant float2 &'
-| | `-MetalBufferIndexAttr 0x13a83a808 <col:30, col:38>
-| |   `-IntegerLiteral 0x13a83a6e0 <col:37> 'int' 1
-| |-ParmVarDecl 0x13a8540e8 <line:19:5, col:23> col:23 buf2 'device float3 *'
-| | `-MetalBufferIndexAttr 0x13a854148 <col:30, col:38>
-| |   `-IntegerLiteral 0x13a854020 <col:37> 'int' 2
-| |-ParmVarDecl 0x13a854218 <line:20:5, col:23> col:23 buf3 'device float3 &'
-| | `-MetalBufferIndexAttr 0x13a854278 <col:30, col:38>
-| |   `-IntegerLiteral 0x13a854190 <col:37> 'int' 3
-| |-ParmVarDecl 0x13a854338 <line:21:5, col:25> col:25 buf5 'const constant MyStruct &'
-| | `-MetalBufferIndexAttr 0x13a854398 <col:32, col:40>
-| |   `-IntegerLiteral 0x13a8542c0 <col:39> 'int' 5
-| |-ParmVarDecl 0x13a8544f8 <line:22:5, col:25> col:25 buf4 'const constant MyStruct *'
-| | `-MetalBufferIndexAttr 0x13a854558 <col:32, col:40>
-| |   `-IntegerLiteral 0x13a854498 <col:39> 'int' 4
-| |-CompoundStmt 0x13a8548e8 <line:23:3, col:15>
-| | `-ReturnStmt 0x13a8548d0 <col:5, col:12>
-| |   `-ImplicitCastExpr 0x13a8548b8 <col:12> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
-| |     `-ImplicitCastExpr 0x13a8548a0 <col:12> 'float' <IntegralToFloating>
-| |       `-IntegerLiteral 0x13a854880 <col:12> 'int' 0
-| `-MetalVertexAttr 0x13a854828 <line:15:3>
+TranslationUnitDecl 0x1210302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x121074860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x121030f20 '__metal_intersection_query_t'
+|-ImportDecl 0x1210748f0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x121131f50 <line:3:1, col:17> col:17 Namespace 0x1210749f0 'metal'
+|-FunctionDecl 0x1211513b8 <line:15:1, line:24:15> line:15:8 test 'float4 (const constant float *, const constant float2 &, uint, device float3 *, device float3 &, texture2d<half>, const constant MyStruct &, const constant MyStruct *)'
+| |-ParmVarDecl 0x121132470 <line:16:5, col:30> col:30 buf0 'const constant float *'
+| | `-MetalBufferIndexAttr 0x1211324d0 <col:42, col:50>
+| |   `-IntegerLiteral 0x1211323f0 <col:49> 'int' 0
+| |-ParmVarDecl 0x1211327a8 <line:17:5, col:30> col:30 buf1 'const constant float2 &'
+| | `-MetalBufferIndexAttr 0x121132808 <col:42, col:50>
+| |   `-IntegerLiteral 0x1211326e0 <col:49> 'int' 1
+| |-ParmVarDecl 0x12114c000 <line:18:14, col:30> col:30 vertex_id 'uint':'unsigned int'
+| | `-MetalVertexIdAttr 0x12114c060 <col:42>
+| |-ParmVarDecl 0x12114c338 <line:19:5, col:30> col:30 buf2 'device float3 *'
+| | `-MetalBufferIndexAttr 0x12114c398 <col:42, col:50>
+| |   `-IntegerLiteral 0x12114c270 <col:49> 'int' 2
+| |-ParmVarDecl 0x12114c468 <line:20:5, col:30> col:30 buf3 'device float3 &'
+| | `-MetalBufferIndexAttr 0x12114c4c8 <col:42, col:50>
+| |   `-IntegerLiteral 0x12114c3e0 <col:49> 'int' 3
+| |-ParmVarDecl 0x121150dc8 <line:21:14, col:30> col:30 tex1 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
+| | `-MetalTextureIndexAttr 0x121150e28 <col:42, col:51>
+| |   `-IntegerLiteral 0x121150d78 <col:50> 'int' 1
+| |-ParmVarDecl 0x121150ee8 <line:22:5, col:30> col:30 buf5 'const constant MyStruct &'
+| | `-MetalBufferIndexAttr 0x121150f48 <col:42, col:50>
+| |   `-IntegerLiteral 0x121150e70 <col:49> 'int' 5
+| |-ParmVarDecl 0x1211510f8 <line:23:5, col:30> col:30 buf4 'const constant MyStruct *'
+| | `-MetalBufferIndexAttr 0x121151158 <col:42, col:50>
+| |   `-IntegerLiteral 0x1211510a0 <col:49> 'int' 4
+| |-CompoundStmt 0x121283140 <line:24:3, col:15>
+| | `-ReturnStmt 0x121283128 <col:5, col:12>
+| |   `-ImplicitCastExpr 0x121283110 <col:12> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x1212830f8 <col:12> 'float' <IntegralToFloating>
+| |       `-IntegerLiteral 0x1212830d8 <col:12> 'int' 0
+| `-MetalVertexAttr 0x121151498 <line:14:3>
 `-<undeserialized declarations>
 ",
                     [
@@ -462,6 +555,7 @@ TranslationUnitDecl 0x13a0302e8 <<invalid sloc>> <invalid sloc>
                                 ShaderFunctionBind::Buffer { index: 1, name: "buf1".to_owned(), data_type: "float2".to_owned(), bind_type: BindType::One, immutable: true },
                                 ShaderFunctionBind::Buffer { index: 2, name: "buf2".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::Many, immutable: false },
                                 ShaderFunctionBind::Buffer { index: 3, name: "buf3".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::One, immutable: false },
+                                ShaderFunctionBind::Texture { index: 1, name: "tex1".to_owned() },
                                 ShaderFunctionBind::Buffer { index: 5, name: "buf5".to_owned(), data_type: "MyStruct".to_owned(), bind_type: BindType::One, immutable: true },
                                 ShaderFunctionBind::Buffer { index: 4, name: "buf4".to_owned(), data_type: "MyStruct".to_owned(), bind_type: BindType::Many, immutable: true },
                             ],
@@ -474,7 +568,35 @@ TranslationUnitDecl 0x13a0302e8 <<invalid sloc>> <invalid sloc>
 
         #[test]
         fn test_bind_texture() {
-            todo!()
+            test(
+                b"\
+TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x126874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x126830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x1268748f0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x116860950 <line:3:1, col:17> col:17 Namespace 0x1268749f0 'metal'
+|-FunctionDecl 0x116879ef8 <line:6:1, line:8:15> line:6:8 test 'float4 (texture2d<half>)'
+| |-ParmVarDecl 0x116879d78 <line:7:5, col:21> col:21 tex0 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
+| | `-MetalTextureIndexAttr 0x116879dd8 <col:28, col:37>
+| |   `-IntegerLiteral 0x116879d28 <col:36> 'int' 0
+| |-CompoundStmt 0x116995340 <line:8:3, col:15>
+| | `-ReturnStmt 0x116995328 <col:5, col:12>
+| |   `-ImplicitCastExpr 0x116995310 <col:12> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x1169952f8 <col:12> 'float' <IntegralToFloating>
+| |       `-IntegerLiteral 0x1169952d8 <col:12> 'int' 0
+| `-MetalFragmentAttr 0x116879fa0 <line:5:3>
+`-<undeserialized declarations>
+",
+                [
+                    ShaderFunction {
+                        shader_type: ShaderType::Fragment,
+                        fn_name: "test".to_owned(),
+                        binds: vec![
+                            ShaderFunctionBind::Texture { index: 0, name: "tex0".to_owned() },
+                        ],
+                    }
+                ]
+            );
         }
 
         #[test]
