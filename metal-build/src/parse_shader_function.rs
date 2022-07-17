@@ -41,6 +41,28 @@ pub(crate) enum ShaderFunctionBind {
         name: String,
     },
 }
+impl ShaderFunctionBind {
+    pub const INVALID_INDEX: u8 = u8::MAX;
+    fn with_new_index(self, index: u8) -> Self {
+        use ShaderFunctionBind::*;
+        match self {
+            Buffer {
+                name,
+                data_type,
+                bind_type,
+                immutable,
+                ..
+            } => Buffer {
+                index,
+                name,
+                data_type,
+                bind_type,
+                immutable,
+            },
+            Texture { name, .. } => Texture { index, name },
+        }
+    }
+}
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -185,30 +207,11 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
     // Example: | `-
     let rx_fn_last_child = Regex::new(r"^\| `-").unwrap();
 
-    const BUFFER_ADDRESS_SPACE_CONSTANT: &'static str = "const constant ";
-    const BUFFER_ADDRESS_SPACE_DEVICE: &'static str = "device ";
-    const BUFFER_ADDRESS_SPACES: [&'static str; 2] =
-        [BUFFER_ADDRESS_SPACE_CONSTANT, BUFFER_ADDRESS_SPACE_DEVICE];
+    // Example: | `-
+    // Example: | | `-
+    // Example: | | |`-
+    let rx_last_child_of_any_level = Regex::new(r"^(\| )+`-").unwrap();
 
-    // Metal Shading Language Specification - "2.9 Textures"
-    // https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
-    const TEXTURE_DATA_TYPES: [&'static str; 15] = [
-        "texture1d",
-        "texture1d_array",
-        "texture2d",
-        "texture2d_array",
-        "texture3d",
-        "texturecube",
-        "texturecube_array",
-        "texture2d_ms",
-        "texture2d_ms_array",
-        "depth2d",
-        "depth2d_array",
-        "depthcube",
-        "depthcube_array",
-        "depth2d_ms",
-        "depth2d_ms_array",
-    ];
     enum FunctionChild {
         Last,
         NotLast,
@@ -226,16 +229,22 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
             }
         }
     }
+    struct ShaderFunctionParamInfo {
+        address_space: String,
+        name: String,
+        multiplicity: String,
+        data_type: String,
+    }
     enum State {
-        FindingFunctionDeclaration,
+        FindFunction,
         Function(ShaderFunction),
-        Param(ShaderFunction, ShaderFunctionBind, FunctionChild),
+        Param(ShaderFunction, ShaderFunctionParamInfo, FunctionChild),
         ParamBufferTexture(ShaderFunction, ShaderFunctionBind, FunctionChild),
     }
     let mut shader_fns = vec![];
     let mut parse_next_state = |state: State, l: String| {
         match state {
-            State::FindingFunctionDeclaration => {
+            State::FindFunction => {
                 if let Some(c) = rx_fn.captures(&l) {
                     return State::Function(ShaderFunction::new(c["fn_name"].to_owned()));
                 }
@@ -245,64 +254,16 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                     // TODO: Implement, maybe this is unecessary if we run shader compilation **before**.
                     // let invalid = &c["invalid"];
                     // TODO: Implement, this should determine immutability of buffers (render pipeline creation).
-                    let address_space = &c["address_space"];
-                    let name = &c["name"];
-                    let multiplicity = &c["multiplicity"];
-                    let data_type = &c["data_type"];
-
-                    // Unfortunately, Clang's AST "ParmVarDecl" line doesn't contain enough
-                    // information to know definitively whether the function param is a bindable
-                    // buffer or texture. We guess based on address_space and data type.
-
-                    // TODO: Consider defering choosing ShaderFunctionBind type.
-                    // - Instead of State::Param() holding a ShaderFunctionBind, maybe it should
-                    //   hold struct/tuple containing address_space, name, multiplicity, data_type
-                    // - The subsequent state `State::ParamBufferTexture` will know definitively
-                    if BUFFER_ADDRESS_SPACES.contains(&address_space) {
-                        return State::Param(
-                            fun,
-                            ShaderFunctionBind::Buffer {
-                                index: u8::MAX,
-                                name: name.to_owned(),
-                                data_type: data_type.to_owned(),
-                                bind_type: if multiplicity == " *" {
-                                    BindType::Many
-                                } else {
-                                    debug_assert_eq!(
-                                        multiplicity, " &",
-                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
-                                    );
-                                    BindType::One
-                                },
-                                immutable: if address_space == BUFFER_ADDRESS_SPACE_CONSTANT {
-                                    true
-                                } else {
-                                    debug_assert_eq!(
-                                        address_space, BUFFER_ADDRESS_SPACE_DEVICE,
-                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
-                                    );
-                                    false
-                                },
-                            },
-                            FunctionChild::parse(&c),
-                        );
-                    } else if TEXTURE_DATA_TYPES
-                        .iter()
-                        .find(|&&texture_type| data_type.starts_with(texture_type))
-                        .is_some()
-                    {
-                        return State::Param(
-                            fun,
-                            ShaderFunctionBind::Texture {
-                                index: u8::MAX,
-                                name: name.to_owned(),
-                            },
-                            FunctionChild::parse(&c),
-                        );
-                    };
-                    // Otherwise, assumed not to be bindable.
-                    // - Function Input Attributes (ex. vertex_id)
-                    // - Function is *not* a shader function
+                    return State::Param(
+                        fun,
+                        ShaderFunctionParamInfo {
+                            address_space: c["address_space"].to_owned(),
+                            name: c["name"].to_owned(),
+                            multiplicity: c["multiplicity"].to_owned(),
+                            data_type: c["data_type"].to_owned(),
+                        },
+                        FunctionChild::parse(&c),
+                    );
                 } else if let Some(c) = rx_fn_metal_shader_type_attr.captures(&l) {
                     let shader_type = &c["shader_type"];
                     match shader_type {
@@ -314,50 +275,75 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                     // Example: [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
                     if FunctionChild::is_last_child(&c) {
                         shader_fns.push(fun);
-                        return State::FindingFunctionDeclaration;
+                        return State::FindFunction;
                     }
                 } else if rx_fn_last_child.is_match(&l) {
-                    return State::FindingFunctionDeclaration;
+                    return State::FindFunction;
                 }
                 return State::Function(fun);
             }
-            State::Param(fun, bind, fun_last_child) => {
+            State::Param(fun, info, fun_last_child) => {
                 if let Some(c) = rx_fn_param_metal_buffer_texture_index_attr.captures(&l) {
                     debug_assert!(
                         FunctionChild::is_last_child(&c),
                         "Unsupported: Multiple function param attributes."
                     );
-                    return State::ParamBufferTexture(fun, bind, fun_last_child);
+                    let buffer_or_texture = &c["buffer_or_texture"];
+                    return State::ParamBufferTexture(
+                        fun,
+                        if buffer_or_texture == "Buffer" {
+                            ShaderFunctionBind::Buffer {
+                                index: ShaderFunctionBind::INVALID_INDEX,
+                                name: info.name,
+                                data_type: info.data_type,
+                                bind_type: if info.multiplicity == " *" {
+                                    BindType::Many
+                                } else {
+                                    debug_assert_eq!(
+                                        info.multiplicity, " &",
+                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
+                                    );
+                                    BindType::One
+                                },
+                                immutable: if info.address_space == "const constant " {
+                                    true
+                                } else {
+                                    debug_assert_eq!(
+                                        info.address_space, "device ",
+                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
+                                    );
+                                    false
+                                },
+                            }
+                        } else {
+                            debug_assert_eq!(buffer_or_texture, "Texture");
+                            ShaderFunctionBind::Texture {
+                                index: ShaderFunctionBind::INVALID_INDEX,
+                                name: info.name,
+                            }
+                        },
+                        fun_last_child,
+                    );
                 }
-                panic!("Unexpected function param information ({l})");
+                if rx_last_child_of_any_level.is_match(&l) {
+                    return match fun_last_child {
+                        FunctionChild::Last => State::FindFunction,
+                        FunctionChild::NotLast => State::Function(fun),
+                    };
+                }
+                return State::Param(fun, info, fun_last_child);
             }
             State::ParamBufferTexture(mut fun, bind, fun_last_child) => {
-                use ShaderFunctionBind::*;
                 if let Some(c) = rx_fn_param_metal_buffer_texture_index_attr_value.captures(&l) {
                     debug_assert!(FunctionChild::is_last_child(&c), "Unexpected function param buffer attribute information to follow (why is this not the last child?)");
                     let index = c["index"].parse::<u8>().expect(&format!(
                         "Failed to parse function param buffer attribute index value ({l})"
                     ));
-                    fun.binds.push(match bind {
-                        Buffer {
-                            name,
-                            data_type,
-                            bind_type,
-                            immutable,
-                            ..
-                        } => Buffer {
-                            index,
-                            name,
-                            data_type,
-                            bind_type,
-                            immutable,
-                        },
-                        Texture { name, .. } => Texture { index, name },
-                    });
+                    fun.binds.push(bind.with_new_index(index));
                     match fun_last_child {
                         FunctionChild::Last => {
                             shader_fns.push(fun);
-                            return State::FindingFunctionDeclaration;
+                            return State::FindFunction;
                         }
                         FunctionChild::NotLast => return State::Function(fun),
                     }
@@ -368,7 +354,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
         state
     };
 
-    let mut state = State::FindingFunctionDeclaration;
+    let mut state = State::FindFunction;
     let mut lines = BufReader::new(shader_file_reader).lines();
     while let Some(Ok(line)) = lines.next() {
         state = parse_next_state(state, line);
