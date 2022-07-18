@@ -78,14 +78,14 @@ pub struct {fn_name}_binds{rust_binds_generic_lifetime} {{"#
                     let rust_shader_bind_name = escape_name(&name);
                     w(&format!(
                         r#"
-    {rust_shader_bind_name}: Bind{bind_type}<'c, {index}, {data_type}>,"#
+    pub {rust_shader_bind_name}: Bind{bind_type}<'c, {index}, {data_type}>,"#
                     ));
                 }
                 Texture { name, index } => {
                     let rust_shader_bind_name = escape_name(&name);
                     w(&format!(
                         r#"
-    {rust_shader_bind_name}: BindTexture<'c, {index}>,"#
+    pub {rust_shader_bind_name}: BindTexture<'c, {index}>,"#
                     ));
                 }
             }
@@ -98,7 +98,7 @@ pub struct {fn_name}_binds{rust_binds_generic_lifetime} {{"#
 
 impl{rust_binds_generic_lifetime} {shader_type_titlecase}ShaderBinds for {fn_name}_binds{rust_binds_generic_lifetime} {{
     #[inline]
-    fn encode_{shader_type_lowercase}_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{"#
+    fn encode_{shader_type_lowercase}_binds(self, encoder: &RenderCommandEncoderRef) {{"#
         ));
         // TODO: Consider to code generation trait to make this more readable...
         //         binds.each_gen_encode(|name| {
@@ -124,7 +124,7 @@ impl{rust_binds_generic_lifetime} {shader_type_titlecase}ShaderBinds for {fn_nam
 }}
 
 #[allow(non_camel_case_types)]
-struct {rust_shader_name};
+pub struct {rust_shader_name};
 impl {shader_type_titlecase}Shader for {rust_shader_name} {{
     type Binds<'c> = {fn_name}_binds{rust_binds_generic_lifetime};
 
@@ -154,18 +154,18 @@ mod test {
 
 #[allow(non_camel_case_types)]
 pub struct test_vertex_binds<'c> {{
-    buf0: BindMany<'c, 0, float>,
-    buf1: BindOne<'c, 1, float2>,
-    buf2: BindMany<'c, 2, float3>,
-    buf3: BindOne<'c, 3, float3>,
-    tex1: BindTexture<'c, 1>,
-    buf5: BindOne<'c, 5, TestStruct>,
-    buf4: BindMany<'c, 4, TestStruct>,
+    pub buf0: BindMany<'c, 0, float>,
+    pub buf1: BindOne<'c, 1, float2>,
+    pub buf2: BindMany<'c, 2, float3>,
+    pub buf3: BindOne<'c, 3, float3>,
+    pub tex1: BindTexture<'c, 1>,
+    pub buf5: BindOne<'c, 5, TestStruct>,
+    pub buf4: BindMany<'c, 4, TestStruct>,
 }}
 
 impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
     #[inline]
-    fn encode_vertex_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
+    fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.buf0.encode_for_vertex(encoder);
         self.buf1.encode_for_vertex(encoder);
         self.buf2.encode_for_vertex(encoder);
@@ -177,7 +177,7 @@ impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
 }}
 
 #[allow(non_camel_case_types)]
-struct test_vertex;
+pub struct test_vertex;
 impl VertexShader for test_vertex {{
     type Binds<'c> = test_vertex_binds<'c>;
 
@@ -187,18 +187,18 @@ impl VertexShader for test_vertex {{
 
 #[allow(non_camel_case_types)]
 pub struct test_fragment_binds<'c> {{
-    buf0: BindMany<'c, 0, float>,
-    buf1: BindOne<'c, 1, float2>,
-    buf2: BindMany<'c, 2, float3>,
-    buf3: BindOne<'c, 3, float3>,
-    tex1: BindTexture<'c, 1>,
-    buf5: BindOne<'c, 5, TestStruct>,
-    buf4: BindMany<'c, 4, TestStruct>,
+    pub buf0: BindMany<'c, 0, float>,
+    pub buf1: BindOne<'c, 1, float2>,
+    pub buf2: BindMany<'c, 2, float3>,
+    pub buf3: BindOne<'c, 3, float3>,
+    pub tex1: BindTexture<'c, 1>,
+    pub buf5: BindOne<'c, 5, TestStruct>,
+    pub buf4: BindMany<'c, 4, TestStruct>,
 }}
 
 impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
     #[inline]
-    fn encode_fragment_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
+    fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.buf0.encode_for_fragment(encoder);
         self.buf1.encode_for_fragment(encoder);
         self.buf2.encode_for_fragment(encoder);
@@ -210,7 +210,7 @@ impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
 }}
 
 #[allow(non_camel_case_types)]
-struct test_fragment;
+pub struct test_fragment;
 impl FragmentShader for test_fragment {{
     type Binds<'c> = test_fragment_binds<'c>;
 
@@ -348,18 +348,18 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'c> {{
-    {rust_shader_bind_name}: Bind{bind_type}<'c, {bind_index}, {data_type}>,
+    pub {rust_shader_bind_name}: Bind{bind_type}<'c, {bind_index}, {data_type}>,
 }}
 
 impl<'c> VertexShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
-    fn encode_vertex_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
+    fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.{rust_shader_bind_name}.encode_for_vertex(encoder);
     }}
 }}
 
 #[allow(non_camel_case_types)]
-struct {rust_shader_name};
+pub struct {rust_shader_name};
 impl VertexShader for {rust_shader_name} {{
     type Binds<'c> = {fn_name}_binds<'c>;
 
@@ -403,18 +403,18 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'c> {{
-    {bind_name}: BindTexture<'c, {bind_index}>,
+    pub {bind_name}: BindTexture<'c, {bind_index}>,
 }}
 
 impl<'c> FragmentShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
-    fn encode_fragment_binds<'a, 'b>(&'a self, encoder: &'b RenderCommandEncoderRef) {{
+    fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.{bind_name}.encode_for_fragment(encoder);
     }}
 }}
 
 #[allow(non_camel_case_types)]
-struct {fn_name};
+pub struct {fn_name};
 impl FragmentShader for {fn_name} {{
     type Binds<'c> = {fn_name}_binds<'c>;
 

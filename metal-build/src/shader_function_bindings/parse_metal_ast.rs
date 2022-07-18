@@ -1,9 +1,7 @@
-use super::generate_metal_ast::generate_metal_ast;
 use regex::{Captures, Regex};
 use std::{
     fmt::Display,
     io::{BufRead, BufReader, Read},
-    path::Path,
 };
 
 #[derive(PartialEq, Eq)]
@@ -101,12 +99,6 @@ impl ShaderFunction {
             shader_type: ShaderType::Vertex,
         }
     }
-}
-
-pub fn parse_shader_functions<P: AsRef<Path>>(shader_file: P) -> Vec<ShaderFunction> {
-    generate_metal_ast(shader_file, |stdout| {
-        parse_shader_functions_from_reader(stdout)
-    })
 }
 
 /*
@@ -684,6 +676,7 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
 
     mod test_parse_shader_functions {
         use super::*;
+        use crate::shader_function_bindings::generate_metal_ast::generate_metal_ast;
 
         #[test]
         fn test() {
@@ -800,7 +793,9 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                 .canonicalize()
                 .expect("Failed to canonicalize path to test_shader_src/deps directory");
             let shader_file = shader_dir.join("shaders.metal");
-            let actual = parse_shader_functions(shader_file);
+            let actual = generate_metal_ast(shader_file, |stdout| {
+                parse_shader_functions_from_reader(stdout)
+            });
 
             assert_eq!(actual, expected);
         }
