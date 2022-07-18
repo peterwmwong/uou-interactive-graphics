@@ -20,6 +20,7 @@ mod objc_helpers;
 pub mod render_pipeline;
 mod renderer;
 mod time;
+pub mod typed_buffer;
 
 pub use application::launch_application;
 pub use metal;

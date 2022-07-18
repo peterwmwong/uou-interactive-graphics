@@ -13,28 +13,61 @@ use tobj::LoadOptions;
 
 pub const NO_MATERIALS_ID: u64 = u64::MAX;
 
+#[derive(Copy, Clone)]
 pub struct NoMaterial {}
 #[allow(non_snake_case)]
 pub fn NO_MATERIALS_ENCODER(_: &mut NoMaterial, _: MaterialToEncode) {}
 
+// trait Iterator<G: Sized, M: Sized> {
+//     type Item<'a>
+//     where
+//         G: 'a,
+//         M: 'a;
+//     fn next<'a>(&mut self) -> Option<Self::Item<'a>>;
+// }
+// struct DrawIteratorItem<'a, G: Sized, M: Sized> {
+//     geometry: &'a TypedBuffer<G>,
+//     material: &'a TypedBuffer<M>,
+// }
+// struct DrawIterator<'a, G: Sized, M: Sized> {
+//     geometry: &'a TypedBuffer<G>,
+//     material: &'a TypedBuffer<M>,
+// }
+// impl<'a, G: Sized, M: Sized> Iterator<G, M> for DrawIterator<'a, G, M> {
+//     type Item<'b> = DrawIteratorItem<'b, G, M>
+//     where
+//         G: 'b,
+//         M: 'b;
+//     fn next<'c>(&mut self) -> Option<Self::Item<'c>> {
+//         Some(DrawIteratorItem {
+//             geometry: self.geometry,
+//             material: self.material,
+//         })
+//     }
+// }
+
 pub struct Model<
     const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
     const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64,
+    G: Sized + Copy + Clone + 'static,
+    M: Sized + Copy + Clone + 'static,
 > {
     heap: Heap,
     draws: Vec<DrawInfo>,
     pub geometry_max_bounds: MaxBounds,
-    geometry_buffers: GeometryBuffers,
-    materials: Option<MaterialResults>,
+    geometry_buffers: GeometryBuffers<G>,
+    materials: Option<MaterialResults<M>>,
 }
 
-impl<const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64, const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>
-    Model<VERTEX_GEOMETRY_ARG_BUFFER_ID, FRAGMENT_MATERIAL_ARG_BUFFER_ID>
+impl<
+        const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
+        const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64,
+        G: Sized + Copy + Clone + 'static,
+        M: Sized + Copy + Clone + 'static,
+    > Model<VERTEX_GEOMETRY_ARG_BUFFER_ID, FRAGMENT_MATERIAL_ARG_BUFFER_ID, G, M>
 {
     pub fn from_file<
         T: AsRef<Path>,
-        G: Sized + 'static,
-        M: Sized + 'static,
         EG: FnMut(&mut G, GeometryToEncode),
         EM: FnMut(&mut M, MaterialToEncode),
     >(
@@ -138,16 +171,18 @@ Only one of these must be true:
         for d in &self.draws {
             encoder.push_debug_group(&d.debug_group_name);
 
-            let material_arg_buffer_offset = d
-                .material_id
-                .zip(materials)
-                .map(|(mid, m)| (mid * m.argument_byte_size, &m.arguments));
+            let material_arg_buffer_offset = d.material_id.zip(materials).map(|(mid, m)| {
+                (
+                    mid * m.arguments_buffer.element_size(),
+                    &m.arguments_buffer.buffer,
+                )
+            });
 
             // For the first object, encode the vertex/fragment buffer.
             if geometry_arg_buffer_offset == 0 {
                 encoder.set_vertex_buffer(
                     VERTEX_GEOMETRY_ARG_BUFFER_ID,
-                    Some(self.geometry_buffers.arguments.as_ref()),
+                    Some(&self.geometry_buffers.arguments.buffer),
                     0,
                 );
                 // TODO: Change condition to FRAGMENT_MATERIAL_ARG_BUFFER_ID != NO_MATERIALS
@@ -175,7 +210,7 @@ Only one of these must be true:
                     );
                 }
             }
-            geometry_arg_buffer_offset += self.geometry_buffers.argument_byte_size;
+            geometry_arg_buffer_offset += self.geometry_buffers.arguments.element_size();
 
             encoder.draw_primitives(primitive_type, 0, d.num_indices as _);
             encoder.pop_debug_group();

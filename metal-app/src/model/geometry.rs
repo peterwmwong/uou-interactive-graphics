@@ -1,8 +1,11 @@
 use crate::{
-    align_size, allocate_new_buffer_with_heap, byte_size_of_slice, copy_into_buffer,
-    get_gpu_addresses, metal::*, MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
+    get_gpu_addresses,
+    metal::*,
+    rolling_copy,
+    typed_buffer::{TypedBuffer, TypedBufferSizer},
+    MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
-use std::{marker::PhantomData, simd::f32x4};
+use std::{marker::PhantomData, ops::Deref, simd::f32x4};
 
 pub struct MaxBounds {
     pub center: f32x4,
@@ -22,39 +25,38 @@ pub struct GeometryToEncode {
     pub tx_coords_buffer: MetalGPUAddress,
 }
 
-pub(crate) struct GeometryBuffers {
-    pub(crate) arguments: Buffer,
-    pub(crate) argument_byte_size: usize,
+pub(crate) struct GeometryBuffers<T: Sized + Copy + Clone> {
+    pub(crate) arguments: TypedBuffer<T>,
     // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
-    _indices: Buffer,
-    _positions: Buffer,
-    _normals: Buffer,
-    _tx_coords: Buffer,
+    _indices: TypedBuffer<u32>,
+    _positions: TypedBuffer<f32>,
+    _normals: TypedBuffer<f32>,
+    _tx_coords: TypedBuffer<f32>,
 }
 
-pub(crate) struct Geometry<'a, T: Sized> {
-    arguments_byte_size: usize,
+pub(crate) struct Geometry<'a, T: Sized + Copy + Clone> {
     objects: &'a [tobj::Model],
-    indices_buf_length: usize,
-    positions_buf_length: usize,
-    normals_buf_length: usize,
-    tx_coords_buf_length: usize,
+    arguments_sizer: TypedBufferSizer<T>,
+    indices_sizer: TypedBufferSizer<u32>,
+    positions_sizer: TypedBufferSizer<f32>,
+    normals_sizer: TypedBufferSizer<f32>,
+    tx_coords_sizer: TypedBufferSizer<f32>,
     heap_size: usize,
     pub(crate) max_bounds: MaxBounds,
     pub(crate) draws: Vec<DrawInfo>,
     _p: PhantomData<T>,
 }
 
-impl<'a, T: Sized> Geometry<'a, T> {
+impl<'a, T: Sized + Copy + Clone> Geometry<'a, T> {
     pub(crate) fn new(objects: &'a [tobj::Model], device: &Device) -> Self {
         let mut heap_size = 0;
 
         // Create a shared buffer (shared between all objects).
         // Calculate the size of each buffer...
-        let mut indices_buf_length = 0;
-        let mut positions_buf_length = 0;
-        let mut normals_buf_length = 0;
-        let mut tx_coords_buf_length = 0;
+        let mut indices_sizer = TypedBufferSizer::new(0, DEFAULT_RESOURCE_OPTIONS);
+        let mut positions_sizer = TypedBufferSizer::new(0, DEFAULT_RESOURCE_OPTIONS);
+        let mut normals_sizer = TypedBufferSizer::new(0, DEFAULT_RESOURCE_OPTIONS);
+        let mut tx_coords_sizer = TypedBufferSizer::new(0, DEFAULT_RESOURCE_OPTIONS);
         let mut mins = f32x4::splat(f32::MAX);
         let mut maxs = f32x4::splat(f32::MIN);
         let mut draws = Vec::<DrawInfo>::with_capacity(objects.len());
@@ -72,10 +74,10 @@ impl<'a, T: Sized> Geometry<'a, T> {
                 (mesh.texcoords.len() / 2) == num_positions,
                 "Unexpected number of positions, normals, or texcoords. Expected each to be the number of indices"
             );
-            indices_buf_length += byte_size_of_slice(&mesh.indices);
-            positions_buf_length += byte_size_of_slice(&mesh.positions);
-            normals_buf_length += byte_size_of_slice(&mesh.normals);
-            tx_coords_buf_length += byte_size_of_slice(&mesh.texcoords);
+            indices_sizer.num_of_elements += mesh.indices.len();
+            positions_sizer.num_of_elements += mesh.positions.len();
+            normals_sizer.num_of_elements += mesh.normals.len();
+            tx_coords_sizer.num_of_elements += mesh.texcoords.len();
             draws.push(DrawInfo {
                 debug_group_name: name.to_owned(),
                 num_indices: mesh.indices.len() as _,
@@ -87,34 +89,21 @@ impl<'a, T: Sized> Geometry<'a, T> {
                 maxs = maxs.max(input);
             }
         }
-        for buf_length in [
-            indices_buf_length,
-            positions_buf_length,
-            normals_buf_length,
-            tx_coords_buf_length,
-        ] {
-            /*
-            This may seem like a mistake to use the aligned size (size + padding) for the last buffer (No
-            subsequent buffer needs padding to be aligned), but this padding actually represents the padding
-            needed for the **first** buffer (right after the last texture).
-            */
-            heap_size += align_size(
-                device.heap_buffer_size_and_align(buf_length as _, DEFAULT_RESOURCE_OPTIONS),
-            );
-        }
-        let arguments_byte_size = std::mem::size_of::<T>() * objects.len();
-        heap_size += align_size(
-            device.heap_buffer_size_and_align(arguments_byte_size as _, DEFAULT_RESOURCE_OPTIONS),
-        );
+        heap_size += indices_sizer.heap_aligned_byte_size(device);
+        heap_size += positions_sizer.heap_aligned_byte_size(device);
+        heap_size += normals_sizer.heap_aligned_byte_size(device);
+        heap_size += tx_coords_sizer.heap_aligned_byte_size(device);
+        let arguments_sizer = TypedBufferSizer::<T>::new(objects.len(), DEFAULT_RESOURCE_OPTIONS);
+        heap_size += arguments_sizer.heap_aligned_byte_size(device);
         let size = maxs - mins;
         let center = mins + (size * f32x4::splat(0.5));
         Self {
-            arguments_byte_size,
+            arguments_sizer,
             heap_size,
-            indices_buf_length,
-            positions_buf_length,
-            normals_buf_length,
-            tx_coords_buf_length,
+            indices_sizer,
+            positions_sizer,
+            normals_sizer,
+            tx_coords_sizer,
             objects,
             draws,
             max_bounds: MaxBounds { center, size },
@@ -131,48 +120,45 @@ impl<'a, T: Sized> Geometry<'a, T> {
         &mut self,
         heap: &Heap,
         mut encode_arg: impl FnMut(&mut T, GeometryToEncode),
-    ) -> GeometryBuffers {
-        let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
-            heap,
-            "Geometry Arguments",
-            self.arguments_byte_size as _,
-        );
-
-        // Allocate buffers...
-        let mut indices_offset: usize = 0;
-        let (indices_ptr, indices_buf) =
-            allocate_new_buffer_with_heap::<u32>(heap, "indices", self.indices_buf_length as _);
-        let mut positions_offset: usize = 0;
-        let (positions_ptr, positions_buf) =
-            allocate_new_buffer_with_heap::<f32>(heap, "positions", self.positions_buf_length as _);
-        let mut normals_offset: usize = 0;
-        let (normals_ptr, normals_buf) =
-            allocate_new_buffer_with_heap::<f32>(heap, "normals", self.normals_buf_length as _);
-        let mut tx_coords_offset: usize = 0;
-        let (tx_coords_ptr, tx_coords_buf) =
-            allocate_new_buffer_with_heap::<f32>(heap, "tx_coords", self.tx_coords_buf_length as _);
-        let [indices_gpu_address, positions_gpu_address, normals_gpu_address, tx_coords_gpu_address] =
-            get_gpu_addresses([&indices_buf, &positions_buf, &normals_buf, &tx_coords_buf]);
-
-        for tobj::Model { mesh, .. } in self.objects.into_iter() {
+    ) -> GeometryBuffers<T> {
+        let arguments_buffer = self.arguments_sizer.allocate("Geometry", heap.deref());
+        let arguments = arguments_buffer.get_mut();
+        let indices_buf = self.indices_sizer.allocate("indices", heap.deref());
+        let mut indices = indices_buf.get_mut();
+        let positions_buf = self.positions_sizer.allocate("positions", heap.deref());
+        let mut positions = positions_buf.get_mut();
+        let normals_buf = self.normals_sizer.allocate("normals", heap.deref());
+        let mut normals = normals_buf.get_mut();
+        let tx_coords_buf = self.tx_coords_sizer.allocate("tx_coords", heap.deref());
+        let mut tx_coords = tx_coords_buf.get_mut();
+        let [mut indices_gpu_address, mut positions_gpu_address, mut normals_gpu_address, mut tx_coords_gpu_address] =
+            get_gpu_addresses([
+                &indices_buf.buffer,
+                &positions_buf.buffer,
+                &normals_buf.buffer,
+                &tx_coords_buf.buffer,
+            ]);
+        for (i, tobj::Model { mesh, .. }) in self.objects.into_iter().enumerate() {
             encode_arg(
-                unsafe { &mut *arguments_ptr },
+                &mut arguments[i],
                 GeometryToEncode {
-                    indices_buffer: indices_gpu_address + (indices_offset as MetalGPUAddress),
-                    positions_buffer: positions_gpu_address + (positions_offset as MetalGPUAddress),
-                    normals_buffer: normals_gpu_address + (normals_offset as MetalGPUAddress),
-                    tx_coords_buffer: tx_coords_gpu_address + (tx_coords_offset as MetalGPUAddress),
+                    indices_buffer: indices_gpu_address,
+                    positions_buffer: positions_gpu_address,
+                    normals_buffer: normals_gpu_address,
+                    tx_coords_buffer: tx_coords_gpu_address,
                 },
             );
-            indices_offset = copy_into_buffer(&mesh.indices, indices_ptr, indices_offset);
-            normals_offset = copy_into_buffer(&mesh.normals, normals_ptr, normals_offset);
-            tx_coords_offset = copy_into_buffer(&mesh.texcoords, tx_coords_ptr, tx_coords_offset);
-            positions_offset = copy_into_buffer(&mesh.positions, positions_ptr, positions_offset);
-            unsafe { arguments_ptr = arguments_ptr.add(1) };
+            indices = rolling_copy(&mesh.indices, indices);
+            indices_gpu_address += std::mem::size_of_val(&mesh.indices[..]) as MetalGPUAddress;
+            normals = rolling_copy(&mesh.normals, normals);
+            normals_gpu_address += std::mem::size_of_val(&mesh.normals[..]) as MetalGPUAddress;
+            tx_coords = rolling_copy(&mesh.texcoords, tx_coords);
+            tx_coords_gpu_address += std::mem::size_of_val(&mesh.texcoords[..]) as MetalGPUAddress;
+            positions = rolling_copy(&mesh.positions, positions);
+            positions_gpu_address += std::mem::size_of_val(&mesh.positions[..]) as MetalGPUAddress;
         }
         GeometryBuffers {
-            arguments,
-            argument_byte_size: std::mem::size_of::<T>() as _,
+            arguments: arguments_buffer,
             _indices: indices_buf,
             _positions: positions_buf,
             _normals: normals_buf,

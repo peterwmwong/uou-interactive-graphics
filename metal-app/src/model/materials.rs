@@ -1,8 +1,11 @@
 use crate::{
-    align_size, allocate_new_buffer_with_heap, metal::*, objc_sendmsg_with_cached_sel,
+    align_size,
+    metal::*,
+    objc_sendmsg_with_cached_sel,
+    typed_buffer::{TypedBuffer, TypedBufferSizer},
     MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
-use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
+use std::{collections::HashMap, marker::PhantomData, ops::Deref, path::PathBuf};
 
 type RGB32 = [f32; 3];
 
@@ -13,9 +16,8 @@ pub struct MaterialToEncode {
     pub specular_shineness: f32,
 }
 
-pub(crate) struct MaterialResults {
-    pub(crate) arguments: Buffer,
-    pub(crate) argument_byte_size: usize,
+pub(crate) struct MaterialResults<T: Sized + Copy + Clone> {
+    pub(crate) arguments_buffer: TypedBuffer<T>,
     // Needs to be owned and not dropped (causing deallocation from heap).
     _textures: Vec<Texture>,
 }
@@ -157,8 +159,8 @@ struct Material<'a> {
     specular_shineness: f32,
 }
 
-pub(crate) struct Materials<'a, T: Sized> {
-    arguments_byte_size: usize,
+pub(crate) struct Materials<'a, T: Sized + Copy + Clone> {
+    arguments_sizer: TypedBufferSizer<T>,
     heap_size: usize,
     materials: Vec<Material<'a>>,
     max_load_texture_buffer_size: usize,
@@ -166,7 +168,7 @@ pub(crate) struct Materials<'a, T: Sized> {
     _p: PhantomData<T>,
 }
 
-impl<'a, T: Sized> Materials<'a, T> {
+impl<'a, T: Sized + Copy + Clone> Materials<'a, T> {
     pub(crate) fn new<'b>(
         device: &Device,
         material_file_dir: &'b PathBuf,
@@ -201,12 +203,10 @@ impl<'a, T: Sized> Materials<'a, T> {
             })
             .collect();
 
-        let arguments_byte_size = std::mem::size_of::<T>() * materials.len();
-        heap_size += align_size(
-            device.heap_buffer_size_and_align(arguments_byte_size as _, DEFAULT_RESOURCE_OPTIONS),
-        );
+        let arguments_sizer = TypedBufferSizer::new(materials.len(), DEFAULT_RESOURCE_OPTIONS);
+        heap_size += arguments_sizer.heap_aligned_byte_size(device);
         Self {
-            arguments_byte_size,
+            arguments_sizer,
             heap_size,
             materials,
             max_load_texture_buffer_size,
@@ -224,19 +224,16 @@ impl<'a, T: Sized> Materials<'a, T> {
         &mut self,
         heap: &Heap,
         mut encode_arg: impl FnMut(&mut T, MaterialToEncode),
-    ) -> MaterialResults {
-        let (mut arguments_ptr, arguments) = allocate_new_buffer_with_heap::<T>(
-            heap,
-            "Materials Arguments",
-            self.arguments_byte_size,
-        );
+    ) -> MaterialResults<T> {
+        let arguments_buffer = self.arguments_sizer.allocate("Materials", heap.deref());
+        let arguments = arguments_buffer.get_mut();
 
         let gpu_handle_sel = sel!(gpuHandle);
         let mut texture_cache: HashMap<MaterialSourceKey<'a>, Texture> =
             HashMap::with_capacity(self.sources.len());
         let mut read_png_buffer: Vec<u8> = Vec::with_capacity(self.max_load_texture_buffer_size);
         unsafe { read_png_buffer.set_len(self.max_load_texture_buffer_size) };
-        for mat in &self.materials {
+        for (i, mat) in self.materials.iter().enumerate() {
             let [ambient_texture, diffuse_texture, specular_texture] =
                 [mat.ambient, mat.diffuse, mat.specular].map(|source_key| {
                     let texture: &TextureRef =
@@ -249,7 +246,7 @@ impl<'a, T: Sized> Materials<'a, T> {
                     unsafe { objc_sendmsg_with_cached_sel(texture, gpu_handle_sel) }
                 });
             encode_arg(
-                unsafe { &mut *arguments_ptr },
+                &mut arguments[i],
                 MaterialToEncode {
                     ambient_texture,
                     diffuse_texture,
@@ -257,12 +254,10 @@ impl<'a, T: Sized> Materials<'a, T> {
                     specular_shineness: mat.specular_shineness,
                 },
             );
-            unsafe { arguments_ptr = arguments_ptr.add(1) };
         }
         let textures = texture_cache.into_iter().map(|(_, tx)| tx).collect();
         MaterialResults {
-            arguments,
-            argument_byte_size: std::mem::size_of::<T>(),
+            arguments_buffer,
             _textures: textures,
         }
     }

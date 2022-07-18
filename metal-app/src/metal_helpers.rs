@@ -15,13 +15,11 @@ pub const fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usi
     (size + (align - (size & (align - 1)))) as _
 }
 
-#[inline(always)]
-pub const fn copy_into_buffer<T: Sized>(src: &[T], dst: *mut T, byte_offset: usize) -> usize {
-    unsafe {
-        let count = src.len();
-        std::ptr::copy_nonoverlapping(src.as_ptr(), dst.byte_add(byte_offset), count);
-        byte_offset + std::mem::size_of::<T>() * count
-    }
+#[inline]
+pub fn rolling_copy<'a, 'b, T: Sized + Clone>(src: &'a [T], dest: &'b mut [T]) -> &'b mut [T] {
+    let (l, r) = dest.split_at_mut(src.len());
+    l.clone_from_slice(src);
+    r
 }
 
 #[inline]
@@ -35,56 +33,6 @@ pub fn debug_assert_buffers_equal(a: &Buffer, b: &Buffer) {
             unsafe { std::slice::from_raw_parts(b.contents() as *const u8, b.length() as _) };
         assert_eq!(a_contents, b_contents, "Buffer contents are not equal");
     }
-}
-
-#[inline(always)]
-pub const fn byte_size_of_slice<T: Sized>(slice: &[T]) -> usize {
-    slice.len() * std::mem::size_of::<T>()
-}
-
-#[inline]
-pub fn allocate_new_buffer_with_heap<T: Sized>(
-    heap: &Heap,
-    label: &'static str,
-    bytes: usize,
-) -> (*mut T, Buffer) {
-    debug_assert_eq!(
-        0,
-        bytes % std::mem::size_of::<T>(),
-        "Attempting to heap allocate by byte size that does not match the size of the type"
-    );
-    let buf = heap
-        .new_buffer(bytes as u64, DEFAULT_RESOURCE_OPTIONS)
-        .expect(&format!("Failed to allocate buffer for {label}"));
-    buf.set_label(label);
-    (buf.contents() as *mut T, buf)
-}
-
-#[inline]
-pub fn allocate_new_buffer<'a, T: Sized>(
-    device: &DeviceRef,
-    label: &'static str,
-    num_elements: usize,
-) -> (&'a mut T, Buffer) {
-    let buf = device.new_buffer(
-        (std::mem::size_of::<T>() * num_elements) as u64,
-        DEFAULT_RESOURCE_OPTIONS,
-    );
-    buf.set_label(label);
-    (unsafe { &mut *(buf.contents() as *mut T) }, buf)
-}
-
-#[inline]
-pub fn allocate_new_buffer_with_data<T: Sized>(
-    device: &DeviceRef,
-    label: &'static str,
-    data: &[T],
-) -> Buffer {
-    let (contents, buffer) = allocate_new_buffer::<T>(&device, label, data.len());
-    unsafe {
-        std::ptr::copy_nonoverlapping(data.as_ptr(), contents, data.len());
-    }
-    buffer
 }
 
 #[inline]
