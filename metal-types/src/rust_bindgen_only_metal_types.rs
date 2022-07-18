@@ -285,3 +285,17 @@ fn bindgen_test_layout_float4x4() {
     }
     test_field_columns();
 }
+
+#[test]
+fn test_metal_types_derive_copy() {
+    use std::marker::PhantomData;
+    struct HasCopyClone<T: Sized + Copy + Clone>(PhantomData<T>);
+    HasCopyClone(PhantomData::<float2>);
+    HasCopyClone(PhantomData::<float3x3>);
+    HasCopyClone(PhantomData::<float4>);
+    HasCopyClone(PhantomData::<float4x4>);
+    HasCopyClone(PhantomData::<packed_float2>);
+    HasCopyClone(PhantomData::<packed_float3>);
+    HasCopyClone(PhantomData::<packed_float4>);
+    HasCopyClone(PhantomData::<ushort2>);
+}

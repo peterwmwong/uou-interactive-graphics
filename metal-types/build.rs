@@ -1,5 +1,5 @@
 use bindgen::{callbacks::ParseCallbacks, CargoCallbacks};
-use std::{env, fmt::Debug, path::Path};
+use std::{env, fmt::Debug, fs, io::Write, path::Path};
 
 const METAL_BUILD_MANIFEST_DIR: &'static str = env!("CARGO_MANIFEST_DIR");
 
@@ -44,6 +44,13 @@ pub fn main() {
         src_dir.join("rust_bindgen_only_metal_types_h_hash"),
         &[&header],
         || {
+            let mut rust_bindgen_only_metal_types_file = fs::File::options()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&src_dir.join("rust_bindgen_only_metal_types.rs"))
+            .expect("Could not create rust_bindgen_only_metal_types.rs containing Rust bindings for types in src/rust_bindgen_only_metal_types.h");
+
             bindgen::Builder::default()
                 .header(header.to_string_lossy())
                 .clang_arg("-xc++")
@@ -52,18 +59,42 @@ pub fn main() {
                     non_exhaustive: false,
                 })
                 .derive_eq(true)
+                .derive_copy(true)
                 .derive_debug(false)
                 .no_debug("*")
                 .parse_callbacks(Box::new(CollectItems::new()))
                 .generate()
                 .expect("Unable to generate bindings")
-                .write_to_file(src_dir.join("rust_bindgen_only_metal_types.rs"))
+                .write(Box::new(&rust_bindgen_only_metal_types_file))
                 .expect("Failed to generate rust_bindgen_only_metal_types.rs");
+            unsafe {
+                ITEMS.sort();
+            }
+
+            // Generate tests to verify all Metal Types derive Copy/Clone.
+            let mut w =
+                |s: &str| {
+                    rust_bindgen_only_metal_types_file.write_all(s.as_bytes()).expect(
+                    "Failed to generate tests verifying all generated Rust types implement Copy",
+                );
+                };
+            w("
+#[test]
+fn test_metal_types_derive_copy() {
+    use std::marker::PhantomData;
+    struct HasCopyClone<T: Sized + Copy + Clone>(PhantomData<T>);");
+            for item in unsafe { &ITEMS } {
+                w(&format!(
+                    r"
+    HasCopyClone(PhantomData::<{item}>);"
+                ));
+            }
+            w("
+}");
             std::fs::write(
     src_dir
         .join("rust_bindgen_only_metal_types_list.rs"),
     unsafe {
-        ITEMS.sort();
         let joined_items = ITEMS
             .iter()
             .map(|a| format!("\t\"{a}\",\n"))

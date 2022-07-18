@@ -1,6 +1,10 @@
 #![feature(assert_matches)]
 mod shader_function_bindings;
 
+use bindgen::{
+    callbacks::{DeriveTrait, ImplementsTrait, ParseCallbacks},
+    CargoCallbacks,
+};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -15,6 +19,28 @@ pub fn build() {
         .expect("Failed to canonicalize path to shaders.metal");
     compile_shaders(&metal_shaders_file);
     generate_rust_shader_bindings(&metal_shaders_file);
+}
+
+#[derive(Debug)]
+struct BlocklistedTypeImplementsTrait(CargoCallbacks);
+
+impl ParseCallbacks for BlocklistedTypeImplementsTrait {
+    fn include_file(&self, filename: &str) {
+        self.0.include_file(filename)
+    }
+    fn blocklisted_type_implements_trait(
+        &self,
+        name: &str,
+        derive_trait: DeriveTrait,
+    ) -> Option<ImplementsTrait> {
+        // ASSUMPTION: All metal types are copy-able. metal-types ensures this by generating a
+        // type test verifying types implement Copy and Clone traits.
+        if derive_trait == DeriveTrait::Copy && metal_types::TYPES.contains(&name) {
+            Some(ImplementsTrait::Yes)
+        } else {
+            Some(ImplementsTrait::No)
+        }
+    }
 }
 
 fn generate_rust_shader_bindings<P: AsRef<Path>>(metal_shaders_file: P) {
@@ -67,12 +93,13 @@ use metal_app::{metal::*, metal_types::*, render_pipeline::*};
                 .clang_arg("-xc++")
                 .clang_arg("-std=c++17")
                 .derive_eq(true)
+                .derive_copy(true)
                 .default_enum_style(bindgen::EnumVariation::Rust {
                     non_exhaustive: false,
                 })
                 .derive_debug(false)
                 .no_debug("*")
-                .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+                .parse_callbacks(Box::new(BlocklistedTypeImplementsTrait(CargoCallbacks)));
             for block_item in metal_types::TYPES {
                 builder = builder.blocklist_type(block_item);
             }
