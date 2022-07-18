@@ -1,10 +1,10 @@
 use crate::typed_buffer::TypedBuffer;
 use metal::{
-    CommandBufferRef, DeviceRef, LibraryRef, MTLClearColor, MTLLoadAction, MTLPixelFormat,
-    MTLStoreAction, RenderCommandEncoderRef, RenderPassColorAttachmentDescriptorRef,
-    RenderPassDescriptor, RenderPassDescriptorRef, RenderPipelineColorAttachmentDescriptorRef,
-    RenderPipelineDescriptor, RenderPipelineDescriptorRef, RenderPipelineState, Texture,
-    TextureRef,
+    BufferRef, CommandBufferRef, DeviceRef, LibraryRef, MTLClearColor, MTLLoadAction,
+    MTLPixelFormat, MTLStoreAction, NSUInteger, RenderCommandEncoderRef,
+    RenderPassColorAttachmentDescriptorRef, RenderPassDescriptor, RenderPassDescriptorRef,
+    RenderPipelineColorAttachmentDescriptorRef, RenderPipelineDescriptor,
+    RenderPipelineDescriptorRef, RenderPipelineState, Texture, TextureRef,
 };
 use std::marker::PhantomData;
 
@@ -23,83 +23,107 @@ pub enum BindOne<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> {
     BufferOffset(usize),
     UsePreviouslySet,
 }
-
-// TODO: DRY this up
 impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindMany<'a, BUFFER_INDEX, T> {
     #[inline]
     pub fn encode_for_vertex<'b>(self, encoder: &'b RenderCommandEncoderRef) {
+        self.encode_vertex_many(encoder);
+    }
+    #[inline]
+    pub fn encode_for_fragment<'b>(self, encoder: &'b RenderCommandEncoderRef) {
+        self.encode_fragment_many(encoder);
+    }
+    #[inline]
+    fn encode_vertex_many(self, encoder: &RenderCommandEncoderRef) {
+        self.encode_many(
+            encoder,
+            RenderCommandEncoderRef::set_vertex_bytes,
+            RenderCommandEncoderRef::set_vertex_buffer,
+            RenderCommandEncoderRef::set_vertex_buffer_offset,
+        );
+    }
+    #[inline]
+    fn encode_fragment_many(self, encoder: &RenderCommandEncoderRef) {
+        self.encode_many(
+            encoder,
+            RenderCommandEncoderRef::set_fragment_bytes,
+            RenderCommandEncoderRef::set_fragment_buffer,
+            RenderCommandEncoderRef::set_fragment_buffer_offset,
+        );
+    }
+    #[inline]
+    fn encode_many(
+        self,
+        encoder: &RenderCommandEncoderRef,
+        encode_bytes: impl FnOnce(
+            &RenderCommandEncoderRef,
+            NSUInteger,
+            NSUInteger,
+            *const std::ffi::c_void,
+        ),
+        encode_buffer_and_offset: impl FnOnce(
+            &RenderCommandEncoderRef,
+            NSUInteger,
+            Option<&'a BufferRef>,
+            NSUInteger,
+        ),
+        encode_buffer_offset: impl FnOnce(&RenderCommandEncoderRef, NSUInteger, NSUInteger),
+    ) {
         match self {
-            BindMany::Bytes(v) => encoder.set_vertex_bytes(
+            BindMany::Bytes(v) => encode_bytes(
+                encoder,
                 BUFFER_INDEX,
-                (std::mem::size_of::<T>() * v.len()) as _,
+                std::mem::size_of_val(v) as _,
                 v.as_ptr() as *const _,
             ),
-            BindMany::BufferAndOffset(tb, o) => encoder.set_vertex_buffer(
+            BindMany::BufferAndOffset(tb, o) => encode_buffer_and_offset(
+                encoder,
                 BUFFER_INDEX,
                 Some(&tb.buffer),
                 (std::mem::size_of::<T>() * o) as _,
             ),
             BindMany::BufferOffset(o) => {
-                encoder.set_vertex_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _)
+                encode_buffer_offset(encoder, BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _)
             }
             _ => {}
         }
     }
     #[inline]
-    pub fn encode_for_fragment<'b>(self, encoder: &'b RenderCommandEncoderRef) {
-        match self {
-            BindMany::Bytes(v) => encoder.set_fragment_bytes(
-                BUFFER_INDEX,
-                (std::mem::size_of::<T>() * v.len()) as _,
-                v.as_ptr() as *const _,
-            ),
-            BindMany::BufferAndOffset(tb, o) => encoder.set_fragment_buffer(
-                BUFFER_INDEX,
-                Some(&tb.buffer),
-                (std::mem::size_of::<T>() * o) as _,
-            ),
-            BindMany::BufferOffset(o) => encoder
-                .set_fragment_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _),
-            _ => {}
+    pub fn rolling_buffer_offset(buffer: &'a TypedBuffer<T>, element_offset: usize) -> Self {
+        if element_offset == 0 {
+            Self::BufferAndOffset(buffer, 0)
+        } else {
+            Self::BufferOffset(0)
         }
     }
 }
 impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindOne<'a, BUFFER_INDEX, T> {
     #[inline]
     pub fn encode_for_vertex<'b>(self, encoder: &'b RenderCommandEncoderRef) {
-        match self {
-            BindOne::Bytes(v) => encoder.set_vertex_bytes(
-                BUFFER_INDEX,
-                std::mem::size_of::<T>() as _,
-                (v as *const T) as _,
-            ),
-            BindOne::BufferAndOffset(tb, o) => encoder.set_vertex_buffer(
-                BUFFER_INDEX,
-                Some(&tb.buffer),
-                (std::mem::size_of::<T>() * o) as _,
-            ),
-            BindOne::BufferOffset(o) => {
-                encoder.set_vertex_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _)
-            }
-            _ => {}
-        }
+        self.encode_one(|b| b.encode_for_vertex(encoder));
     }
     #[inline]
     pub fn encode_for_fragment<'b>(self, encoder: &'b RenderCommandEncoderRef) {
-        match self {
-            BindOne::Bytes(v) => encoder.set_fragment_bytes(
-                BUFFER_INDEX,
-                std::mem::size_of::<T>() as _,
-                (v as *const T) as _,
-            ),
-            BindOne::BufferAndOffset(tb, o) => encoder.set_fragment_buffer(
-                BUFFER_INDEX,
-                Some(&tb.buffer),
-                (std::mem::size_of::<T>() * o) as _,
-            ),
-            BindOne::BufferOffset(o) => encoder
-                .set_fragment_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _),
-            _ => {}
+        self.encode_one(|b| b.encode_for_fragment(encoder));
+    }
+    #[inline]
+    fn encode_one<'b>(self, encode_fn: impl FnOnce(BindMany<'_, BUFFER_INDEX, T>)) {
+        let tmp: [T; 1];
+        encode_fn(match self {
+            BindOne::Bytes(&v) => {
+                tmp = [v];
+                BindMany::Bytes(&tmp)
+            }
+            BindOne::BufferAndOffset(b, o) => BindMany::BufferAndOffset(b, o),
+            BindOne::BufferOffset(o) => BindMany::BufferOffset(o),
+            BindOne::UsePreviouslySet => BindMany::UsePreviouslySet,
+        });
+    }
+    #[inline]
+    pub fn rolling_buffer_offset(buffer: &'a TypedBuffer<T>, element_offset: usize) -> Self {
+        if element_offset == 0 {
+            Self::BufferAndOffset(buffer, 0)
+        } else {
+            Self::BufferOffset(0)
         }
     }
 }

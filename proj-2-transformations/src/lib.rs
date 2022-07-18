@@ -107,7 +107,7 @@ impl RendererDelgate for Delegate {
                 encoder,
                 main_vertex_binds {
                     r#in: BindOne::Bytes(&self.vertex_input),
-                    geometry: BindOne::BufferAndOffset(geo, geo_i),
+                    geometry: BindOne::rolling_buffer_offset(geo, geo_i),
                 },
                 main_fragment_binds {},
             );
