@@ -1,6 +1,7 @@
+#![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
-use metal_app::{components::Camera, metal::*, *};
+use metal_app::{components::Camera, metal::*, render_pipeline::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -14,9 +15,9 @@ struct Delegate {
     camera: Camera<4>,
     command_queue: CommandQueue,
     device: Device,
-    model: Model<{ VertexBufferIndex::Geometry as _ }, NO_MATERIALS_ID>,
+    model: Model<1, NO_MATERIALS_ID, Geometry, NoMaterial>,
     needs_render: bool,
-    render_pipeline: RenderPipelineState,
+    render_pipeline: RenderPipeline<1, main_vertex, main_fragment, NoDepth, NoStencil>,
     vertex_input: VertexInput,
 }
 
@@ -53,28 +54,16 @@ impl RendererDelgate for Delegate {
                 let library = device
                     .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib.");
-                let p = create_render_pipeline(
+                RenderPipeline::new(
+                    "Render Pipeline",
                     &device,
-                    &new_render_pipeline_descriptor(
-                        "Render Pipeline",
-                        &library,
-                        Some((DEFAULT_PIXEL_FORMAT, false)),
-                        None,
-                        None,
-                        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                        Some((&"main_fragment", 0)),
-                    ),
-                );
-                use debug_assert_pipeline_function_arguments::*;
-                debug_assert_render_pipeline_function_arguments(
-                    &p,
-                    &[
-                        pointer_arg::<VertexInput>(VertexBufferIndex::VertexInput as _),
-                        pointer_arg::<Geometry>(VertexBufferIndex::Geometry as _),
-                    ],
-                    None,
-                );
-                p.pipeline_state
+                    &library,
+                    [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                    main_vertex,
+                    main_fragment,
+                    NoDepth,
+                    NoStencil,
+                )
             },
             vertex_input: VertexInput {
                 mins: (center - half_size).into(),
@@ -95,25 +84,35 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-            Some((
+        let encoder = self.render_pipeline.new_render_command_encoder(
+            "Render Teapot",
+            command_buffer,
+            [(
                 render_target,
                 (0., 0., 0., 0.),
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
-            )),
-            None,
-            None,
-        ));
-        encoder.set_label("Render Teapot");
-        encoder.set_render_pipeline_state(&self.render_pipeline);
-        encode_vertex_bytes(
-            &encoder,
-            VertexBufferIndex::VertexInput as _,
-            &self.vertex_input,
+            )],
+            NoDepth,
+            NoStencil,
         );
-        self.model
-            .encode_draws_with_primitive_type(encoder, MTLPrimitiveType::Point);
+        let mut draw_iterator = self.model.get_draws();
+        while let Some(DrawIteratorItem {
+            geometry: (geo, geo_i),
+            num_vertices,
+            ..
+        }) = draw_iterator.next()
+        {
+            self.render_pipeline.setup_binds(
+                encoder,
+                main_vertex_binds {
+                    r#in: BindOne::Bytes(&self.vertex_input),
+                    geometry: BindOne::BufferAndOffset(geo, geo_i),
+                },
+                main_fragment_binds {},
+            );
+            encoder.draw_primitives(MTLPrimitiveType::Point, 0, num_vertices as _);
+        }
         encoder.end_encoding();
         command_buffer
     }

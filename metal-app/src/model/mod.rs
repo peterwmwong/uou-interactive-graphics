@@ -3,12 +3,15 @@ mod materials;
 
 use crate::metal::*;
 use crate::time::debug_time;
+use crate::typed_buffer::TypedBuffer;
 use geometry::{DrawInfo, Geometry, GeometryBuffers};
 pub use geometry::{GeometryToEncode, MaxBounds};
 pub use materials::MaterialToEncode;
 use materials::{MaterialResults, Materials};
 use std::any::TypeId;
+use std::iter::Enumerate;
 use std::path::{Path, PathBuf};
+use std::slice::Iter;
 use tobj::LoadOptions;
 
 pub const NO_MATERIALS_ID: u64 = u64::MAX;
@@ -18,33 +21,50 @@ pub struct NoMaterial {}
 #[allow(non_snake_case)]
 pub fn NO_MATERIALS_ENCODER(_: &mut NoMaterial, _: MaterialToEncode) {}
 
-// trait Iterator<G: Sized, M: Sized> {
-//     type Item<'a>
-//     where
-//         G: 'a,
-//         M: 'a;
-//     fn next<'a>(&mut self) -> Option<Self::Item<'a>>;
-// }
-// struct DrawIteratorItem<'a, G: Sized, M: Sized> {
-//     geometry: &'a TypedBuffer<G>,
-//     material: &'a TypedBuffer<M>,
-// }
-// struct DrawIterator<'a, G: Sized, M: Sized> {
-//     geometry: &'a TypedBuffer<G>,
-//     material: &'a TypedBuffer<M>,
-// }
-// impl<'a, G: Sized, M: Sized> Iterator<G, M> for DrawIterator<'a, G, M> {
-//     type Item<'b> = DrawIteratorItem<'b, G, M>
-//     where
-//         G: 'b,
-//         M: 'b;
-//     fn next<'c>(&mut self) -> Option<Self::Item<'c>> {
-//         Some(DrawIteratorItem {
-//             geometry: self.geometry,
-//             material: self.material,
-//         })
-//     }
-// }
+pub trait Iterator {
+    type Item<'a>
+    where
+        Self: 'a;
+    fn next(&mut self) -> Option<Self::Item<'_>>;
+}
+
+pub struct DrawIteratorItem<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> {
+    pub num_vertices: usize,
+    pub geometry: (&'a TypedBuffer<G>, usize),
+    pub material: Option<(&'a TypedBuffer<M>, usize)>,
+}
+pub struct DrawIterator<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> {
+    draw_i: Enumerate<Iter<'a, DrawInfo>>,
+    geometry: &'a TypedBuffer<G>,
+    material: Option<&'a TypedBuffer<M>>,
+}
+
+impl<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> DrawIterator<'a, G, M> {
+    fn new(
+        draws: &'a [DrawInfo],
+        geometry_buffers: &'a GeometryBuffers<G>,
+        materials: Option<&'a MaterialResults<M>>,
+    ) -> Self {
+        Self {
+            draw_i: draws.iter().enumerate(),
+            geometry: &geometry_buffers.arguments,
+            material: materials.as_ref().map(|m| &m.arguments_buffer),
+        }
+    }
+}
+
+impl<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> Iterator for DrawIterator<'a, G, M> {
+    type Item<'b> = DrawIteratorItem<'a, G , M>
+    where
+        Self: 'b;
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        self.draw_i.next().map(|(i, d)| DrawIteratorItem {
+            geometry: (self.geometry, i),
+            material: self.material.zip(d.material_id),
+            num_vertices: d.num_indices,
+        })
+    }
+}
 
 pub struct Model<
     const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
@@ -158,6 +178,10 @@ Only one of these must be true:
     #[inline]
     pub fn encode_draws(&self, encoder: &RenderCommandEncoderRef) {
         self.encode_draws_with_primitive_type(encoder, MTLPrimitiveType::Triangle);
+    }
+    #[inline]
+    pub fn get_draws(&self) -> DrawIterator<'_, G, M> {
+        DrawIterator::new(&self.draws, &self.geometry_buffers, self.materials.as_ref())
     }
 
     #[inline]

@@ -21,10 +21,3 @@ struct VertexInput {
     float  camera_distance;
     bool   use_perspective;
 };
-
-enum struct VertexBufferIndex
-{
-    VertexInput = 0,
-    Geometry,
-    LENGTH,
-};

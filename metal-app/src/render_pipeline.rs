@@ -23,6 +23,8 @@ pub enum BindOne<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> {
     BufferOffset(usize),
     UsePreviouslySet,
 }
+
+// TODO: DRY this up
 impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindMany<'a, BUFFER_INDEX, T> {
     #[inline]
     pub fn encode_for_vertex<'b>(self, encoder: &'b RenderCommandEncoderRef) {
@@ -32,10 +34,14 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindMany<'a, BUFFER_I
                 (std::mem::size_of::<T>() * v.len()) as _,
                 v.as_ptr() as *const _,
             ),
-            BindMany::BufferAndOffset(tb, o) => {
-                encoder.set_vertex_buffer(BUFFER_INDEX, Some(&tb.buffer), o as _)
+            BindMany::BufferAndOffset(tb, o) => encoder.set_vertex_buffer(
+                BUFFER_INDEX,
+                Some(&tb.buffer),
+                (std::mem::size_of::<T>() * o) as _,
+            ),
+            BindMany::BufferOffset(o) => {
+                encoder.set_vertex_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _)
             }
-            BindMany::BufferOffset(o) => encoder.set_vertex_buffer_offset(BUFFER_INDEX, o as _),
             _ => {}
         }
     }
@@ -47,10 +53,13 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindMany<'a, BUFFER_I
                 (std::mem::size_of::<T>() * v.len()) as _,
                 v.as_ptr() as *const _,
             ),
-            BindMany::BufferAndOffset(tb, o) => {
-                encoder.set_fragment_buffer(BUFFER_INDEX, Some(&tb.buffer), o as _)
-            }
-            BindMany::BufferOffset(o) => encoder.set_fragment_buffer_offset(BUFFER_INDEX, o as _),
+            BindMany::BufferAndOffset(tb, o) => encoder.set_fragment_buffer(
+                BUFFER_INDEX,
+                Some(&tb.buffer),
+                (std::mem::size_of::<T>() * o) as _,
+            ),
+            BindMany::BufferOffset(o) => encoder
+                .set_fragment_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _),
             _ => {}
         }
     }
@@ -64,10 +73,14 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindOne<'a, BUFFER_IN
                 std::mem::size_of::<T>() as _,
                 (v as *const T) as _,
             ),
-            BindOne::BufferAndOffset(tb, o) => {
-                encoder.set_vertex_buffer(BUFFER_INDEX, Some(&tb.buffer), o as _)
+            BindOne::BufferAndOffset(tb, o) => encoder.set_vertex_buffer(
+                BUFFER_INDEX,
+                Some(&tb.buffer),
+                (std::mem::size_of::<T>() * o) as _,
+            ),
+            BindOne::BufferOffset(o) => {
+                encoder.set_vertex_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _)
             }
-            BindOne::BufferOffset(o) => encoder.set_vertex_buffer_offset(BUFFER_INDEX, o as _),
             _ => {}
         }
     }
@@ -79,10 +92,13 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindOne<'a, BUFFER_IN
                 std::mem::size_of::<T>() as _,
                 (v as *const T) as _,
             ),
-            BindOne::BufferAndOffset(tb, o) => {
-                encoder.set_fragment_buffer(BUFFER_INDEX, Some(&tb.buffer), o as _)
-            }
-            BindOne::BufferOffset(o) => encoder.set_fragment_buffer_offset(BUFFER_INDEX, o as _),
+            BindOne::BufferAndOffset(tb, o) => encoder.set_fragment_buffer(
+                BUFFER_INDEX,
+                Some(&tb.buffer),
+                (std::mem::size_of::<T>() * o) as _,
+            ),
+            BindOne::BufferOffset(o) => encoder
+                .set_fragment_buffer_offset(BUFFER_INDEX, (std::mem::size_of::<T>() * o) as _),
             _ => {}
         }
     }

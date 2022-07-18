@@ -1,6 +1,25 @@
 use metal::{Buffer, DeviceRef, HeapRef, MTLResourceOptions, MTLSizeAndAlign};
 use std::marker::PhantomData;
 
+// TODO: Create API to make creating `private` buffers easier.
+// - According to Apple Metal documentation (https://developer.apple.com/documentation/metal/resource_fundamentals/choosing_a_resource_storage_mode_for_apple_gpus)...
+//     Populated once by the CPU and accessed frequently by a GPU. Use the CPU to create a resource
+//     with an MTLStorageMode.shared mode and populate its contents. Then, use the GPU to copy the
+//     resource’s contents into another resource with an MTLStorageMode.private mode.
+// - Originally thought of as a pre-Apple-Silicon technique, ^^^ makes it clear that is still
+//   applicable/preferred
+// - Not sure this is the best place, but we need something...
+//     - Provide API to calculate byte size to help size a common scratch buffer (amortize multiple private buffer creation, with a shared scratch buffer)
+//     - Given a single `scratch_buffer: Buffer`, `data: &[T]`, `destination: TypedBuffer<T>`...
+//          1. Write to scratch_buffer with data
+//          2. Create a BlitCommandEncoder
+//          3. Encode copyFromBuffer to scratch_buffer to destination
+//     - Given a single `scratch_buffer: Buffer`, `src_dests: &[(T, TypedBuffer<T>)]`
+//          - ??? Consider making scratch_buffer optional? Automatically size/create scratch buffer based on largest src
+//          - For each src_dests
+//              1. Write to scratch_buffer with data
+//              2. Create a BlitCommandEncoder
+//              3. Encode copyFromBuffer to scratch_buffer to destination
 pub trait MetalBufferAllocator {
     fn with_capacity<T: Sized>(&self, capacity: usize, options: MTLResourceOptions) -> Buffer;
 }
@@ -83,7 +102,7 @@ impl<T: Sized + Copy + Clone> TypedBuffer<T> {
         tb
     }
 
-    pub fn element_size(&self) -> usize {
+    pub const fn element_size(&self) -> usize {
         std::mem::size_of::<T>()
     }
     // TODO: Add update_data or get_mut function
