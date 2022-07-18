@@ -161,7 +161,7 @@ vec![
 pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec<ShaderFunction> {
     // Example: |-FunctionDecl 0x14a1327a8 <line:9:1, line:11:15> line:9:8 main_vertex 'float4 (const constant packed_float4 *)'
     let rx_fn = Regex::new(
-        r"^\|-FunctionDecl 0x\w+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<fn_name>\w+) ",
+        r"^\|-FunctionDecl 0x\w+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<fn_name>\w+) ",
     )
     .unwrap();
 
@@ -393,23 +393,24 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 
         #[test]
         fn test_no_binds() {
-            for (metal_attr, expected_shader_type) in [
-                ("MetalVertexAttr", ShaderType::Vertex),
-                ("MetalFragmentAttr", ShaderType::Fragment),
-            ] {
-                /*
-                [[vertex]]
-                float4 test() {
-                    return 0;
-                }
-                */
-                test(format!("\
+            for path in ["line", "proj-2-transformations/shader_src/shaders.metal"] {
+                for (metal_attr, expected_shader_type) in [
+                    ("MetalVertexAttr", ShaderType::Vertex),
+                    ("MetalFragmentAttr", ShaderType::Fragment),
+                ] {
+                    /*
+                    [[vertex]]
+                    float4 test() {
+                        return 0;
+                    }
+                    */
+                    test(format!("\
 TranslationUnitDecl 0x11f0302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x12802c460 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x11f030f20 '__metal_intersection_query_t'
 |-ImportDecl 0x12802c4f0 <<built-in>:1:1> col:1 implicit metal_types
 |-UsingDirectiveDecl 0x10f066d50 <line:3:1, col:17> col:17 Namespace 0x12802c5f0 'metal'
-|-FunctionDecl 0x10f067028 <line:6:1, col:27> col:8 test 'float4 ()'
+|-FunctionDecl 0x10f067028 <{path}:6:1, col:27> col:8 test 'float4 ()'
 | |-CompoundStmt 0x10f067188 <col:15, col:27>
 | | `-ReturnStmt 0x10f067170 <col:17, col:24>
 | |   `-ImplicitCastExpr 0x10f067158 <col:24> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
@@ -424,6 +425,7 @@ TranslationUnitDecl 0x11f0302e8 <<invalid sloc>> <invalid sloc>
                         shader_type: expected_shader_type,
                     }]
                 );
+                }
             }
         }
 
@@ -669,14 +671,14 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
             // Example Input Snippets:
             //     [[vertex]]   float4 my_fn(device int *input [[buffer(0), function_constant(hasInputBuffer)]]) { ... }
             //     [[fragment]] half4  my_fn(texture2d<half, access::read_write> tex [[raster_order_group(0), texture(0)]]) { ... }
-            todo!();
+            // TODO: Implement
         }
 
         #[test]
         fn test_multiple_function_attributes() {
             // Example Input Snippets:
             //     [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]] void objectShader(mesh_grid_properties mgp) { ... }
-            todo!();
+            // TODO: Implement
         }
     }
 
