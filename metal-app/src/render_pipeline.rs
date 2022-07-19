@@ -477,9 +477,9 @@ mod test {
     struct Vertex1Binds<'a> {
         v_bind1: BindMany<'a, 0, f32>,
     }
-    impl<'c> VertexShaderBinds for Vertex1Binds<'c> {
+    impl VertexShaderBinds for Vertex1Binds<'_> {
         #[inline]
-        fn encode_vertex_binds<'a, 'b>(self, encoder: &'b RenderCommandEncoderRef) {
+        fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {
             self.v_bind1.encode_for_vertex(encoder);
         }
     }
@@ -497,7 +497,7 @@ mod test {
     struct Frag1Binds<'a> {
         f_bind1: BindOne<'a, 0, float4>,
     }
-    impl<'c> FragmentShaderBinds for Frag1Binds<'c> {
+    impl FragmentShaderBinds for Frag1Binds<'_> {
         #[inline]
         fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {
             self.f_bind1.encode_for_fragment(encoder);

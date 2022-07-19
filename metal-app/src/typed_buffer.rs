@@ -102,11 +102,12 @@ impl<T: Sized + Copy + Clone> TypedBuffer<T> {
         tb
     }
 
+    #[inline(always)]
     pub const fn element_size(&self) -> usize {
         std::mem::size_of::<T>()
     }
-    // TODO: Add update_data or get_mut function
 
+    #[inline]
     pub fn get_mut(&self) -> &mut [T] {
         let contents = self.buffer.contents() as *mut T;
         unsafe { std::slice::from_raw_parts_mut(contents, self.len) }

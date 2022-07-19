@@ -200,7 +200,7 @@ pub struct main_vertex_binds<'c> {
     pub r#in: BindOne<'c, 0, VertexInput>,
     pub geometry: BindOne<'c, 1, Geometry>,
 }
-impl<'c> VertexShaderBinds for main_vertex_binds<'c> {
+impl VertexShaderBinds for main_vertex_binds<'_> {
     #[inline]
     fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {
         self.r#in.encode_for_vertex(encoder);

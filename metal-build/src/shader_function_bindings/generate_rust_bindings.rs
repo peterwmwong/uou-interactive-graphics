@@ -52,7 +52,11 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
     {
         use ShaderFunctionBind::*;
         let rust_shader_name = escape_name(&fn_name);
-        let rust_binds_generic_lifetime = if binds.is_empty() { "" } else { "<'c>" };
+        let (rust_binds_generic_lifetime, rust_binds_any_lifetime) = if binds.is_empty() {
+            ("", "")
+        } else {
+            ("<'c>", "<'_>")
+        };
         w(&format!(
             r#"
 #[allow(non_camel_case_types)]
@@ -102,7 +106,7 @@ pub struct {fn_name}_binds{rust_binds_generic_lifetime}"#
         let encoder_variable_prefix = if binds.is_empty() { "_" } else { "" };
         w(&format!(
             r#"
-impl{rust_binds_generic_lifetime} {shader_type_titlecase}ShaderBinds for {fn_name}_binds{rust_binds_generic_lifetime} {{
+impl {shader_type_titlecase}ShaderBinds for {fn_name}_binds{rust_binds_any_lifetime} {{
     #[inline]
     fn encode_{shader_type_lowercase}_binds(self, {encoder_variable_prefix}encoder: &RenderCommandEncoderRef) {{"#
         ));
@@ -168,7 +172,7 @@ pub struct test_vertex_binds<'c> {{
     pub buf5: BindOne<'c, 5, TestStruct>,
     pub buf4: BindMany<'c, 4, TestStruct>,
 }}
-impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
+impl VertexShaderBinds for test_vertex_binds<'_> {{
     #[inline]
     fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.buf0.encode_for_vertex(encoder);
@@ -200,7 +204,7 @@ pub struct test_fragment_binds<'c> {{
     pub buf5: BindOne<'c, 5, TestStruct>,
     pub buf4: BindMany<'c, 4, TestStruct>,
 }}
-impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
+impl FragmentShaderBinds for test_fragment_binds<'_> {{
     #[inline]
     fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.buf0.encode_for_fragment(encoder);
@@ -233,7 +237,7 @@ impl FragmentShader for test_fragment {{
             generate_shader_function_bindings(shader_file, &mut actual);
             let actual = unsafe { std::str::from_utf8_unchecked(&actual) };
 
-            assert_eq!(actual, expected);
+            pretty_assertions::assert_eq!(actual, expected);
         }
     }
 
@@ -245,7 +249,7 @@ impl FragmentShader for test_fragment {{
             let mut actual = Vec::<u8>::new();
             generate_shader_function_bindings_from_reader(input, &mut actual);
             let actual = unsafe { std::str::from_utf8_unchecked(&actual) };
-            assert_eq!(actual, expected);
+            pretty_assertions::assert_eq!(actual, expected);
         }
 
         #[test]
@@ -397,7 +401,7 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 pub struct {fn_name}_binds<'c> {{
     pub {rust_shader_bind_name}: Bind{bind_type}<'c, {bind_index}, {data_type}>,
 }}
-impl<'c> VertexShaderBinds for {fn_name}_binds<'c> {{
+impl VertexShaderBinds for {fn_name}_binds<'_> {{
     #[inline]
     fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.{rust_shader_bind_name}.encode_for_vertex(encoder);
@@ -451,7 +455,7 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 pub struct {fn_name}_binds<'c> {{
     pub {bind_name}: BindTexture<'c, {bind_index}>,
 }}
-impl<'c> FragmentShaderBinds for {fn_name}_binds<'c> {{
+impl FragmentShaderBinds for {fn_name}_binds<'_> {{
     #[inline]
     fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.{bind_name}.encode_for_fragment(encoder);

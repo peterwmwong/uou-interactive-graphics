@@ -347,7 +347,7 @@ mod test {
             let expected = Vec::from(expected_fns);
             let actual = parse_shader_functions_from_reader(input);
 
-            assert_eq!(actual, expected);
+            pretty_assertions::assert_eq!(actual, expected);
         }
 
         #[test]
@@ -797,7 +797,7 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                 parse_shader_functions_from_reader(stdout)
             });
 
-            assert_eq!(actual, expected);
+            pretty_assertions::assert_eq!(actual, expected);
         }
     }
 }
