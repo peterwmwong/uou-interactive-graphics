@@ -21,13 +21,6 @@ pub struct NoMaterial {}
 #[allow(non_snake_case)]
 pub fn NO_MATERIALS_ENCODER(_: &mut NoMaterial, _: MaterialToEncode) {}
 
-pub trait Iterator {
-    type Item<'a>
-    where
-        Self: 'a;
-    fn next(&mut self) -> Option<Self::Item<'_>>;
-}
-
 pub struct DrawIteratorItem<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> {
     pub num_vertices: usize,
     pub geometry: (&'a TypedBuffer<G>, usize),
@@ -54,10 +47,8 @@ impl<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> DrawIterator<'a, G, M
 }
 
 impl<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> Iterator for DrawIterator<'a, G, M> {
-    type Item<'b> = DrawIteratorItem<'a, G , M>
-    where
-        Self: 'b;
-    fn next(&mut self) -> Option<Self::Item<'_>> {
+    type Item = DrawIteratorItem<'a, G, M>;
+    fn next(&mut self) -> Option<Self::Item> {
         self.draw_i.next().map(|(i, d)| DrawIteratorItem {
             geometry: (self.geometry, i),
             material: self.material.zip(d.material_id),

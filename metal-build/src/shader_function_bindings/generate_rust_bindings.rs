@@ -56,49 +56,55 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
         w(&format!(
             r#"
 #[allow(non_camel_case_types)]
-pub struct {fn_name}_binds{rust_binds_generic_lifetime} {{"#
+pub struct {fn_name}_binds{rust_binds_generic_lifetime}"#
         ));
-        // TODO: Consider to code generation trait to make this more readable...
-        //         binds.each_gen_field(|index, name, data_type, bind_type| {
-        //             &format!(
-        //                 r#"
-        // {name}: Bind{bind_type}<'a, {index}, {data_type}>,"#
-        //             )
-        //         });
-        for bind in &binds {
-            match bind {
-                Buffer {
-                    index,
-                    name,
-                    data_type,
-                    bind_type,
-                    // TODO: Implement marking buffers as immutible
-                    immutable: _,
-                } => {
-                    let rust_shader_bind_name = escape_name(&name);
-                    w(&format!(
-                        r#"
+        if binds.is_empty() {
+            w(";");
+        } else {
+            w(" {");
+            // TODO: Consider to code generation trait to make this more readable...
+            //         binds.each_gen_field(|index, name, data_type, bind_type| {
+            //             &format!(
+            //                 r#"
+            // {name}: Bind{bind_type}<'a, {index}, {data_type}>,"#
+            //             )
+            //         });
+            for bind in &binds {
+                match bind {
+                    Buffer {
+                        index,
+                        name,
+                        data_type,
+                        bind_type,
+                        // TODO: Implement marking buffers as immutible
+                        immutable: _,
+                    } => {
+                        let rust_shader_bind_name = escape_name(&name);
+                        w(&format!(
+                            r#"
     pub {rust_shader_bind_name}: Bind{bind_type}<'c, {index}, {data_type}>,"#
-                    ));
-                }
-                Texture { name, index } => {
-                    let rust_shader_bind_name = escape_name(&name);
-                    w(&format!(
-                        r#"
+                        ));
+                    }
+                    Texture { name, index } => {
+                        let rust_shader_bind_name = escape_name(&name);
+                        w(&format!(
+                            r#"
     pub {rust_shader_bind_name}: BindTexture<'c, {index}>,"#
-                    ));
+                        ));
+                    }
                 }
             }
+            w(r#"
+}"#);
         }
         let shader_type_lowercase = shader_type.lowercase();
         let shader_type_titlecase = shader_type.titlecase();
+        let encoder_variable_prefix = if binds.is_empty() { "_" } else { "" };
         w(&format!(
             r#"
-}}
-
 impl{rust_binds_generic_lifetime} {shader_type_titlecase}ShaderBinds for {fn_name}_binds{rust_binds_generic_lifetime} {{
     #[inline]
-    fn encode_{shader_type_lowercase}_binds(self, encoder: &RenderCommandEncoderRef) {{"#
+    fn encode_{shader_type_lowercase}_binds(self, {encoder_variable_prefix}encoder: &RenderCommandEncoderRef) {{"#
         ));
         // TODO: Consider to code generation trait to make this more readable...
         //         binds.each_gen_encode(|name| {
@@ -162,7 +168,6 @@ pub struct test_vertex_binds<'c> {{
     pub buf5: BindOne<'c, 5, TestStruct>,
     pub buf4: BindMany<'c, 4, TestStruct>,
 }}
-
 impl<'c> VertexShaderBinds for test_vertex_binds<'c> {{
     #[inline]
     fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
@@ -195,7 +200,6 @@ pub struct test_fragment_binds<'c> {{
     pub buf5: BindOne<'c, 5, TestStruct>,
     pub buf4: BindMany<'c, 4, TestStruct>,
 }}
-
 impl<'c> FragmentShaderBinds for test_fragment_binds<'c> {{
     #[inline]
     fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
@@ -242,6 +246,49 @@ impl FragmentShader for test_fragment {{
             generate_shader_function_bindings_from_reader(input, &mut actual);
             let actual = unsafe { std::str::from_utf8_unchecked(&actual) };
             assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn test_no_binds() {
+            test(
+                format!("\
+TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x14d874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x14d830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x14d874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-UsingDirectiveDecl 0x13d87ef50 <line:3:1, col:17> col:17 Namespace 0x14d8749f0 'metal'
+|-FunctionDecl 0x13da41288 <line:12:1, line:14:15> line:12:8 test 'float4 ()'
+| |-CompoundStmt 0x13da413f0 <line:14:3, col:15>
+| | `-ReturnStmt 0x13da413d8 <col:5, col:12>
+| |   `-ImplicitCastExpr 0x13da413c0 <col:12> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x13da413a8 <col:12> 'float' <IntegralToFloating>
+| |       `-IntegerLiteral 0x13da41388 <col:12> 'int' 0
+| `-MetalVertexAttr 0x13da41330 <line:11:3>
+`-<undeserialized declarations>
+").as_bytes(),
+                    r#"
+/****************
+ Shader functions
+*****************/
+
+#[allow(non_camel_case_types)]
+pub struct test_binds;
+impl VertexShaderBinds for test_binds {
+    #[inline]
+    fn encode_vertex_binds(self, _encoder: &RenderCommandEncoderRef) {
+    }
+}
+
+#[allow(non_camel_case_types)]
+pub struct test;
+impl VertexShader for test {
+    type Binds<'c> = test_binds;
+
+    #[inline]
+    fn function_name() -> &'static str { "test" }
+}
+"#
+            );
         }
 
         #[test]
@@ -350,7 +397,6 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 pub struct {fn_name}_binds<'c> {{
     pub {rust_shader_bind_name}: Bind{bind_type}<'c, {bind_index}, {data_type}>,
 }}
-
 impl<'c> VertexShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
     fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
@@ -405,7 +451,6 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 pub struct {fn_name}_binds<'c> {{
     pub {bind_name}: BindTexture<'c, {bind_index}>,
 }}
-
 impl<'c> FragmentShaderBinds for {fn_name}_binds<'c> {{
     #[inline]
     fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{

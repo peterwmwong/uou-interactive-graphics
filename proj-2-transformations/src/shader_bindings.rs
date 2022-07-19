@@ -200,7 +200,6 @@ pub struct main_vertex_binds<'c> {
     pub r#in: BindOne<'c, 0, VertexInput>,
     pub geometry: BindOne<'c, 1, Geometry>,
 }
-
 impl<'c> VertexShaderBinds for main_vertex_binds<'c> {
     #[inline]
     fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {
@@ -219,12 +218,10 @@ impl VertexShader for main_vertex {
 }
 
 #[allow(non_camel_case_types)]
-pub struct main_fragment_binds {
-}
-
+pub struct main_fragment_binds;
 impl FragmentShaderBinds for main_fragment_binds {
     #[inline]
-    fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {
+    fn encode_fragment_binds(self, _encoder: &RenderCommandEncoderRef) {
     }
 }
 

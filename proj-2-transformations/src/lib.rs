@@ -96,12 +96,11 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
         );
-        let mut draw_iterator = self.model.get_draws();
-        while let Some(DrawIteratorItem {
+        for DrawIteratorItem {
             geometry: (geo, geo_i),
             num_vertices,
             ..
-        }) = draw_iterator.next()
+        } in self.model.get_draws()
         {
             self.render_pipeline.setup_binds(
                 encoder,
@@ -109,7 +108,7 @@ impl RendererDelgate for Delegate {
                     r#in: BindOne::Bytes(&self.vertex_input),
                     geometry: BindOne::rolling_buffer_offset(geo, geo_i),
                 },
-                main_fragment_binds {},
+                main_fragment_binds,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, num_vertices as _);
         }
