@@ -211,25 +211,13 @@ impl FunctionBinds for main_vertex_binds<'_> {
 #[allow(non_camel_case_types)]
 pub struct main_vertex;
 impl VertexShader for main_vertex {
+    const FUNCTION_NAME: &'static str = "main_vertex";
     type Binds<'c> = main_vertex_binds<'c>;
-
-    #[inline]
-    fn function_name() -> &'static str { "main_vertex" }
-}
-
-#[allow(non_camel_case_types)]
-pub struct main_fragment_binds;
-impl FunctionBinds for main_fragment_binds {
-    #[inline]
-    fn encode_binds(self, _encoder: &RenderCommandEncoderRef) {
-    }
 }
 
 #[allow(non_camel_case_types)]
 pub struct main_fragment;
 impl FragmentShader for main_fragment {
-    type Binds<'c> = main_fragment_binds;
-
-    #[inline]
-    fn function_name() -> &'static str { "main_fragment" }
+    const FUNCTION_NAME: &'static str = "main_fragment";
+    type Binds<'c> = NoBinds;
 }

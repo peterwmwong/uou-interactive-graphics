@@ -105,7 +105,7 @@ impl RendererDelgate for Delegate {
                     r#in: BindOne::Bytes(&self.vertex_input),
                     geometry: BindOne::rolling_buffer_offset(d.geometry),
                 },
-                main_fragment_binds,
+                NoBinds,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, d.num_vertices as _);
         }

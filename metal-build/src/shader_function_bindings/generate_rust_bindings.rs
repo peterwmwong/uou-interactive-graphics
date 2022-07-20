@@ -94,31 +94,15 @@ impl FunctionConstantsFactory for FunctionConstants {
     {
         use ShaderFunctionBind::*;
         let rust_shader_name = escape_name(&fn_name);
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Instead of generating an empty binds struct, just use NoBinds.
-        let (rust_binds_generic_lifetime, rust_binds_any_lifetime) = if binds.is_empty() {
-            ("", "")
+        let shader_type_titlecase = shader_type.titlecase();
+        let rust_function_binds_name = if binds.is_empty() {
+            "NoBinds".to_owned()
         } else {
-            ("<'c>", "<'_>")
-        };
-        w(&format!(
-            r#"
+            w(&format!(
+                r#"
 #[allow(non_camel_case_types)]
-pub struct {fn_name}_binds{rust_binds_generic_lifetime}"#
-        ));
-        if binds.is_empty() {
-            w(";");
-        } else {
-            w(" {");
-            // TODO: Consider to code generation trait to make this more readable...
-            //         binds.each_gen_field(|index, name, data_type, bind_type| {
-            //             &format!(
-            //                 r#"
-            // {name}: Bind{bind_type}<'a, {index}, {data_type}>,"#
-            //             )
-            //         });
+pub struct {fn_name}_binds<'c> {{"#
+            ));
             for bind in &binds {
                 match bind {
                     Buffer {
@@ -146,39 +130,38 @@ pub struct {fn_name}_binds{rust_binds_generic_lifetime}"#
             }
             w(r#"
 }"#);
-        }
-        let shader_type_lowercase = shader_type.lowercase();
-        let shader_type_titlecase = shader_type.titlecase();
-        let encoder_variable_prefix = if binds.is_empty() { "_" } else { "" };
-        w(&format!(
-            r#"
-impl FunctionBinds for {fn_name}_binds{rust_binds_any_lifetime} {{
+            let shader_type_lowercase = shader_type.lowercase();
+            let encoder_variable_prefix = if binds.is_empty() { "_" } else { "" };
+            w(&format!(
+                r#"
+impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
     fn encode_binds(self, {encoder_variable_prefix}encoder: &RenderCommandEncoderRef) {{"#
-        ));
-        for bind in &binds {
-            match bind {
-                Buffer { name, .. } | Texture { name, .. } => {
-                    let rust_shader_bind_name = escape_name(name);
-                    w(&format!(
-                        r#"
+            ));
+            for bind in &binds {
+                match bind {
+                    Buffer { name, .. } | Texture { name, .. } => {
+                        let rust_shader_bind_name = escape_name(name);
+                        w(&format!(
+                            r#"
         self.{rust_shader_bind_name}.encode_for_{shader_type_lowercase}(encoder);"#
-                    ))
+                        ))
+                    }
                 }
             }
-        }
+            w(r#"
+    }
+}
+"#);
+            format!("{fn_name}_binds<'c>")
+        };
         w(&format!(
             r#"
-    }}
-}}
-
 #[allow(non_camel_case_types)]
 pub struct {rust_shader_name};
 impl {shader_type_titlecase}Shader for {rust_shader_name} {{
-    type Binds<'c> = {fn_name}_binds{rust_binds_generic_lifetime};
-
-    #[inline]
-    fn function_name() -> &'static str {{ "{fn_name}" }}
+    const FUNCTION_NAME: &'static str = "{fn_name}";
+    type Binds<'c> = {rust_function_binds_name};
 }}
 "#
         ));
@@ -249,10 +232,8 @@ impl FunctionBinds for test_vertex_binds<'_> {{
 #[allow(non_camel_case_types)]
 pub struct test_vertex;
 impl VertexShader for test_vertex {{
+    const FUNCTION_NAME: &'static str = "test_vertex";
     type Binds<'c> = test_vertex_binds<'c>;
-
-    #[inline]
-    fn function_name() -> &'static str {{ "test_vertex" }}
 }}
 
 #[allow(non_camel_case_types)]
@@ -281,10 +262,8 @@ impl FunctionBinds for test_fragment_binds<'_> {{
 #[allow(non_camel_case_types)]
 pub struct test_fragment;
 impl FragmentShader for test_fragment {{
+    const FUNCTION_NAME: &'static str = "test_fragment";
     type Binds<'c> = test_fragment_binds<'c>;
-
-    #[inline]
-    fn function_name() -> &'static str {{ "test_fragment" }}
 }}
 "#
             );
@@ -337,20 +316,10 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 *****************/
 
 #[allow(non_camel_case_types)]
-pub struct test_binds;
-impl FunctionBinds for test_binds {
-    #[inline]
-    fn encode_binds(self, _encoder: &RenderCommandEncoderRef) {
-    }
-}
-
-#[allow(non_camel_case_types)]
 pub struct test;
 impl VertexShader for test {
-    type Binds<'c> = test_binds;
-
-    #[inline]
-    fn function_name() -> &'static str { "test" }
+    const FUNCTION_NAME: &'static str = "test";
+    type Binds<'c> = NoBinds;
 }
 "#
             );
@@ -472,10 +441,8 @@ impl FunctionBinds for {fn_name}_binds<'_> {{
 #[allow(non_camel_case_types)]
 pub struct {rust_shader_name};
 impl VertexShader for {rust_shader_name} {{
+    const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
-
-    #[inline]
-    fn function_name() -> &'static str {{ "{fn_name}" }}
 }}
 "#)
                         }
@@ -526,10 +493,8 @@ impl FunctionBinds for {fn_name}_binds<'_> {{
 #[allow(non_camel_case_types)]
 pub struct {fn_name};
 impl FragmentShader for {fn_name} {{
+    const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
-
-    #[inline]
-    fn function_name() -> &'static str {{ "{fn_name}" }}
 }}
 "#),
         );
