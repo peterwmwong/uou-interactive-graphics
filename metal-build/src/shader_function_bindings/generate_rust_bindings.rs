@@ -1,6 +1,8 @@
 use super::{
     generate_metal_ast::generate_metal_ast,
-    parse_metal_ast::{parse_shader_functions_from_reader, ShaderFunction, ShaderFunctionBind},
+    parse_metal_ast::{
+        parse_shader_functions_from_reader, FunctionConstant, ShaderFunction, ShaderFunctionBind,
+    },
 };
 use std::{
     borrow::Cow,
@@ -40,6 +42,45 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
             .expect("Unable to write shader_bindings.rs file (shader function bindings)");
     };
     let (fn_consts, fns) = parse_shader_functions_from_reader(shader_file_reader);
+    if !fn_consts.is_empty() {
+        w(r#"
+/******************
+ Function Constants
+*******************/
+
+pub struct FunctionConstants {"#);
+        for FunctionConstant {
+            name, data_type, ..
+        } in &fn_consts
+        {
+            w(&format!(
+                r#"
+    pub {name}: {data_type},"#
+            ));
+        }
+        w(r#"
+}
+impl FunctionConstantsFactory for FunctionConstants {
+    #[inline]
+    fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {
+        let fcv = FunctionConstantValues::new();"#);
+        for FunctionConstant {
+            name,
+            data_type,
+            index,
+        } in &fn_consts
+        {
+            w(&format!(
+                r#"
+        fcv.set_constant_value_at_index((&self.{name} as *const _) as _, {data_type}::MTL_DATA_TYPE, {index});"#
+            ));
+        }
+        w(r#"
+        Some(fcv)
+    }
+}
+"#);
+    }
     w(r#"
 /****************
  Shader functions
@@ -53,6 +94,10 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
     {
         use ShaderFunctionBind::*;
         let rust_shader_name = escape_name(&fn_name);
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Instead of generating an empty binds struct, just use NoBinds.
         let (rust_binds_generic_lifetime, rust_binds_any_lifetime) = if binds.is_empty() {
             ("", "")
         } else {
@@ -107,21 +152,14 @@ pub struct {fn_name}_binds{rust_binds_generic_lifetime}"#
         let encoder_variable_prefix = if binds.is_empty() { "_" } else { "" };
         w(&format!(
             r#"
-impl {shader_type_titlecase}ShaderBinds for {fn_name}_binds{rust_binds_any_lifetime} {{
+impl FunctionBinds for {fn_name}_binds{rust_binds_any_lifetime} {{
     #[inline]
-    fn encode_{shader_type_lowercase}_binds(self, {encoder_variable_prefix}encoder: &RenderCommandEncoderRef) {{"#
+    fn encode_binds(self, {encoder_variable_prefix}encoder: &RenderCommandEncoderRef) {{"#
         ));
-        // TODO: Consider to code generation trait to make this more readable...
-        //         binds.each_gen_encode(|name| {
-        //             &format!(
-        //                 r#"
-        // self.{name}.encode_for_{shader_type_lowercase}(encoder);"#
-        //             )
-        //         });
         for bind in &binds {
             match bind {
                 Buffer { name, .. } | Texture { name, .. } => {
-                    let rust_shader_bind_name = escape_name(&name);
+                    let rust_shader_bind_name = escape_name(name);
                     w(&format!(
                         r#"
         self.{rust_shader_bind_name}.encode_for_{shader_type_lowercase}(encoder);"#
@@ -159,6 +197,28 @@ mod test {
         fn test() {
             let expected = &format!(
                 r#"
+/******************
+ Function Constants
+*******************/
+
+pub struct FunctionConstants {{
+    pub A_Bool: bool,
+    pub A_Float: float,
+    pub A_Float4: float4,
+    pub A_Uint: uint,
+}}
+impl FunctionConstantsFactory for FunctionConstants {{
+    #[inline]
+    fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {{
+        let fcv = FunctionConstantValues::new();
+        fcv.set_constant_value_at_index((&self.A_Bool as *const _) as _, bool::MTL_DATA_TYPE, 0);
+        fcv.set_constant_value_at_index((&self.A_Float as *const _) as _, float::MTL_DATA_TYPE, 1);
+        fcv.set_constant_value_at_index((&self.A_Float4 as *const _) as _, float4::MTL_DATA_TYPE, 2);
+        fcv.set_constant_value_at_index((&self.A_Uint as *const _) as _, uint::MTL_DATA_TYPE, 3);
+        Some(fcv)
+    }}
+}}
+
 /****************
  Shader functions
 *****************/
@@ -173,9 +233,9 @@ pub struct test_vertex_binds<'c> {{
     pub buf5: BindOne<'c, 5, TestStruct>,
     pub buf4: BindMany<'c, 4, TestStruct>,
 }}
-impl VertexShaderBinds for test_vertex_binds<'_> {{
+impl FunctionBinds for test_vertex_binds<'_> {{
     #[inline]
-    fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
+    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.buf0.encode_for_vertex(encoder);
         self.buf1.encode_for_vertex(encoder);
         self.buf2.encode_for_vertex(encoder);
@@ -205,9 +265,9 @@ pub struct test_fragment_binds<'c> {{
     pub buf5: BindOne<'c, 5, TestStruct>,
     pub buf4: BindMany<'c, 4, TestStruct>,
 }}
-impl FragmentShaderBinds for test_fragment_binds<'_> {{
+impl FunctionBinds for test_fragment_binds<'_> {{
     #[inline]
-    fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
+    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.buf0.encode_for_fragment(encoder);
         self.buf1.encode_for_fragment(encoder);
         self.buf2.encode_for_fragment(encoder);
@@ -278,9 +338,9 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct test_binds;
-impl VertexShaderBinds for test_binds {
+impl FunctionBinds for test_binds {
     #[inline]
-    fn encode_vertex_binds(self, _encoder: &RenderCommandEncoderRef) {
+    fn encode_binds(self, _encoder: &RenderCommandEncoderRef) {
     }
 }
 
@@ -402,9 +462,9 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 pub struct {fn_name}_binds<'c> {{
     pub {rust_shader_bind_name}: Bind{bind_type}<'c, {bind_index}, {data_type}>,
 }}
-impl VertexShaderBinds for {fn_name}_binds<'_> {{
+impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
-    fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {{
+    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.{rust_shader_bind_name}.encode_for_vertex(encoder);
     }}
 }}
@@ -456,9 +516,9 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 pub struct {fn_name}_binds<'c> {{
     pub {bind_name}: BindTexture<'c, {bind_index}>,
 }}
-impl FragmentShaderBinds for {fn_name}_binds<'_> {{
+impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
-    fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {{
+    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
         self.{bind_name}.encode_for_fragment(encoder);
     }}
 }}

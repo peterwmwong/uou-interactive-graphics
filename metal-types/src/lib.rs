@@ -16,6 +16,17 @@ use std::{
     simd::{f32x2, f32x4, u16x2},
 };
 
+#[allow(non_camel_case_types)]
+pub type float = f32;
+#[allow(non_camel_case_types)]
+pub type uint = u32;
+#[allow(non_camel_case_types)]
+pub type int = i32;
+#[allow(non_camel_case_types)]
+pub type ushort = u16;
+#[allow(non_camel_case_types)]
+pub type short = i16;
+
 // TODO: Add some tests to verify this actually correct for whatever platfrom this is
 // running on.
 macro_rules! transmute_from_to {

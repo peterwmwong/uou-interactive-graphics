@@ -1,9 +1,9 @@
 use crate::typed_buffer::TypedBuffer;
 use metal::{
-    BufferRef, CommandBufferRef, DeviceRef, LibraryRef, MTLClearColor, MTLLoadAction,
-    MTLPixelFormat, MTLStoreAction, NSUInteger, RenderCommandEncoderRef,
-    RenderPassColorAttachmentDescriptorRef, RenderPassDescriptor, RenderPassDescriptorRef,
-    RenderPipelineColorAttachmentDescriptorRef, RenderPipelineDescriptor,
+    BufferRef, CommandBufferRef, DeviceRef, FunctionConstantValues, LibraryRef, MTLClearColor,
+    MTLDataType, MTLLoadAction, MTLPixelFormat, MTLStoreAction, NSUInteger,
+    RenderCommandEncoderRef, RenderPassColorAttachmentDescriptorRef, RenderPassDescriptor,
+    RenderPassDescriptorRef, RenderPipelineColorAttachmentDescriptorRef, RenderPipelineDescriptor,
     RenderPipelineDescriptorRef, RenderPipelineState, Texture, TextureRef,
 };
 use std::marker::PhantomData;
@@ -286,26 +286,18 @@ impl StencilAttachmentKind for NoStencil {
     }
 }
 
-pub trait VertexShaderBinds {
-    fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef);
-}
-
-pub trait FragmentShaderBinds {
-    fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef);
+pub trait FunctionBinds {
+    fn encode_binds(self, encoder: &RenderCommandEncoderRef);
 }
 
 pub struct NoBinds;
-impl VertexShaderBinds for NoBinds {
+impl FunctionBinds for NoBinds {
     #[inline]
-    fn encode_vertex_binds(self, _encoder: &RenderCommandEncoderRef) {}
-}
-impl FragmentShaderBinds for NoBinds {
-    #[inline]
-    fn encode_fragment_binds(self, _encoder: &RenderCommandEncoderRef) {}
+    fn encode_binds(self, _encoder: &RenderCommandEncoderRef) {}
 }
 
 pub trait VertexShader {
-    type Binds<'a>: VertexShaderBinds;
+    type Binds<'a>: FunctionBinds;
 
     // TODO: START HERE 2
     // TODO: START HERE 2
@@ -317,9 +309,10 @@ pub trait VertexShader {
         &self,
         lib: &LibraryRef,
         pipeline_desc: &RenderPipelineDescriptorRef,
+        function_constants: Option<FunctionConstantValues>,
     ) {
         let func = lib
-            .get_function(Self::function_name(), None)
+            .get_function(Self::function_name(), function_constants)
             .expect("Failed to get vertex function from library");
         pipeline_desc.set_vertex_function(Some(&func));
     }
@@ -328,16 +321,17 @@ pub trait VertexShader {
 }
 
 pub trait FragmentShader {
-    type Binds<'a>: FragmentShaderBinds;
+    type Binds<'a>: FunctionBinds;
 
     #[inline]
     fn setup_pipeline_fragment_function(
         &self,
         lib: &LibraryRef,
         pipeline_desc: &RenderPipelineDescriptorRef,
+        function_constants: Option<FunctionConstantValues>,
     ) {
         let func = lib
-            .get_function(Self::function_name(), None)
+            .get_function(Self::function_name(), function_constants)
             .expect("Failed to get vertex function from library");
         pipeline_desc.set_fragment_function(Some(&func));
     }
@@ -354,6 +348,7 @@ impl FragmentShader for NoFragmentShader {
         &self,
         _lib: &LibraryRef,
         _pipeline_desc: &RenderPipelineDescriptorRef,
+        _function_constants: Option<FunctionConstantValues>,
     ) {
     }
 
@@ -363,33 +358,89 @@ impl FragmentShader for NoFragmentShader {
     }
 }
 
+pub trait FunctionConstantsFactory {
+    fn create_function_constant_values(&self) -> Option<FunctionConstantValues>;
+}
+
+pub struct NoFunctionConstants;
+impl FunctionConstantsFactory for NoFunctionConstants {
+    fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {
+        None
+    }
+}
+
+pub trait HasMTLDataType {
+    const MTL_DATA_TYPE: MTLDataType;
+}
+macro_rules! into_mtl_data_type {
+    ($from:path, $mtl_data_type:path) => {
+        impl HasMTLDataType for $from {
+            const MTL_DATA_TYPE: MTLDataType = $mtl_data_type;
+        }
+    };
+}
+
+into_mtl_data_type!(bool, MTLDataType::Float);
+into_mtl_data_type!(metal_types::float, MTLDataType::Float);
+into_mtl_data_type!(metal_types::float2, MTLDataType::Float2);
+// into_mtl_data_type!(metal_types::float3, MTLDataType::Float3);
+into_mtl_data_type!(metal_types::float4, MTLDataType::Float4);
+into_mtl_data_type!(metal_types::uint, MTLDataType::UInt);
+into_mtl_data_type!(metal_types::int, MTLDataType::Int);
+into_mtl_data_type!(metal_types::ushort, MTLDataType::UShort);
+into_mtl_data_type!(metal_types::short, MTLDataType::Short);
+
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Consider metal-build generating {Render/Compute/Mesh}Pipeline related helpers
+// - Currently, users stil need define RenderPipeline<...> and apply the write combination of NUM_COLOR_ATTACHMENTS, FCS, VS, FS
+//    - During metal-build binding generation we have enough information to limit combinations
+//       - We know FCS is required needed or not.
+//       - We know a RenderPipeline is possible or not (is there a VS?)
+//          - Depending on FS return type (has `[[color(n)]]`? or just `half4`/`float4`), we know NUM_COLOR_ATTACHMENTS
+//          - If there's only one VS... well the user doesn't even need to choose? (overly optimized?)
+//       - We know a MeshPipeline (future) is possible or not (is there an Object and Mesh function?)
+//       - We know a ComputePipeline (future) is possible or not (is there an Kernel function?)
+// - We could go further to solve/mitigate the following...
+//   - Use the wrong FunctionConstantFactory type
+//       - ex. Accidentally use NoFunctionConstants when it is actually required
+//   - Use the wrong NUM_COLOR_ATTACHMENTS
+//       - ex. FS has `[[color(2)]]`, but NUM_COLOR_ATTACHMENTS is 1
+// 1. Sketch out what this would look like
+// 2. Does it actually worth the code generation complexity?
+
 pub struct RenderPipeline<
     const NUM_COLOR_ATTACHMENTS: usize,
+    FCF: FunctionConstantsFactory,
     VS: VertexShader,
     FS: FragmentShader,
     D: DepthAttachmentKind,
     S: StencilAttachmentKind,
 > {
     pipeline: RenderPipelineState,
-    _depth_kind: PhantomData<D>,
-    _stencil_kind: PhantomData<S>,
+    _function_constants: PhantomData<FCF>,
     _vertex_fn: PhantomData<VS>,
     _fragment_fn: PhantomData<FS>,
+    _depth_kind: PhantomData<D>,
+    _stencil_kind: PhantomData<S>,
 }
 
 impl<
         const NUM_COLOR_ATTACHMENTS: usize,
+        FCF: FunctionConstantsFactory,
         VS: VertexShader,
         FS: FragmentShader,
         D: DepthAttachmentKind,
         S: StencilAttachmentKind,
-    > RenderPipeline<NUM_COLOR_ATTACHMENTS, VS, FS, D, S>
+    > RenderPipeline<NUM_COLOR_ATTACHMENTS, FCF, VS, FS, D, S>
 {
     pub fn new(
         label: &str,
         device: &DeviceRef,
         library: &LibraryRef,
         colors: [ColorAttachementPipelineDesc; NUM_COLOR_ATTACHMENTS],
+        function_constants: FCF,
         vertex_fn: VS,
         fragment_fn: FS,
         depth_kind: D,
@@ -409,8 +460,19 @@ impl<
         stencil_kind.setup_pipeline_attachment(&pipeline_desc);
 
         // TODO: Set vertex/fragment shader buffer arguments as immutable, where appropriate.
-        vertex_fn.setup_pipeline_vertex_function(library, &pipeline_desc);
-        fragment_fn.setup_pipeline_fragment_function(library, &pipeline_desc);
+
+        let fcs_v = function_constants.create_function_constant_values();
+        let fcs_f = fcs_v.clone();
+
+        // TODO: Is it any faster to manually clone and avoid calling Obj-C `retain`?
+        // - Does this double drop?
+        //   - Can we work around this with a std::mem::forget?
+        // let fcs_v = function_constants.create_function_constant_values();
+        // let fcs_f = fcs_v
+        //     .as_ref()
+        //     .map(|m| unsafe { FunctionConstantValues::from_ptr(m.as_ptr()) });
+        vertex_fn.setup_pipeline_vertex_function(library, &pipeline_desc, fcs_v);
+        fragment_fn.setup_pipeline_fragment_function(library, &pipeline_desc, fcs_f);
 
         // TODO: START HERE 2
         // TODO: START HERE 2
@@ -422,6 +484,7 @@ impl<
             .expect("Failed to create pipeline state");
         Self {
             pipeline,
+            _function_constants: PhantomData,
             _vertex_fn: PhantomData,
             _fragment_fn: PhantomData,
             _depth_kind: PhantomData,
@@ -461,8 +524,8 @@ impl<
         vertex_binds: VS::Binds<'b>,
         fragment_binds: FS::Binds<'c>,
     ) {
-        vertex_binds.encode_vertex_binds(encoder);
-        fragment_binds.encode_fragment_binds(encoder);
+        vertex_binds.encode_binds(encoder);
+        fragment_binds.encode_binds(encoder);
     }
 }
 
@@ -478,13 +541,27 @@ mod test {
     // TODO: START HERE
     // DOOOO ITTTT! Parse. Shader. Functions.
 
+    struct FunctionConstants1;
+    impl FunctionConstantsFactory for FunctionConstants1 {
+        #[inline]
+        fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {
+            let fcv = FunctionConstantValues::new();
+            fcv.set_constant_value_at_index(
+                (&0_f32 as *const _) as _,
+                metal_types::float::MTL_DATA_TYPE,
+                0,
+            );
+            Some(fcv)
+        }
+    }
+
     // Assumed to be generated by metal-build (shader_function_parser/generate_shader_binds)
     struct Vertex1Binds<'a> {
         v_bind1: BindMany<'a, 0, f32>,
     }
-    impl VertexShaderBinds for Vertex1Binds<'_> {
+    impl FunctionBinds for Vertex1Binds<'_> {
         #[inline]
-        fn encode_vertex_binds(self, encoder: &RenderCommandEncoderRef) {
+        fn encode_binds(self, encoder: &RenderCommandEncoderRef) {
             self.v_bind1.encode_for_vertex(encoder);
         }
     }
@@ -502,9 +579,9 @@ mod test {
     struct Frag1Binds<'a> {
         f_bind1: BindOne<'a, 0, float4>,
     }
-    impl FragmentShaderBinds for Frag1Binds<'_> {
+    impl FunctionBinds for Frag1Binds<'_> {
         #[inline]
-        fn encode_fragment_binds(self, encoder: &RenderCommandEncoderRef) {
+        fn encode_binds(self, encoder: &RenderCommandEncoderRef) {
             self.f_bind1.encode_for_fragment(encoder);
         }
     }
@@ -563,6 +640,7 @@ mod test {
                 &device,
                 &lib,
                 [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                NoFunctionConstants,
                 Vertex1,
                 Fragment1,
                 NoDepth,
@@ -609,6 +687,7 @@ mod test {
                     (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
                     (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
                 ],
+                NoFunctionConstants,
                 Vertex1,
                 Fragment1,
                 NoDepth,
@@ -650,6 +729,7 @@ mod test {
                 &device,
                 &lib,
                 [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                NoFunctionConstants,
                 Vertex1,
                 NoFragmentShader,
                 HasDepth(MTLPixelFormat::Depth16Unorm),
