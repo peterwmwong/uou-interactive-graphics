@@ -15,7 +15,7 @@ struct Delegate {
     camera: Camera<4>,
     command_queue: CommandQueue,
     device: Device,
-    model: Model<1, NO_MATERIALS_ID, Geometry, NoMaterial>,
+    model: Model<1, Geometry, NoMaterial>,
     needs_render: bool,
     render_pipeline: RenderPipeline<1, main_vertex, main_fragment, NoDepth, NoStencil>,
     vertex_input: VertexInput,
@@ -34,7 +34,7 @@ impl RendererDelgate for Delegate {
                 arg.indices = geo.indices_buffer;
                 arg.positions = geo.positions_buffer;
             },
-            NO_MATERIALS_ENCODER,
+            NoMaterial,
         );
         let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let half_size = size * f32x4::splat(0.5);
@@ -96,21 +96,16 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
         );
-        for DrawIteratorItem {
-            geometry: (geo, geo_i),
-            num_vertices,
-            ..
-        } in self.model.get_draws()
-        {
+        for d in self.model.get_draws() {
             self.render_pipeline.setup_binds(
                 encoder,
                 main_vertex_binds {
                     r#in: BindOne::Bytes(&self.vertex_input),
-                    geometry: BindOne::rolling_buffer_offset(geo, geo_i),
+                    geometry: BindOne::rolling_buffer_offset(d.geometry),
                 },
                 main_fragment_binds,
             );
-            encoder.draw_primitives(MTLPrimitiveType::Point, 0, num_vertices as _);
+            encoder.draw_primitives(MTLPrimitiveType::Point, 0, d.num_vertices as _);
         }
         encoder.end_encoding();
         command_buffer

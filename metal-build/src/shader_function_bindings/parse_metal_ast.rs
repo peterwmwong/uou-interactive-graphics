@@ -151,6 +151,11 @@ vec![
 
 */
 pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec<ShaderFunction> {
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Parse Function Constants!
+
     // Example: |-FunctionDecl 0x14a1327a8 <line:9:1, line:11:15> line:9:8 main_vertex 'float4 (const constant packed_float4 *)'
     let rx_fn = Regex::new(
         r"^\|-FunctionDecl 0x\w+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<fn_name>\w+) ",

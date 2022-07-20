@@ -119,7 +119,7 @@ impl<'a, const BUFFER_INDEX: u64, T: Sized + Copy + Clone> BindOne<'a, BUFFER_IN
         });
     }
     #[inline]
-    pub fn rolling_buffer_offset(buffer: &'a TypedBuffer<T>, element_offset: usize) -> Self {
+    pub fn rolling_buffer_offset((buffer, element_offset): (&'a TypedBuffer<T>, usize)) -> Self {
         if element_offset == 0 {
             Self::BufferAndOffset(buffer, 0)
         } else {
@@ -211,7 +211,7 @@ pub trait DepthAttachmentKind {
     ) {
     }
 }
-pub struct HasDepth(MTLPixelFormat);
+pub struct HasDepth(pub MTLPixelFormat);
 impl DepthAttachmentKind for HasDepth {
     type RenderPassDesc<'a> = (&'a TextureRef, f32, MTLLoadAction, MTLStoreAction);
 
@@ -248,7 +248,7 @@ pub trait StencilAttachmentKind {
         pass: &RenderPassDescriptorRef,
     );
 }
-pub struct HasStencil(MTLPixelFormat);
+pub struct HasStencil(pub MTLPixelFormat);
 impl StencilAttachmentKind for HasStencil {
     type RenderPassDesc<'a> = (&'a TextureRef, u32, MTLLoadAction, MTLStoreAction);
 
@@ -307,6 +307,11 @@ impl FragmentShaderBinds for NoBinds {
 pub trait VertexShader {
     type Binds<'a>: VertexShaderBinds;
 
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // 1. Remove &self
+    // 2. Remove VertexShader and FragmentShader from RenderPipeline::new() params
     #[inline]
     fn setup_pipeline_vertex_function(
         &self,
