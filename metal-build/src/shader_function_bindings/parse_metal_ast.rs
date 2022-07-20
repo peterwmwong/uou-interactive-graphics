@@ -85,6 +85,25 @@ impl ShaderType {
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
+pub struct FunctionConstant {
+    pub name: String,
+    pub data_type: String,
+    pub index: u16,
+}
+
+impl FunctionConstant {
+    pub const INVALID_INDEX: u16 = u16::MAX;
+    pub fn new(name: &str, data_type: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            data_type: data_type.to_owned(),
+            index: Self::INVALID_INDEX,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ShaderFunction {
     pub fn_name: String,
     pub binds: Vec<ShaderFunctionBind>,
@@ -92,9 +111,9 @@ pub struct ShaderFunction {
 }
 
 impl ShaderFunction {
-    fn new(fn_name: String) -> Self {
+    fn new(fn_name: &str) -> Self {
         Self {
-            fn_name,
+            fn_name: fn_name.to_owned(),
             binds: vec![],
             shader_type: ShaderType::Vertex,
         }
@@ -150,21 +169,28 @@ vec![
 ]
 
 */
-pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec<ShaderFunction> {
+pub fn parse_shader_functions_from_reader<R: Read>(
+    shader_file_reader: R,
+) -> (Vec<FunctionConstant>, Vec<ShaderFunction>) {
     // TODO: START HERE
     // TODO: START HERE
     // TODO: START HERE
     // Parse Function Constants!
 
+    // FUNCTION REGULAR EXPRESSIONS
+    // ----------------------------
+
+    // TODO: Optimize Hex Address RegEx. Currently 0x\w+, could be 0x[0-9a-f]+
+
     // Example: |-FunctionDecl 0x14a1327a8 <line:9:1, line:11:15> line:9:8 main_vertex 'float4 (const constant packed_float4 *)'
     let rx_fn = Regex::new(
-        r"^\|-FunctionDecl 0x\w+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<fn_name>\w+) ",
+        r"^\|-FunctionDecl 0x[0-9a-f]+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<fn_name>\w+) ",
     )
     .unwrap();
 
     // Example: | |-ParmVarDecl 0x14a132638 <line:10:5, col:29> col:29 yolo 'const constant packed_float4 *'
     // Example: | |-ParmVarDecl 0x116879d78 <line:7:5, col:21> col:21 tex0 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
-    let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x\w+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) '(?P<address_space>const constant |device |\w+[\w:<>, ]+':')(metal::)?(?P<data_type>[\w:<>, ]+)(?P<multiplicity> [*&]|)'").unwrap();
+    let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x[0-9a-f]+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) '(?P<address_space>const constant |device |\w+[\w:<>, ]+':')(metal::)?(?P<data_type>[\w:<>, ]+)(?P<multiplicity> [*&]|)'").unwrap();
 
     // Example: | | `-MetalBufferIndexAttr 0x14a132698 <col:36, col:44>
     let rx_fn_param_metal_buffer_texture_index_attr = Regex::new(
@@ -174,7 +200,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
 
     // Example: | |   `-IntegerLiteral 0x14a132570 <col:43> 'int' 0
     let rx_fn_param_metal_buffer_texture_index_attr_value = Regex::new(
-        r"^\| \|   (?P<last_child>[`|])-IntegerLiteral 0x\w+ <(line|col)(:\d+)+> 'int' (?P<index>\d+)",
+        r"^\| \|   (?P<last_child>[`|])-IntegerLiteral 0x[0-9a-f]+ <(line|col)(:\d+)+> 'int' (?P<index>\d+)",
     )
     .unwrap();
 
@@ -183,8 +209,26 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
     let rx_fn_metal_shader_type_attr =
         Regex::new(r"^\| (?P<last_child>[`|])-Metal(?P<shader_type>Vertex|Fragment)Attr ").unwrap();
 
+    // VARIABLE REGULAR EXPRESSIONS
+    // ----------------------------
+
     // Example: | `-
     let rx_fn_last_child = Regex::new(r"^\| `-").unwrap();
+
+    // Example: |-VarDecl 0x13a136af0 <line:7:1, col:26> col:26 HasAmbient 'const constant bool' constexpr
+    let rx_var =
+        Regex::new(r"^\|-VarDecl 0x[0-9a-f]+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<name>\w+) 'const constant (metal::)?(?P<data_type>[\w:<>, ]+)'( |:'.* )constexpr$").unwrap();
+
+    // Example: | `-MetalFunctionConstantAttr 0x13a136b50 <col:41, col:60>
+    let rx_var_metal_func_const = Regex::new(r"^\| `-MetalFunctionConstantAttr ").unwrap();
+
+    // Example: |   `-IntegerLiteral 0x13a136ac0 <col:59> 'int' 9
+    let rx_var_metal_func_const_value =
+        Regex::new(r"^\|   `-IntegerLiteral 0x[0-9a-f]+ <(line|col)(:\d+)+> 'int' (?P<index>\d+)")
+            .unwrap();
+
+    // COMMON REGULAR EXPRESSIONS
+    // --------------------------
 
     // Example: | `-
     // Example: | | `-
@@ -215,23 +259,28 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
         data_type: String,
     }
     enum State {
-        FindFunction,
+        FindingRoot,
         Function(ShaderFunction),
-        Param(ShaderFunction, ShaderFunctionParamInfo, FunctionChild),
-        ParamBufferTexture(ShaderFunction, ShaderFunctionBind, FunctionChild),
+        FunctionParam(ShaderFunction, ShaderFunctionParamInfo, FunctionChild),
+        FunctionParamBufferOrTexture(ShaderFunction, ShaderFunctionBind, FunctionChild),
+        Variable(FunctionConstant),
+        VariableValue(FunctionConstant),
     }
+    let mut fn_consts: Vec<FunctionConstant> = vec![];
     let mut shader_fns = vec![];
     let mut parse_next_state = |state: State, l: String| {
         match state {
-            State::FindFunction => {
+            State::FindingRoot => {
                 if let Some(c) = rx_fn.captures(&l) {
-                    return State::Function(ShaderFunction::new(c["fn_name"].to_owned()));
+                    return State::Function(ShaderFunction::new(&c["fn_name"]));
+                } else if let Some(c) = rx_var.captures(&l) {
+                    return State::Variable(FunctionConstant::new(&c["name"], &c["data_type"]));
                 }
             }
             State::Function(mut fun) => {
                 if let Some(c) = rx_fn_param.captures(&l) {
                     // TODO: Implement, this should determine immutability of buffers (render pipeline creation).
-                    return State::Param(
+                    return State::FunctionParam(
                         fun,
                         ShaderFunctionParamInfo {
                             address_space: c["address_space"].to_owned(),
@@ -252,21 +301,21 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                     // Example: [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
                     if FunctionChild::is_last_child(&c) {
                         shader_fns.push(fun);
-                        return State::FindFunction;
+                        return State::FindingRoot;
                     }
                 } else if rx_fn_last_child.is_match(&l) {
-                    return State::FindFunction;
+                    return State::FindingRoot;
                 }
                 return State::Function(fun);
             }
-            State::Param(fun, info, fun_last_child) => {
+            State::FunctionParam(fun, info, fun_last_child) => {
                 if let Some(c) = rx_fn_param_metal_buffer_texture_index_attr.captures(&l) {
                     debug_assert!(
                         FunctionChild::is_last_child(&c),
                         "Unsupported: Multiple function param attributes."
                     );
                     let buffer_or_texture = &c["buffer_or_texture"];
-                    return State::ParamBufferTexture(
+                    return State::FunctionParamBufferOrTexture(
                         fun,
                         if buffer_or_texture == "Buffer" {
                             ShaderFunctionBind::Buffer {
@@ -304,13 +353,13 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                 }
                 if rx_last_child_of_any_level.is_match(&l) {
                     return match fun_last_child {
-                        FunctionChild::Last => State::FindFunction,
+                        FunctionChild::Last => State::FindingRoot,
                         FunctionChild::NotLast => State::Function(fun),
                     };
                 }
-                return State::Param(fun, info, fun_last_child);
+                return State::FunctionParam(fun, info, fun_last_child);
             }
-            State::ParamBufferTexture(mut fun, bind, fun_last_child) => {
+            State::FunctionParamBufferOrTexture(mut fun, bind, fun_last_child) => {
                 if let Some(c) = rx_fn_param_metal_buffer_texture_index_attr_value.captures(&l) {
                     debug_assert!(FunctionChild::is_last_child(&c), "Unexpected function param buffer attribute information to follow (why is this not the last child?)");
                     let index = c["index"].parse::<u8>().expect(&format!(
@@ -320,24 +369,40 @@ pub fn parse_shader_functions_from_reader<R: Read>(shader_file_reader: R) -> Vec
                     match fun_last_child {
                         FunctionChild::Last => {
                             shader_fns.push(fun);
-                            return State::FindFunction;
+                            return State::FindingRoot;
                         }
                         FunctionChild::NotLast => return State::Function(fun),
                     }
                 }
                 panic!("Unexpected function param buffer attribute information ({l})");
             }
+            State::Variable(fn_const) => {
+                if rx_var_metal_func_const.is_match(&l) {
+                    return State::VariableValue(fn_const);
+                }
+                return State::FindingRoot;
+            }
+            State::VariableValue(mut fn_const) => {
+                if let Some(c) = rx_var_metal_func_const_value.captures(&l) {
+                    fn_const.index = c["index"].parse::<u16>().expect(&format!(
+                        "Failed to parse function constant index value ({l})"
+                    ));
+                    fn_consts.push(fn_const);
+                    return State::FindingRoot;
+                }
+                panic!("Unexpected function constant attribute information ({l})");
+            }
         }
         state
     };
 
-    let mut state = State::FindFunction;
+    let mut state = State::FindingRoot;
     let mut lines = BufReader::new(shader_file_reader).lines();
     while let Some(Ok(line)) = lines.next() {
         state = parse_next_state(state, line);
     }
 
-    shader_fns
+    (fn_consts, shader_fns)
 }
 
 #[cfg(test)]
@@ -348,11 +413,67 @@ mod test {
     mod test_parse_shader_functions_from_reader {
         use super::*;
 
-        fn test<const N: usize>(input: &[u8], expected_fns: [ShaderFunction; N]) {
-            let expected = Vec::from(expected_fns);
-            let actual = parse_shader_functions_from_reader(input);
+        fn test<const N_FN_CONSTS: usize, const N_FNS: usize>(
+            input: &[u8],
+            expected_fn_consts: [FunctionConstant; N_FN_CONSTS],
+            expected_fns: [ShaderFunction; N_FNS],
+        ) {
+            let (actual_fn_consts, actual_fns) = parse_shader_functions_from_reader(input);
+            pretty_assertions::assert_eq!(&actual_fn_consts, &expected_fn_consts);
+            pretty_assertions::assert_eq!(&actual_fns, &expected_fns);
+        }
 
-            pretty_assertions::assert_eq!(actual, expected);
+        #[test]
+        fn test_fn_consts() {
+            /*
+            constant constexpr bool   A_Bool   [[function_constant(9)]];
+            constant constexpr float  A_Float  [[function_constant(2)]];
+            constant constexpr float4 A_Float4 [[function_constant(4)]];
+            constant constexpr uint   A_Uint   [[function_constant(1)]];
+            */
+            test(format!("\
+TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x14c874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x14c830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x14c874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-VarDecl 0x1358cfdf0 <line:5:1, col:27> col:27 A_Bool 'const constant bool' constexpr
+| `-MetalFunctionConstantAttr 0x1358cfe50 <col:40, col:59>
+|   `-IntegerLiteral 0x1358cfda0 <col:58> 'int' 9
+|-VarDecl 0x1358cff18 <line:6:1, col:27> col:27 A_Float 'const constant float' constexpr
+| `-MetalFunctionConstantAttr 0x1358cff78 <col:40, col:59>
+|   `-IntegerLiteral 0x1358cfeb8 <col:58> 'int' 2
+|-VarDecl 0x1358d0240 <line:7:1, col:27> col:27 A_Float4 'const constant float4':'float const constant __attribute__((ext_vector_type(4)))' constexpr
+| `-MetalFunctionConstantAttr 0x1358d02a0 <col:40, col:59>
+|   `-IntegerLiteral 0x1358d01d0 <col:58> 'int' 4
+|-VarDecl 0x1358d0520 <line:8:1, col:27> col:27 A_Uint 'const constant uint':'const constant unsigned int' constexpr
+| `-MetalFunctionConstantAttr 0x1358d0580 <col:40, col:59>
+|   `-IntegerLiteral 0x1358d04a8 <col:58> 'int' 1
+`-<undeserialized declarations>
+").as_bytes(),
+                [
+                    FunctionConstant {
+                        name: "A_Bool".to_owned(),
+                        data_type: "bool".to_owned(),
+                        index: 9,
+                    },
+                    FunctionConstant {
+                        name: "A_Float".to_owned(),
+                        data_type: "float".to_owned(),
+                        index: 2,
+                    },
+                    FunctionConstant {
+                        name: "A_Float4".to_owned(),
+                        data_type: "float4".to_owned(),
+                        index: 4,
+                    },
+                    FunctionConstant {
+                        name: "A_Uint".to_owned(),
+                        data_type: "uint".to_owned(),
+                        index: 1,
+                    },
+                ],
+                []
+            );
         }
 
         #[test]
@@ -380,6 +501,7 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 | `-MetalVertexAttr 0x14c932540 <line:5:3>
 `-<undeserialized declarations>
 ").as_bytes(),
+[],
                 [ShaderFunction {
                     fn_name: "test".to_owned(),
                     binds: vec![],
@@ -416,6 +538,7 @@ TranslationUnitDecl 0x11f0302e8 <<invalid sloc>> <invalid sloc>
 | `-{metal_attr} 0x10f0670c8 <line:5:3>
 `-<undeserialized declarations>
 ").as_bytes(),
+[],
                     [ShaderFunction {
                         fn_name: "test".to_owned(),
                         binds: vec![],
@@ -459,6 +582,7 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 | `-MetalVertexAttr 0x13da41330 <line:11:3>
 `-<undeserialized declarations>
 ").as_bytes(),
+                    [],
                     [ShaderFunction {
                         fn_name: "test".to_owned(),
                         binds: vec![
@@ -526,6 +650,7 @@ TranslationUnitDecl 0x1210302e8 <<invalid sloc>> <invalid sloc>
 | `-MetalVertexAttr 0x121151498 <line:14:3>
 `-<undeserialized declarations>
 ",
+                [],
                 [
                     ShaderFunction {
                         fn_name: "test".to_owned(),
@@ -566,6 +691,7 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 | `-MetalFragmentAttr 0x116879fa0 <line:5:3>
 `-<undeserialized declarations>
 ").as_bytes(),
+                    [],
                     [
                         ShaderFunction {
                             shader_type: ShaderType::Fragment,
@@ -597,6 +723,7 @@ TranslationUnitDecl 0x12a8302e8 <<invalid sloc>> <invalid sloc>
 |         `-IntegerLiteral 0x12a932388 <col:33> 'int' 0
 `-<undeserialized declarations>
 ",
+                [],
                 []
             );
         }
@@ -644,6 +771,7 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
 | `-MetalFragmentAttr 0x13d914dc0 <col:3>
 `-<undeserialized declarations>
 ",
+                [],
                 [
                     ShaderFunction {
                         fn_name: "test_vertex".to_owned(),
@@ -685,7 +813,7 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
 
         #[test]
         fn test() {
-            let expected = vec![
+            let expected_fns = vec![
                 ShaderFunction {
                     fn_name: "test_vertex".to_owned(),
                     binds: vec![
@@ -798,11 +926,36 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                 .canonicalize()
                 .expect("Failed to canonicalize path to test_shader_src/deps directory");
             let shader_file = shader_dir.join("shaders.metal");
-            let actual = generate_metal_ast(shader_file, |stdout| {
+            let (actual_fn_consts, actual_fns) = generate_metal_ast(shader_file, |stdout| {
                 parse_shader_functions_from_reader(stdout)
             });
 
-            pretty_assertions::assert_eq!(actual, expected);
+            pretty_assertions::assert_eq!(
+                actual_fn_consts,
+                &[
+                    FunctionConstant {
+                        name: "A_Bool".to_owned(),
+                        data_type: "bool".to_owned(),
+                        index: 0,
+                    },
+                    FunctionConstant {
+                        name: "A_Float".to_owned(),
+                        data_type: "float".to_owned(),
+                        index: 1,
+                    },
+                    FunctionConstant {
+                        name: "A_Float4".to_owned(),
+                        data_type: "float4".to_owned(),
+                        index: 2,
+                    },
+                    FunctionConstant {
+                        name: "A_Uint".to_owned(),
+                        data_type: "uint".to_owned(),
+                        index: 3,
+                    },
+                ]
+            );
+            pretty_assertions::assert_eq!(actual_fns, expected_fns);
         }
     }
 }

@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "./function-constants.h"
 
 using namespace metal;
 

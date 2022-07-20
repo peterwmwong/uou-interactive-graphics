@@ -39,6 +39,7 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
             .write_all(s.as_bytes())
             .expect("Unable to write shader_bindings.rs file (shader function bindings)");
     };
+    let (fn_consts, fns) = parse_shader_functions_from_reader(shader_file_reader);
     w(r#"
 /****************
  Shader functions
@@ -48,7 +49,7 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
         fn_name,
         binds,
         shader_type,
-    } in parse_shader_functions_from_reader(shader_file_reader)
+    } in fns
     {
         use ShaderFunctionBind::*;
         let rust_shader_name = escape_name(&fn_name);

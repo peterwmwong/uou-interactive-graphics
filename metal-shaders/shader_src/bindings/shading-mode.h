@@ -1,3 +1,5 @@
+#pragma once
+
 enum struct ShadingMode: unsigned char
 {
     HasAmbient = 0,
