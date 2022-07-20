@@ -12,10 +12,10 @@ pub struct MaxBounds {
     pub size: f32x4,
 }
 
-pub(crate) struct DrawInfo {
-    pub(crate) debug_group_name: String,
-    pub(crate) num_indices: usize,
-    pub(crate) material_id: Option<usize>,
+pub struct DrawInfo {
+    pub debug_group_name: String,
+    pub num_indices: usize,
+    pub material_id: Option<usize>,
 }
 
 pub struct GeometryToEncode {

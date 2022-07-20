@@ -5,7 +5,7 @@ use crate::{
     typed_buffer::{TypedBuffer, TypedBufferSizer},
     MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
-use std::{collections::HashMap, marker::PhantomData, ops::Deref, path::PathBuf};
+use std::{collections::HashMap, ops::Deref, path::Path};
 
 type RGB32 = [f32; 3];
 
@@ -54,11 +54,12 @@ struct MaterialSource<'a> {
 }
 
 impl<'a> MaterialSource<'a> {
-    fn new<'b>(png_file_dir: &'b PathBuf, key: MaterialSourceKey<'a>) -> Self {
+    fn new<'b, P: AsRef<Path>>(png_file_dir: P, key: MaterialSourceKey<'a>) -> Self {
         let (width, height, load_texture_buffer_size, png_reader) = match key {
             MaterialSourceKey::PNG(png_file) => {
-                let decoder =
-                    png::Decoder::new(std::fs::File::open(png_file_dir.join(png_file)).unwrap());
+                let decoder = png::Decoder::new(
+                    std::fs::File::open(png_file_dir.as_ref().join(png_file)).unwrap(),
+                );
                 let reader = decoder.read_info().unwrap();
                 let info = reader.info();
                 let load_texture_buffer_size = reader.output_buffer_size();
@@ -165,13 +166,12 @@ pub(crate) struct Materials<'a, T: Sized + Copy + Clone> {
     materials: Vec<Material<'a>>,
     max_load_texture_buffer_size: usize,
     sources: HashMap<MaterialSourceKey<'a>, MaterialSource<'a>>,
-    _p: PhantomData<T>,
 }
 
 impl<'a, T: Sized + Copy + Clone> Materials<'a, T> {
-    pub(crate) fn new<'b>(
+    pub(crate) fn new<P: AsRef<Path>>(
         device: &Device,
-        material_file_dir: &'b PathBuf,
+        material_file_dir: P,
         obj_mats: &'a [tobj::Material],
     ) -> Self {
         let num_materials = obj_mats.len();
@@ -190,7 +190,7 @@ impl<'a, T: Sized + Copy + Clone> Materials<'a, T> {
                 };
                 for key in [&m.ambient, &m.diffuse, &m.specular] {
                     sources.entry(*key).or_insert_with(|| {
-                        let mat_tx = MaterialSource::new(material_file_dir, *key);
+                        let mat_tx = MaterialSource::new(&material_file_dir, *key);
                         max_load_texture_buffer_size =
                             max_load_texture_buffer_size.max(mat_tx.load_texture_buffer_size);
                         let (size, padding) = mat_tx.size_and_padding(device);
@@ -211,7 +211,6 @@ impl<'a, T: Sized + Copy + Clone> Materials<'a, T> {
             materials,
             max_load_texture_buffer_size,
             sources,
-            _p: PhantomData,
         }
     }
 
