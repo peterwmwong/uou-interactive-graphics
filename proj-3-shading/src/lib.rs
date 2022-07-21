@@ -2,7 +2,7 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::components::{Camera, ShadingModeSelector};
+use metal_app::components::{Camera, DepthTexture, ShadingModeSelector};
 use metal_app::render_pipeline::{
     BindOne, BlendMode, HasDepth, NoBinds, NoStencil, RenderPipeline,
 };
@@ -28,7 +28,7 @@ struct Delegate {
     camera_space: ProjectedSpace,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
-    depth_texture: Option<Texture>,
+    depth_texture: DepthTexture,
     device: Device,
     library: Library,
     light: Camera,
@@ -123,7 +123,7 @@ impl RendererDelgate for Delegate {
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            depth_texture: None,
+            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
             light: Camera::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
@@ -175,9 +175,7 @@ impl RendererDelgate for Delegate {
                     MTLStoreAction::Store,
                 )],
                 (
-                    self.depth_texture
-                        .as_deref()
-                        .expect("Failed to access Depth Texture"),
+                    self.depth_texture.texture(),
                     1.,
                     MTLLoadAction::Clear,
                     MTLStoreAction::DontCare,
@@ -248,18 +246,8 @@ impl RendererDelgate for Delegate {
                 create_model_pipeline(&self.device, &self.library, self.shading_mode);
             self.needs_render = true;
         }
-        match event {
-            UserEvent::WindowFocusedOrResized { size, .. } => {
-                let desc = TextureDescriptor::new();
-                desc.set_width(size[0] as _);
-                desc.set_height(size[1] as _);
-                desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
-                desc.set_storage_mode(MTLStorageMode::Memoryless);
-                desc.set_usage(MTLTextureUsage::RenderTarget);
-                self.depth_texture = Some(self.device.new_texture(&desc));
-                self.needs_render = true;
-            }
-            _ => {}
+        if self.depth_texture.on_event(event, &self.device) {
+            self.needs_render = true;
         }
     }
 
