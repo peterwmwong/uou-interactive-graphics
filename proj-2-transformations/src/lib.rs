@@ -15,7 +15,7 @@ struct Delegate {
     camera: Camera<4>,
     command_queue: CommandQueue,
     device: Device,
-    model: Model<1, Geometry, NoMaterial>,
+    model: Model<Geometry, NoMaterial>,
     needs_render: bool,
     render_pipeline:
         RenderPipeline<1, NoFunctionConstants, main_vertex, main_fragment, NoDepth, NoStencil>,

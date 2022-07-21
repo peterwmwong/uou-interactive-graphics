@@ -1,16 +1,9 @@
 #pragma once
 
-enum struct ShadingMode: unsigned char
-{
-    HasAmbient = 0,
-    HasDiffuse,
-    OnlyNormals,
-    HasSpecular
-};
-
+// TODO: Consider moving function constants to a single place so it's easier to spot duplicate indices.
 #ifdef __METAL_VERSION__
-constant constexpr bool  HasAmbient  [[function_constant(static_cast<uint>(ShadingMode::HasAmbient))]];
-constant constexpr bool  HasDiffuse  [[function_constant(static_cast<uint>(ShadingMode::HasDiffuse))]];
-constant constexpr bool  OnlyNormals   [[function_constant(static_cast<uint>(ShadingMode::OnlyNormals))]];
-constant constexpr bool  HasSpecular [[function_constant(static_cast<uint>(ShadingMode::HasSpecular))]];
+constant constexpr bool  HasAmbient  [[function_constant(0)]];
+constant constexpr bool  HasDiffuse  [[function_constant(1)]];
+constant constexpr bool  OnlyNormals [[function_constant(2)]];
+constant constexpr bool  HasSpecular [[function_constant(3)]];
 #endif

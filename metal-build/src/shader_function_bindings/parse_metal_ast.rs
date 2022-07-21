@@ -217,7 +217,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
 
     // Example: |-VarDecl 0x13a136af0 <line:7:1, col:26> col:26 HasAmbient 'const constant bool' constexpr
     let rx_var =
-        Regex::new(r"^\|-VarDecl 0x[0-9a-f]+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<name>\w+) 'const constant (metal::)?(?P<data_type>[\w:<>, ]+)'( |:'.* )constexpr$").unwrap();
+        Regex::new(r"^\|-VarDecl 0x[0-9a-f]+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) 'const constant (metal::)?(?P<data_type>[\w:<>, ]+)'( |:'.* )constexpr$").unwrap();
 
     // Example: | `-MetalFunctionConstantAttr 0x13a136b50 <col:41, col:60>
     let rx_var_metal_func_const = Regex::new(r"^\| `-MetalFunctionConstantAttr ").unwrap();
@@ -439,13 +439,13 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 |-VarDecl 0x1358cfdf0 <line:5:1, col:27> col:27 A_Bool 'const constant bool' constexpr
 | `-MetalFunctionConstantAttr 0x1358cfe50 <col:40, col:59>
 |   `-IntegerLiteral 0x1358cfda0 <col:58> 'int' 9
-|-VarDecl 0x1358cff18 <line:6:1, col:27> col:27 A_Float 'const constant float' constexpr
+|-VarDecl 0x1358cff18 <line:6:1, col:27> col:27 used A_Float 'const constant float' constexpr
 | `-MetalFunctionConstantAttr 0x1358cff78 <col:40, col:59>
 |   `-IntegerLiteral 0x1358cfeb8 <col:58> 'int' 2
 |-VarDecl 0x1358d0240 <line:7:1, col:27> col:27 A_Float4 'const constant float4':'float const constant __attribute__((ext_vector_type(4)))' constexpr
 | `-MetalFunctionConstantAttr 0x1358d02a0 <col:40, col:59>
 |   `-IntegerLiteral 0x1358d01d0 <col:58> 'int' 4
-|-VarDecl 0x1358d0520 <line:8:1, col:27> col:27 A_Uint 'const constant uint':'const constant unsigned int' constexpr
+|-VarDecl 0x1358d0520 <line:8:1, col:27> col:27 used A_Uint 'const constant uint':'const constant unsigned int' constexpr
 | `-MetalFunctionConstantAttr 0x1358d0580 <col:40, col:59>
 |   `-IntegerLiteral 0x1358d04a8 <col:58> 'int' 1
 `-<undeserialized declarations>

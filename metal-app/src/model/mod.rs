@@ -50,65 +50,38 @@ impl<'a, G: Sized + Copy + Clone, MK: MaterialKind> Iterator for DrawIterator<'a
     }
 }
 
-pub trait MaterialLocatorFromDraw<M: Sized + Copy + Clone> {
+pub trait MaterialLocator<M: Sized + Copy + Clone> {
     fn get_material(&self, draw: &DrawInfo) -> Option<(&TypedBuffer<M>, usize)>;
-    fn legacy_encode_fragment<const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>(
-        &self,
-        _encoder: &RenderCommandEncoderRef,
-        _draw: &DrawInfo,
-    ) {
-    }
 }
 
-pub struct HasMaterial_MaterialLocatorFromDraw<M: Sized + Copy + Clone + 'static> {
+pub struct HasMaterialLocator<M: Sized + Copy + Clone + 'static> {
     materials_arg_buffers: TypedBuffer<M>,
 }
 
-impl<M: Sized + Copy + Clone + 'static> MaterialLocatorFromDraw<M>
-    for HasMaterial_MaterialLocatorFromDraw<M>
-{
+impl<M: Sized + Copy + Clone + 'static> MaterialLocator<M> for HasMaterialLocator<M> {
     fn get_material(&self, draw: &DrawInfo) -> Option<(&TypedBuffer<M>, usize)> {
         draw.material_id
             .map(|mid| (&self.materials_arg_buffers, mid))
     }
-
-    fn legacy_encode_fragment<const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>(
-        &self,
-        encoder: &RenderCommandEncoderRef,
-        draw: &DrawInfo,
-    ) {
-        if let Some(material_id) = draw.material_id {
-            encoder.set_fragment_buffer(
-                FRAGMENT_MATERIAL_ARG_BUFFER_ID,
-                Some(&self.materials_arg_buffers.buffer),
-                (material_id * self.materials_arg_buffers.element_size()) as _,
-            );
-        }
-    }
 }
 
-pub trait InitializedMaterials<Locator> {
+pub trait MaterialsInitialized<Locator> {
     fn allocate_materials(self, heap: &Heap) -> Locator;
     fn heap_size(&self) -> usize;
 }
 
-pub struct HasMaterial_InitializedMaterials<
-    'a,
-    M: Sized + Copy + Clone,
-    F: FnMut(&mut M, MaterialToEncode),
-> {
+pub struct HasMaterialInitialized<'a, M: Sized + Copy + Clone, F: FnMut(&mut M, MaterialToEncode)> {
     encoder: F,
     materials: Materials<'a, M>,
     heap_size: usize,
 }
 
 impl<'a, M: Sized + Copy + Clone, F: FnMut(&mut M, MaterialToEncode)>
-    InitializedMaterials<HasMaterial_MaterialLocatorFromDraw<M>>
-    for HasMaterial_InitializedMaterials<'a, M, F>
+    MaterialsInitialized<HasMaterialLocator<M>> for HasMaterialInitialized<'a, M, F>
 {
-    fn allocate_materials(mut self, heap: &Heap) -> HasMaterial_MaterialLocatorFromDraw<M> {
+    fn allocate_materials(mut self, heap: &Heap) -> HasMaterialLocator<M> {
         let results = self.materials.allocate_and_encode(heap, self.encoder);
-        HasMaterial_MaterialLocatorFromDraw {
+        HasMaterialLocator {
             materials_arg_buffers: results.arguments_buffer,
         }
     }
@@ -120,8 +93,8 @@ impl<'a, M: Sized + Copy + Clone, F: FnMut(&mut M, MaterialToEncode)>
 
 pub trait MaterialKind {
     type Argument: Sized + Copy + 'static;
-    type Initialized<'a>: InitializedMaterials<Self::Locator>;
-    type Locator: MaterialLocatorFromDraw<Self::Argument>;
+    type Initialized<'a>: MaterialsInitialized<Self::Locator>;
+    type Locator: MaterialLocator<Self::Argument>;
 
     fn initialize_materials<'a, P: AsRef<Path>>(
         self,
@@ -148,8 +121,8 @@ impl<M: Sized + Copy + Clone + 'static, F: FnMut(&mut M, MaterialToEncode)> Mate
     for HasMaterial<M, F>
 {
     type Argument = M;
-    type Initialized<'a> = HasMaterial_InitializedMaterials<'a, Self::Argument, F>;
-    type Locator = HasMaterial_MaterialLocatorFromDraw<M>;
+    type Initialized<'a> = HasMaterialInitialized<'a, Self::Argument, F>;
+    type Locator = HasMaterialLocator<M>;
 
     fn initialize_materials<'a, P: AsRef<Path>>(
         self,
@@ -159,7 +132,7 @@ impl<M: Sized + Copy + Clone + 'static, F: FnMut(&mut M, MaterialToEncode)> Mate
     ) -> Self::Initialized<'a> {
         let materials = Materials::new(device, material_file_dir, tobj_materials);
         let heap_size = materials.heap_size();
-        HasMaterial_InitializedMaterials {
+        HasMaterialInitialized {
             encoder: self.encoder,
             materials,
             heap_size,
@@ -182,7 +155,7 @@ impl MaterialKind for NoMaterial {
         NoMaterial
     }
 }
-impl InitializedMaterials<NoMaterial> for NoMaterial {
+impl MaterialsInitialized<NoMaterial> for NoMaterial {
     fn allocate_materials(self, _heap: &Heap) -> NoMaterial {
         NoMaterial
     }
@@ -192,16 +165,12 @@ impl InitializedMaterials<NoMaterial> for NoMaterial {
     }
 }
 
-impl MaterialLocatorFromDraw<()> for NoMaterial {
+impl MaterialLocator<()> for NoMaterial {
     fn get_material(&self, _draw: &DrawInfo) -> Option<(&TypedBuffer<()>, usize)> {
         None
     }
 }
-pub struct Model<
-    const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
-    G: Sized + Copy + Clone + 'static,
-    MK: MaterialKind,
-> {
+pub struct Model<G: Sized + Copy + Clone + 'static, MK: MaterialKind> {
     heap: Heap,
     draws: Vec<DrawInfo>,
     pub geometry_max_bounds: MaxBounds,
@@ -209,12 +178,7 @@ pub struct Model<
     material_locator: MK::Locator,
 }
 
-impl<
-        const VERTEX_GEOMETRY_ARG_BUFFER_ID: u64,
-        G: Sized + Copy + Clone + 'static,
-        MK: MaterialKind,
-    > Model<VERTEX_GEOMETRY_ARG_BUFFER_ID, G, MK>
-{
+impl<G: Sized + Copy + Clone + 'static, MK: MaterialKind> Model<G, MK> {
     pub fn from_file<T: AsRef<Path>, EG: FnMut(&mut G, GeometryToEncode)>(
         obj_file: T,
         device: &Device,
@@ -280,58 +244,8 @@ impl<
             MTLRenderStages::Vertex | MTLRenderStages::Fragment,
         )
     }
-
-    #[inline]
-    pub fn encode_draws<const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>(
-        &self,
-        encoder: &RenderCommandEncoderRef,
-    ) {
-        self.encode_draws_with_primitive_type::<FRAGMENT_MATERIAL_ARG_BUFFER_ID>(
-            encoder,
-            MTLPrimitiveType::Triangle,
-        );
-    }
     #[inline]
     pub fn get_draws(&self) -> DrawIterator<'_, G, MK> {
         DrawIterator::new(&self.draws, &self.geometry_buffers, &self.material_locator)
-    }
-
-    #[inline]
-    pub fn encode_draws_with_primitive_type<const FRAGMENT_MATERIAL_ARG_BUFFER_ID: u64>(
-        &self,
-        encoder: &RenderCommandEncoderRef,
-        primitive_type: MTLPrimitiveType,
-    ) {
-        let mut geometry_arg_buffer_offset = 0;
-
-        for d in &self.draws {
-            encoder.push_debug_group(&d.debug_group_name);
-
-            // For the first object, encode the vertex/fragment buffer.
-            if geometry_arg_buffer_offset == 0 {
-                encoder.set_vertex_buffer(
-                    VERTEX_GEOMETRY_ARG_BUFFER_ID,
-                    Some(&self.geometry_buffers.arguments.buffer),
-                    0,
-                );
-                // TODO: Change condition to FRAGMENT_MATERIAL_ARG_BUFFER_ID != NO_MATERIALS
-                // - Should generate better code
-                self.material_locator
-                    .legacy_encode_fragment::<FRAGMENT_MATERIAL_ARG_BUFFER_ID>(encoder, d);
-            }
-            // Subsequent objects, just move the vertex/fragment buffer offsets
-            else {
-                encoder.set_vertex_buffer_offset(
-                    VERTEX_GEOMETRY_ARG_BUFFER_ID,
-                    geometry_arg_buffer_offset as _,
-                );
-                self.material_locator
-                    .legacy_encode_fragment::<FRAGMENT_MATERIAL_ARG_BUFFER_ID>(encoder, d);
-            }
-            geometry_arg_buffer_offset += self.geometry_buffers.arguments.element_size();
-
-            encoder.draw_primitives(primitive_type, 0, d.num_indices as _);
-            encoder.pop_debug_group();
-        }
     }
 }

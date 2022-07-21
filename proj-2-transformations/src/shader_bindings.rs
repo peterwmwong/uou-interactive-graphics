@@ -214,6 +214,7 @@ impl metal_app::render_pipeline::Function for main_vertex {
     const FUNCTION_NAME: &'static str = "main_vertex";
     type Binds<'c> = main_vertex_binds<'c>;
     type Type = VertexFunctionType;
+    type FunctionConstantsType = NoFunctionConstants;
 }
 
 #[allow(non_camel_case_types)]
@@ -222,4 +223,5 @@ impl metal_app::render_pipeline::Function for main_fragment {
     const FUNCTION_NAME: &'static str = "main_fragment";
     type Binds<'c> = NoBinds;
     type Type = FragmentFunctionType;
+    type FunctionConstantsType = NoFunctionConstants;
 }

@@ -8,24 +8,3 @@
 #include "../../metal-shaders/shader_src/bindings/model-space.h"
 #include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
-
-enum struct VertexBufferIndex
-{
-    Geometry = 0,
-    ModelSpace,
-    LENGTH
-};
-
-enum struct FragBufferIndex
-{
-    CameraSpace = 0,
-    LightPosition,
-    LENGTH,
-};
-
-enum struct LightVertexBufferIndex
-{
-    CameraSpace = 0,
-    LightPosition,
-    LENGTH,
-};

@@ -11,8 +11,8 @@ struct VertexOut
 
 vertex VertexOut
 main_vertex(         uint         vertex_id       [[vertex_id]],
-            constant Geometry   & geometry        [[buffer(VertexBufferIndex::Geometry)]],
-            constant ModelSpace & model           [[buffer(VertexBufferIndex::ModelSpace)]])
+            constant Geometry   & geometry        [[buffer(0)]],
+            constant ModelSpace & model           [[buffer(1)]])
 {
     const uint   idx      = geometry.indices[vertex_id];
     const float4 position = float4(geometry.positions[idx], 1.0);
@@ -25,8 +25,8 @@ main_vertex(         uint         vertex_id       [[vertex_id]],
 
 fragment half4
 main_fragment(         VertexOut        in        [[stage_in]],
-              constant ProjectedSpace & camera    [[buffer(FragBufferIndex::CameraSpace)]],
-              constant float4         & light_pos [[buffer(FragBufferIndex::LightPosition)]])
+              constant ProjectedSpace & camera    [[buffer(0)]],
+              constant float4         & light_pos [[buffer(1)]])
 {
     const float3 n = normalize(in.normal); // Normal - unit vector, world space direction perpendicular to surface
     if (OnlyNormals) return half4(half3(n * float3(1,1,-1)), 1);
@@ -101,8 +101,8 @@ struct LightVertexOut {
 };
 
 vertex LightVertexOut
-light_vertex(constant ProjectedSpace & camera    [[buffer(LightVertexBufferIndex::CameraSpace)]],
-             constant float4         & light_pos [[buffer(LightVertexBufferIndex::LightPosition)]])
+light_vertex(constant ProjectedSpace & camera    [[buffer(0)]],
+             constant float4         & light_pos [[buffer(1)]])
 {
     return {
         .position = camera.matrix_world_to_projection * light_pos,

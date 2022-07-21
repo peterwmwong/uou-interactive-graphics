@@ -42,7 +42,18 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
             .expect("Unable to write shader_bindings.rs file (shader function bindings)");
     };
     let (fn_consts, fns) = parse_shader_functions_from_reader(shader_file_reader);
-    if !fn_consts.is_empty() {
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Having on set of Function Constants for **all** functions may be too simplistic/unrealistic.
+    // - Looking at proj-3, light_vertex and light_fragment functions can be created **WITHOUT** any function constants!
+    // 1. Parsing: Collect all referenced Function Constants in a function and create a type from that
+    // 2. RenderPipeline API: new() takes a Function objects that contain an instance of Function Constants
+    //    - Like `RenderPipeline::new(.., main_vertex(main_vertex_function_constants { ... }), );`
+    // 3. Generator: Update according to 1 and 2.
+    let fn_consts_type = if fn_consts.is_empty() {
+        "NoFunctionConstants"
+    } else {
         w(r#"
 /******************
  Function Constants
@@ -80,7 +91,8 @@ impl FunctionConstantsFactory for FunctionConstants {
     }
 }
 "#);
-    }
+        "FunctionConstants"
+    };
     w(r#"
 /****************
  Shader functions
@@ -126,10 +138,9 @@ pub struct {fn_name}_binds<'c> {{"#
                     }
                 }
             }
-            w(r#"
-}"#);
             w(&format!(
                 r#"
+}}
 impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
     fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{"#
@@ -172,6 +183,7 @@ impl metal_app::render_pipeline::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {rust_function_binds_name};
     type Type = {shader_type_titlecase}FunctionType;
+    type FunctionConstantsType = {fn_consts_type};
 }}
 "#
         ));
@@ -245,6 +257,7 @@ impl metal_app::render_pipeline::Function for test_vertex {{
     const FUNCTION_NAME: &'static str = "test_vertex";
     type Binds<'c> = test_vertex_binds<'c>;
     type Type = VertexFunctionType;
+    type FunctionConstantsType = FunctionConstants;
 }}
 
 #[allow(non_camel_case_types)]
@@ -276,6 +289,7 @@ impl metal_app::render_pipeline::Function for test_fragment {{
     const FUNCTION_NAME: &'static str = "test_fragment";
     type Binds<'c> = test_fragment_binds<'c>;
     type Type = FragmentFunctionType;
+    type FunctionConstantsType = FunctionConstants;
 }}
 "#
             );
@@ -333,6 +347,7 @@ impl metal_app::render_pipeline::Function for test {
     const FUNCTION_NAME: &'static str = "test";
     type Binds<'c> = NoBinds;
     type Type = VertexFunctionType;
+    type FunctionConstantsType = NoFunctionConstants;
 }
 "#
             );
@@ -458,6 +473,7 @@ impl metal_app::render_pipeline::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
     type Type = VertexFunctionType;
+    type FunctionConstantsType = NoFunctionConstants;
 }}
 "#)
                         }
@@ -511,6 +527,7 @@ impl metal_app::render_pipeline::Function for {fn_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
     type Type = FragmentFunctionType;
+    type FunctionConstantsType = NoFunctionConstants;
 }}
 "#),
             );

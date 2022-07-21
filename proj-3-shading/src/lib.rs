@@ -1,7 +1,11 @@
+#![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
 
 use metal_app::components::{Camera, ShadingModeSelector};
+use metal_app::render_pipeline::{
+    BindOne, BlendMode, HasDepth, NoBinds, NoStencil, RenderPipeline,
+};
 use metal_app::*;
 use metal_app::{metal::*, metal_types::*};
 use shader_bindings::*;
@@ -28,11 +32,13 @@ struct Delegate {
     device: Device,
     library: Library,
     light: Camera,
-    light_pipeline: RenderPipelineState,
+    light_pipeline:
+        RenderPipeline<1, FunctionConstants, light_vertex, light_fragment, HasDepth, NoStencil>,
     light_world_position: float4,
     matrix_model_to_world: f32x4x4,
-    model: Model<{ VertexBufferIndex::Geometry as _ }, NO_MATERIALS_ID>,
-    model_pipeline: RenderPipelineState,
+    model: Model<Geometry, NoMaterial>,
+    model_pipeline:
+        RenderPipeline<1, FunctionConstants, main_vertex, main_fragment, HasDepth, NoStencil>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
 }
@@ -41,38 +47,21 @@ fn create_model_pipeline(
     device: &Device,
     library: &Library,
     shading_mode: ShadingModeSelector,
-) -> RenderPipelineState {
-    let p = create_render_pipeline(
-        &device,
-        &new_render_pipeline_descriptor(
-            "Render Teapot Pipeline",
-            &library,
-            Some((DEFAULT_PIXEL_FORMAT, false)),
-            Some(DEPTH_TEXTURE_FORMAT),
-            Some(&shading_mode.encode(
-                FunctionConstantValues::new(),
-                ShadingMode::HasAmbient as _,
-                ShadingMode::HasDiffuse as _,
-                ShadingMode::HasSpecular as _,
-                ShadingMode::OnlyNormals as _,
-            )),
-            Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-        ),
-    );
-    use debug_assert_pipeline_function_arguments::*;
-    debug_assert_render_pipeline_function_arguments(
-        &p,
-        &[
-            value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
-            value_arg::<ModelSpace>(VertexBufferIndex::ModelSpace as _),
-        ],
-        Some(&[
-            value_arg::<ProjectedSpace>(FragBufferIndex::CameraSpace as _),
-            value_arg::<float4>(FragBufferIndex::LightPosition as _),
-        ]),
-    );
-    p.pipeline_state
+) -> RenderPipeline<1, FunctionConstants, main_vertex, main_fragment, HasDepth, NoStencil> {
+    RenderPipeline::new(
+        "Render Teapot Pipeline",
+        device,
+        library,
+        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        FunctionConstants {
+            HasAmbient: shading_mode.contains(ShadingModeSelector::HAS_AMBIENT),
+            HasDiffuse: shading_mode.contains(ShadingModeSelector::HAS_DIFFUSE),
+            OnlyNormals: shading_mode.contains(ShadingModeSelector::ONLY_NORMALS),
+            HasSpecular: shading_mode.contains(ShadingModeSelector::HAS_SPECULAR),
+        },
+        HasDepth(DEPTH_TEXTURE_FORMAT),
+        NoStencil,
+    )
 }
 
 impl RendererDelgate for Delegate {
@@ -97,7 +86,7 @@ impl RendererDelgate for Delegate {
                 arg.normals = normals_buffer;
                 arg.tx_coords = tx_coords_buffer;
             },
-            NO_MATERIALS_ENCODER,
+            NoMaterial,
         );
         let matrix_model_to_world = {
             let MaxBounds { center, size } = model.geometry_max_bounds;
@@ -142,19 +131,20 @@ impl RendererDelgate for Delegate {
                 true,
                 0.,
             ),
-            light_pipeline: create_render_pipeline(
+            light_pipeline: RenderPipeline::new(
+                "Render Light Pipeline",
                 &device,
-                &new_render_pipeline_descriptor(
-                    "Render Light Pipeline",
-                    &library,
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    Some(DEPTH_TEXTURE_FORMAT),
-                    None,
-                    Some((&"light_vertex", LightVertexBufferIndex::LENGTH as _)),
-                    Some((&"light_fragment", 0)),
-                ),
-            )
-            .pipeline_state,
+                &library,
+                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                FunctionConstants {
+                    HasAmbient: true,
+                    HasDiffuse: true,
+                    OnlyNormals: true,
+                    HasSpecular: true,
+                },
+                HasDepth(DEPTH_TEXTURE_FORMAT),
+                NoStencil,
+            ),
             light_world_position: f32x4::default().into(),
             matrix_model_to_world,
             model,
@@ -174,65 +164,69 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-            Some((
-                render_target,
-                (0., 0., 0., 0.),
-                MTLLoadAction::Clear,
-                MTLStoreAction::Store,
-            )),
-            self.depth_texture
-                .as_ref()
-                .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
-            None,
-        ));
-        encoder.set_label("Model and Light");
-
-        self.model.encode_use_resources(encoder);
-        encoder.set_render_pipeline_state(&self.model_pipeline);
-        encoder.set_depth_stencil_state(&self.depth_state);
-
-        // Render Teapot
         {
-            let matrix_normal_to_world: float3x3 = self.matrix_model_to_world.into();
-            encode_vertex_bytes(
-                &encoder,
-                VertexBufferIndex::ModelSpace as _,
-                &ModelSpace {
-                    matrix_model_to_projection: (self.camera_space.matrix_world_to_projection
-                        * self.matrix_model_to_world),
-                    matrix_normal_to_world,
+            let encoder = self.model_pipeline.new_render_command_encoder(
+                "Model and Light",
+                command_buffer,
+                [(
+                    render_target,
+                    (0., 0., 0., 0.),
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                )],
+                (
+                    self.depth_texture
+                        .as_deref()
+                        .expect("Failed to access Depth Texture"),
+                    1.,
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::DontCare,
+                ),
+                NoStencil,
+            );
+            self.model.encode_use_resources(encoder);
+            encoder.set_depth_stencil_state(&self.depth_state);
+
+            // Render Teapot
+            for DrawIteratorItem {
+                num_vertices,
+                geometry,
+                ..
+            } in self.model.get_draws()
+            {
+                self.model_pipeline.setup_binds(
+                    encoder,
+                    main_vertex_binds {
+                        geometry: BindOne::rolling_buffer_offset(geometry),
+                        model: BindOne::Bytes(&ModelSpace {
+                            matrix_model_to_projection: (self
+                                .camera_space
+                                .matrix_world_to_projection
+                                * self.matrix_model_to_world),
+                            matrix_normal_to_world: self.matrix_model_to_world.into(),
+                        }),
+                    },
+                    main_fragment_binds {
+                        camera: BindOne::Bytes(&self.camera_space),
+                        light_pos: BindOne::Bytes(&self.light_world_position),
+                    },
+                );
+                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, num_vertices as _);
+            }
+
+            // Render Light
+            encoder.set_render_pipeline_state(&self.light_pipeline.pipeline);
+            self.light_pipeline.setup_binds(
+                encoder,
+                light_vertex_binds {
+                    camera: BindOne::Bytes(&self.camera_space),
+                    light_pos: BindOne::Bytes(&self.light_world_position),
                 },
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex::CameraSpace as _,
-                &self.camera_space,
-            );
-            encode_fragment_bytes(
-                &encoder,
-                FragBufferIndex::LightPosition as _,
-                &self.light_world_position,
-            );
-            self.model.encode_draws(encoder);
-        }
-
-        // Render Light
-        {
-            encoder.set_render_pipeline_state(&self.light_pipeline);
-            encode_vertex_bytes(
-                &encoder,
-                LightVertexBufferIndex::CameraSpace as _,
-                &self.camera_space,
-            );
-            encode_vertex_bytes(
-                &encoder,
-                LightVertexBufferIndex::LightPosition as _,
-                &self.light_world_position,
+                NoBinds,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
+            encoder.end_encoding();
         }
-        encoder.end_encoding();
         command_buffer
     }
 
