@@ -61,8 +61,6 @@ impl RendererDelgate for Delegate {
                     &library,
                     [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
                     NoFunctionConstants,
-                    main_vertex,
-                    main_fragment,
                     NoDepth,
                     NoStencil,
                 )

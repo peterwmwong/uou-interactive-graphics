@@ -197,27 +197,29 @@ fn bindgen_test_layout_VertexInput() {
 
 #[allow(non_camel_case_types)]
 pub struct main_vertex_binds<'c> {
-    pub r#in: BindOne<'c, 0, VertexInput>,
-    pub geometry: BindOne<'c, 1, Geometry>,
+    pub r#in: BindOne<'c, VertexInput>,
+    pub geometry: BindOne<'c, Geometry>,
 }
 impl FunctionBinds for main_vertex_binds<'_> {
     #[inline]
-    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {
-        self.r#in.encode_for_vertex(encoder);
-        self.geometry.encode_for_vertex(encoder);
+    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {
+        E::encode_one(encoder, self.r#in, 0);
+        E::encode_one(encoder, self.geometry, 1);
     }
 }
 
 #[allow(non_camel_case_types)]
 pub struct main_vertex;
-impl VertexShader for main_vertex {
+impl metal_app::render_pipeline::Function for main_vertex {
     const FUNCTION_NAME: &'static str = "main_vertex";
     type Binds<'c> = main_vertex_binds<'c>;
+    type Type = VertexFunctionType;
 }
 
 #[allow(non_camel_case_types)]
 pub struct main_fragment;
-impl FragmentShader for main_fragment {
+impl metal_app::render_pipeline::Function for main_fragment {
     const FUNCTION_NAME: &'static str = "main_fragment";
     type Binds<'c> = NoBinds;
+    type Type = FragmentFunctionType;
 }

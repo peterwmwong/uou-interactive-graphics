@@ -106,46 +106,55 @@ pub struct {fn_name}_binds<'c> {{"#
             for bind in &binds {
                 match bind {
                     Buffer {
-                        index,
                         name,
                         data_type,
                         bind_type,
-                        // TODO: Implement marking buffers as immutible
-                        immutable: _,
+                        ..
                     } => {
                         let rust_shader_bind_name = escape_name(&name);
                         w(&format!(
                             r#"
-    pub {rust_shader_bind_name}: Bind{bind_type}<'c, {index}, {data_type}>,"#
+    pub {rust_shader_bind_name}: Bind{bind_type}<'c, {data_type}>,"#
                         ));
                     }
-                    Texture { name, index } => {
+                    Texture { name, .. } => {
                         let rust_shader_bind_name = escape_name(&name);
                         w(&format!(
                             r#"
-    pub {rust_shader_bind_name}: BindTexture<'c, {index}>,"#
+    pub {rust_shader_bind_name}: BindTexture<'c>,"#
                         ));
                     }
                 }
             }
             w(r#"
 }"#);
-            let shader_type_lowercase = shader_type.lowercase();
-            let encoder_variable_prefix = if binds.is_empty() { "_" } else { "" };
             w(&format!(
                 r#"
 impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
-    fn encode_binds(self, {encoder_variable_prefix}encoder: &RenderCommandEncoderRef) {{"#
+    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{"#
             ));
             for bind in &binds {
                 match bind {
-                    Buffer { name, .. } | Texture { name, .. } => {
+                    Buffer {
+                        name,
+                        bind_type,
+                        index,
+                        ..
+                    } => {
+                        let bind_type = bind_type.to_string().to_ascii_lowercase();
                         let rust_shader_bind_name = escape_name(name);
                         w(&format!(
                             r#"
-        self.{rust_shader_bind_name}.encode_for_{shader_type_lowercase}(encoder);"#
-                        ))
+        E::encode_{bind_type}(encoder, self.{rust_shader_bind_name}, {index});"#
+                        ));
+                    }
+                    Texture { name, index, .. } => {
+                        let rust_shader_bind_name = escape_name(name);
+                        w(&format!(
+                            r#"
+        E::encode_texture(encoder, self.{rust_shader_bind_name}, {index});"#
+                        ));
                     }
                 }
             }
@@ -159,9 +168,10 @@ impl FunctionBinds for {fn_name}_binds<'_> {{
             r#"
 #[allow(non_camel_case_types)]
 pub struct {rust_shader_name};
-impl {shader_type_titlecase}Shader for {rust_shader_name} {{
+impl metal_app::render_pipeline::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {rust_function_binds_name};
+    type Type = {shader_type_titlecase}FunctionType;
 }}
 "#
         ));
@@ -208,62 +218,64 @@ impl FunctionConstantsFactory for FunctionConstants {{
 
 #[allow(non_camel_case_types)]
 pub struct test_vertex_binds<'c> {{
-    pub buf0: BindMany<'c, 0, float>,
-    pub buf1: BindOne<'c, 1, float2>,
-    pub buf2: BindMany<'c, 2, float3>,
-    pub buf3: BindOne<'c, 3, float3>,
-    pub tex1: BindTexture<'c, 1>,
-    pub buf5: BindOne<'c, 5, TestStruct>,
-    pub buf4: BindMany<'c, 4, TestStruct>,
+    pub buf0: BindMany<'c, float>,
+    pub buf1: BindOne<'c, float2>,
+    pub buf2: BindMany<'c, float3>,
+    pub buf3: BindOne<'c, float3>,
+    pub tex1: BindTexture<'c>,
+    pub buf5: BindOne<'c, TestStruct>,
+    pub buf4: BindMany<'c, TestStruct>,
 }}
 impl FunctionBinds for test_vertex_binds<'_> {{
     #[inline]
-    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
-        self.buf0.encode_for_vertex(encoder);
-        self.buf1.encode_for_vertex(encoder);
-        self.buf2.encode_for_vertex(encoder);
-        self.buf3.encode_for_vertex(encoder);
-        self.tex1.encode_for_vertex(encoder);
-        self.buf5.encode_for_vertex(encoder);
-        self.buf4.encode_for_vertex(encoder);
+    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{
+        E::encode_many(encoder, self.buf0, 0);
+        E::encode_one(encoder, self.buf1, 1);
+        E::encode_many(encoder, self.buf2, 2);
+        E::encode_one(encoder, self.buf3, 3);
+        E::encode_texture(encoder, self.tex1, 1);
+        E::encode_one(encoder, self.buf5, 5);
+        E::encode_many(encoder, self.buf4, 4);
     }}
 }}
 
 #[allow(non_camel_case_types)]
 pub struct test_vertex;
-impl VertexShader for test_vertex {{
+impl metal_app::render_pipeline::Function for test_vertex {{
     const FUNCTION_NAME: &'static str = "test_vertex";
     type Binds<'c> = test_vertex_binds<'c>;
+    type Type = VertexFunctionType;
 }}
 
 #[allow(non_camel_case_types)]
 pub struct test_fragment_binds<'c> {{
-    pub buf0: BindMany<'c, 0, float>,
-    pub buf1: BindOne<'c, 1, float2>,
-    pub buf2: BindMany<'c, 2, float3>,
-    pub buf3: BindOne<'c, 3, float3>,
-    pub tex1: BindTexture<'c, 1>,
-    pub buf5: BindOne<'c, 5, TestStruct>,
-    pub buf4: BindMany<'c, 4, TestStruct>,
+    pub buf0: BindMany<'c, float>,
+    pub buf1: BindOne<'c, float2>,
+    pub buf2: BindMany<'c, float3>,
+    pub buf3: BindOne<'c, float3>,
+    pub tex1: BindTexture<'c>,
+    pub buf5: BindOne<'c, TestStruct>,
+    pub buf4: BindMany<'c, TestStruct>,
 }}
 impl FunctionBinds for test_fragment_binds<'_> {{
     #[inline]
-    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
-        self.buf0.encode_for_fragment(encoder);
-        self.buf1.encode_for_fragment(encoder);
-        self.buf2.encode_for_fragment(encoder);
-        self.buf3.encode_for_fragment(encoder);
-        self.tex1.encode_for_fragment(encoder);
-        self.buf5.encode_for_fragment(encoder);
-        self.buf4.encode_for_fragment(encoder);
+    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{
+        E::encode_many(encoder, self.buf0, 0);
+        E::encode_one(encoder, self.buf1, 1);
+        E::encode_many(encoder, self.buf2, 2);
+        E::encode_one(encoder, self.buf3, 3);
+        E::encode_texture(encoder, self.tex1, 1);
+        E::encode_one(encoder, self.buf5, 5);
+        E::encode_many(encoder, self.buf4, 4);
     }}
 }}
 
 #[allow(non_camel_case_types)]
 pub struct test_fragment;
-impl FragmentShader for test_fragment {{
+impl metal_app::render_pipeline::Function for test_fragment {{
     const FUNCTION_NAME: &'static str = "test_fragment";
     type Binds<'c> = test_fragment_binds<'c>;
+    type Type = FragmentFunctionType;
 }}
 "#
             );
@@ -317,9 +329,10 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct test;
-impl VertexShader for test {
+impl metal_app::render_pipeline::Function for test {
     const FUNCTION_NAME: &'static str = "test";
     type Binds<'c> = NoBinds;
+    type Type = VertexFunctionType;
 }
 "#
             );
@@ -422,6 +435,7 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
                     {
                         let rust_shader_name = escape_name(fn_name);
                         let rust_shader_bind_name = escape_name(bind_name);
+                        let bind_type_lowercase = bind_type.to_string().to_ascii_lowercase();
                         &format!(r#"
 /****************
  Shader functions
@@ -429,20 +443,21 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'c> {{
-    pub {rust_shader_bind_name}: Bind{bind_type}<'c, {bind_index}, {data_type}>,
+    pub {rust_shader_bind_name}: Bind{bind_type}<'c, {data_type}>,
 }}
 impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
-    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
-        self.{rust_shader_bind_name}.encode_for_vertex(encoder);
+    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{
+        E::encode_{bind_type_lowercase}(encoder, self.{rust_shader_bind_name}, {bind_index});
     }}
 }}
 
 #[allow(non_camel_case_types)]
 pub struct {rust_shader_name};
-impl VertexShader for {rust_shader_name} {{
+impl metal_app::render_pipeline::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
+    type Type = VertexFunctionType;
 }}
 "#)
                         }
@@ -481,23 +496,24 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct {fn_name}_binds<'c> {{
-    pub {bind_name}: BindTexture<'c, {bind_index}>,
+    pub {bind_name}: BindTexture<'c>,
 }}
 impl FunctionBinds for {fn_name}_binds<'_> {{
     #[inline]
-    fn encode_binds(self, encoder: &RenderCommandEncoderRef) {{
-        self.{bind_name}.encode_for_fragment(encoder);
+    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{
+        E::encode_texture(encoder, self.{bind_name}, {bind_index});
     }}
 }}
 
 #[allow(non_camel_case_types)]
 pub struct {fn_name};
-impl FragmentShader for {fn_name} {{
+impl metal_app::render_pipeline::Function for {fn_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
+    type Type = FragmentFunctionType;
 }}
 "#),
-        );
+            );
         }
     }
 }
