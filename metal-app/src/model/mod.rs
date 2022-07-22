@@ -14,10 +14,10 @@ use std::path::{Path, PathBuf};
 use std::slice::Iter;
 use tobj::LoadOptions;
 
-pub struct DrawIteratorItem<'a, G: Sized + Copy + Clone, M: Sized + Copy + Clone> {
+pub struct DrawIteratorItem<'a, G: Sized + Copy + Clone, MI> {
     pub num_vertices: usize,
     pub geometry: (&'a TypedBuffer<G>, usize),
-    pub material: Option<(&'a TypedBuffer<M>, usize)>,
+    pub material: MI,
 }
 pub struct DrawIterator<'a, G: Sized + Copy + Clone, MK: MaterialKind> {
     draw_i: Enumerate<Iter<'a, DrawInfo>>,
@@ -40,7 +40,7 @@ impl<'a, G: Sized + Copy + Clone, MK: MaterialKind> DrawIterator<'a, G, MK> {
 }
 
 impl<'a, G: Sized + Copy + Clone, MK: MaterialKind> Iterator for DrawIterator<'a, G, MK> {
-    type Item = DrawIteratorItem<'a, G, MK::Argument>;
+    type Item = DrawIteratorItem<'a, G, <<MK as MaterialKind>::Locator as MaterialLocator>::T<'a>>;
     fn next(&mut self) -> Option<Self::Item> {
         self.draw_i.next().map(|(i, d)| DrawIteratorItem {
             geometry: (self.geometry, i),
@@ -50,18 +50,31 @@ impl<'a, G: Sized + Copy + Clone, MK: MaterialKind> Iterator for DrawIterator<'a
     }
 }
 
-pub trait MaterialLocator<M: Sized + Copy + Clone> {
-    fn get_material(&self, draw: &DrawInfo) -> Option<(&TypedBuffer<M>, usize)>;
+pub trait MaterialLocator {
+    type T<'a>
+    where
+        Self: 'a;
+    fn get_material<'a>(&'a self, draw: &DrawInfo) -> Self::T<'a>;
 }
 
 pub struct HasMaterialLocator<M: Sized + Copy + Clone + 'static> {
-    materials_arg_buffers: TypedBuffer<M>,
+    materials: self::materials::MaterialResults<M>,
 }
 
-impl<M: Sized + Copy + Clone + 'static> MaterialLocator<M> for HasMaterialLocator<M> {
-    fn get_material(&self, draw: &DrawInfo) -> Option<(&TypedBuffer<M>, usize)> {
+impl<M: Sized + Copy + Clone + 'static> MaterialLocator for HasMaterialLocator<M> {
+    type T<'a> = (&'a TypedBuffer<M>, usize)
+    where
+        Self: 'a;
+
+    fn get_material<'a>(&'a self, draw: &DrawInfo) -> Self::T<'a> {
         draw.material_id
-            .map(|mid| (&self.materials_arg_buffers, mid))
+            .map(|mid| (&self.materials.arguments_buffer, mid))
+            // TODO: START HERE
+            // TODO: START HERE
+            // TODO: START HERE
+            // We should be able to remove the Option/expect().
+            // DrawInfo should be generic to know whether material_id is a thing or not.
+            .expect("Failed to get material for draw")
     }
 }
 
@@ -70,19 +83,18 @@ pub trait MaterialsInitialized<Locator> {
     fn heap_size(&self) -> usize;
 }
 
-pub struct HasMaterialInitialized<'a, M: Sized + Copy + Clone, F: FnMut(&mut M, MaterialToEncode)> {
-    encoder: F,
+pub struct HasMaterialInitialized<'a, M: Sized + Copy + Clone> {
+    encoder: fn(&mut M, MaterialToEncode),
     materials: Materials<'a, M>,
     heap_size: usize,
 }
 
-impl<'a, M: Sized + Copy + Clone, F: FnMut(&mut M, MaterialToEncode)>
-    MaterialsInitialized<HasMaterialLocator<M>> for HasMaterialInitialized<'a, M, F>
+impl<'a, M: Sized + Copy + Clone> MaterialsInitialized<HasMaterialLocator<M>>
+    for HasMaterialInitialized<'a, M>
 {
     fn allocate_materials(mut self, heap: &Heap) -> HasMaterialLocator<M> {
-        let results = self.materials.allocate_and_encode(heap, self.encoder);
         HasMaterialLocator {
-            materials_arg_buffers: results.arguments_buffer,
+            materials: self.materials.allocate_and_encode(heap, self.encoder),
         }
     }
 
@@ -94,7 +106,7 @@ impl<'a, M: Sized + Copy + Clone, F: FnMut(&mut M, MaterialToEncode)>
 pub trait MaterialKind {
     type Argument: Sized + Copy + 'static;
     type Initialized<'a>: MaterialsInitialized<Self::Locator>;
-    type Locator: MaterialLocator<Self::Argument>;
+    type Locator: MaterialLocator;
 
     fn initialize_materials<'a, P: AsRef<Path>>(
         self,
@@ -104,12 +116,12 @@ pub trait MaterialKind {
     ) -> Self::Initialized<'a>;
 }
 
-pub struct HasMaterial<M: Sized + Copy + Clone + 'static, F: FnMut(&mut M, MaterialToEncode)> {
-    encoder: F,
+pub struct HasMaterial<M: Sized + Copy + Clone + 'static> {
+    encoder: fn(&mut M, MaterialToEncode),
     _m: PhantomData<M>,
 }
-impl<M: Sized + Copy + Clone + 'static, F: FnMut(&mut M, MaterialToEncode)> HasMaterial<M, F> {
-    pub fn new(encoder: F) -> Self {
+impl<M: Sized + Copy + Clone + 'static> HasMaterial<M> {
+    pub fn new(encoder: fn(&mut M, MaterialToEncode)) -> Self {
         Self {
             encoder,
             _m: PhantomData,
@@ -117,11 +129,9 @@ impl<M: Sized + Copy + Clone + 'static, F: FnMut(&mut M, MaterialToEncode)> HasM
     }
 }
 
-impl<M: Sized + Copy + Clone + 'static, F: FnMut(&mut M, MaterialToEncode)> MaterialKind
-    for HasMaterial<M, F>
-{
+impl<M: Sized + Copy + Clone + 'static> MaterialKind for HasMaterial<M> {
     type Argument = M;
-    type Initialized<'a> = HasMaterialInitialized<'a, Self::Argument, F>;
+    type Initialized<'a> = HasMaterialInitialized<'a, Self::Argument>;
     type Locator = HasMaterialLocator<M>;
 
     fn initialize_materials<'a, P: AsRef<Path>>(
@@ -164,11 +174,11 @@ impl MaterialsInitialized<NoMaterial> for NoMaterial {
         0
     }
 }
-
-impl MaterialLocator<()> for NoMaterial {
-    fn get_material(&self, _draw: &DrawInfo) -> Option<(&TypedBuffer<()>, usize)> {
-        None
-    }
+impl MaterialLocator for NoMaterial {
+    type T<'a> = ()
+    where
+        Self: 'a;
+    fn get_material(&self, _draw: &DrawInfo) -> () {}
 }
 pub struct Model<G: Sized + Copy + Clone + 'static, MK: MaterialKind> {
     heap: Heap,

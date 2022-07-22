@@ -100,8 +100,12 @@ impl RendererDelgate for Delegate {
             self.render_pipeline.setup_binds(
                 encoder,
                 main_vertex_binds {
+                    // TODO: START HERE
+                    // TODO: START HERE
+                    // TODO: START HERE
+                    // Look at proj-4 for optimal binds (bind r#in once, outside of loop)
                     r#in: BindOne::Bytes(&self.vertex_input),
-                    geometry: BindOne::rolling_buffer_offset(d.geometry),
+                    geometry: BindOne::buffer_with_rolling_offset(d.geometry),
                 },
                 NoBinds,
             );

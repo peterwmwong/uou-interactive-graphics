@@ -16,15 +16,29 @@ pub enum BindMany<'a, T: Sized + Copy + Clone> {
     Bytes(&'a [T]),
     BufferAndOffset(&'a TypedBuffer<T>, usize),
     BufferOffset(usize),
-    UsePreviouslySet,
+    Skip,
 }
 impl<'a, T: Sized + Copy + Clone> BindMany<'a, T> {
-    #[inline]
-    pub fn rolling_buffer_offset(buffer: &'a TypedBuffer<T>, element_offset: usize) -> Self {
+    #[inline(always)]
+    pub fn buffer_with_rolling_offset(
+        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+    ) -> Self {
         if element_offset == 0 {
             Self::BufferAndOffset(buffer, 0)
         } else {
-            Self::BufferOffset(0)
+            Self::BufferOffset(element_offset)
+        }
+    }
+
+    #[inline(always)]
+    pub fn iterating_buffer_offset(
+        iteration: usize,
+        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+    ) -> Self {
+        if iteration == 0 {
+            Self::BufferAndOffset(buffer, element_offset)
+        } else {
+            Self::BufferOffset(element_offset)
         }
     }
 }
@@ -33,15 +47,29 @@ pub enum BindOne<'a, T: Sized + Copy + Clone> {
     Bytes(&'a T),
     BufferAndOffset(&'a TypedBuffer<T>, usize),
     BufferOffset(usize),
-    UsePreviouslySet,
+    Skip,
 }
 impl<'a, T: Sized + Copy + Clone> BindOne<'a, T> {
-    #[inline]
-    pub fn rolling_buffer_offset((buffer, element_offset): (&'a TypedBuffer<T>, usize)) -> Self {
+    #[inline(always)]
+    pub fn buffer_with_rolling_offset(
+        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+    ) -> Self {
         if element_offset == 0 {
             Self::BufferAndOffset(buffer, 0)
         } else {
-            Self::BufferOffset(0)
+            Self::BufferOffset(element_offset)
+        }
+    }
+
+    #[inline(always)]
+    pub fn iterating_buffer_offset(
+        iteration: usize,
+        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+    ) -> Self {
+        if iteration == 0 {
+            Self::BufferAndOffset(buffer, element_offset)
+        } else {
+            Self::BufferOffset(element_offset)
         }
     }
 }
@@ -107,7 +135,7 @@ pub trait BindEncoder {
                 }
                 BindOne::BufferAndOffset(b, o) => BindMany::BufferAndOffset(b, o),
                 BindOne::BufferOffset(o) => BindMany::BufferOffset(o),
-                BindOne::UsePreviouslySet => BindMany::UsePreviouslySet,
+                BindOne::Skip => BindMany::Skip,
             },
             bind_index,
         );

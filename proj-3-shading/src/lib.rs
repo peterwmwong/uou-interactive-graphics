@@ -187,10 +187,14 @@ impl RendererDelgate for Delegate {
                 ..
             } in self.model.get_draws()
             {
+                // TODO: START HERE
+                // TODO: START HERE
+                // TODO: START HERE
+                // Look at proj-4 for optimal binds (bind model, camera, light_pos once, outside of loop)
                 self.model_pipeline.setup_binds(
                     encoder,
                     main_vertex_binds {
-                        geometry: BindOne::rolling_buffer_offset(geometry),
+                        geometry: BindOne::buffer_with_rolling_offset(geometry),
                         model: BindOne::Bytes(&ModelSpace {
                             matrix_model_to_projection: (self
                                 .camera_space
