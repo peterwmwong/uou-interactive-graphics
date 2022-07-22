@@ -32,13 +32,11 @@ struct Delegate {
     device: Device,
     library: Library,
     light: Camera,
-    light_pipeline:
-        RenderPipeline<1, FunctionConstants, light_vertex, light_fragment, HasDepth, NoStencil>,
+    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, HasDepth, NoStencil>,
     light_world_position: float4,
     matrix_model_to_world: f32x4x4,
     model: Model<Geometry, NoMaterial>,
-    model_pipeline:
-        RenderPipeline<1, FunctionConstants, main_vertex, main_fragment, HasDepth, NoStencil>,
+    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
 }
@@ -47,13 +45,14 @@ fn create_model_pipeline(
     device: &Device,
     library: &Library,
     shading_mode: ShadingModeSelector,
-) -> RenderPipeline<1, FunctionConstants, main_vertex, main_fragment, HasDepth, NoStencil> {
+) -> RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil> {
     RenderPipeline::new(
         "Render Teapot Pipeline",
         device,
         library,
         [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
-        FunctionConstants {
+        main_vertex,
+        main_fragment {
             HasAmbient: shading_mode.contains(ShadingModeSelector::HAS_AMBIENT),
             HasDiffuse: shading_mode.contains(ShadingModeSelector::HAS_DIFFUSE),
             OnlyNormals: shading_mode.contains(ShadingModeSelector::ONLY_NORMALS),
@@ -136,12 +135,8 @@ impl RendererDelgate for Delegate {
                 &device,
                 &library,
                 [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
-                FunctionConstants {
-                    HasAmbient: true,
-                    HasDiffuse: true,
-                    OnlyNormals: true,
-                    HasSpecular: true,
-                },
+                light_vertex,
+                light_fragment,
                 HasDepth(DEPTH_TEXTURE_FORMAT),
                 NoStencil,
             ),

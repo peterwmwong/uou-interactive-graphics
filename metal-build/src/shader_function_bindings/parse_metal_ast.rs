@@ -1,7 +1,9 @@
 use regex::{Captures, Regex};
 use std::{
+    collections::BTreeSet,
     fmt::Display,
     io::{BufRead, BufReader, Read},
+    num::NonZeroU16,
 };
 
 #[derive(PartialEq, Eq)]
@@ -11,6 +13,7 @@ pub enum BindType {
     Many,
 }
 
+// TODO: Could this just be From<BindType> for &str or something lighter than instead of Display.
 impl Display for BindType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(
@@ -25,7 +28,7 @@ impl Display for BindType {
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum ShaderFunctionBind {
+pub enum Binds {
     Buffer {
         index: u8,
         name: String,
@@ -38,10 +41,10 @@ pub enum ShaderFunctionBind {
         name: String,
     },
 }
-impl ShaderFunctionBind {
+impl Binds {
     pub const INVALID_INDEX: u8 = u8::MAX;
     fn with_new_index(self, index: u8) -> Self {
-        use ShaderFunctionBind::*;
+        use Binds::*;
         match self {
             Buffer {
                 name,
@@ -63,22 +66,16 @@ impl ShaderFunctionBind {
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum ShaderType {
+pub enum FunctionType {
     Vertex,
     Fragment,
 }
 
-impl ShaderType {
-    pub const fn lowercase(&self) -> &'static str {
-        match self {
-            ShaderType::Vertex => "vertex",
-            ShaderType::Fragment => "fragment",
-        }
-    }
+impl FunctionType {
     pub const fn titlecase(&self) -> &'static str {
         match self {
-            ShaderType::Vertex => "Vertex",
-            ShaderType::Fragment => "Fragment",
+            FunctionType::Vertex => "Vertex",
+            FunctionType::Fragment => "Fragment",
         }
     }
 }
@@ -102,20 +99,72 @@ impl FunctionConstant {
     }
 }
 
-#[derive(PartialEq, Eq)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct ShaderFunction {
-    pub fn_name: String,
-    pub binds: Vec<ShaderFunctionBind>,
-    pub shader_type: ShaderType,
+#[derive(Copy, Clone, PartialEq, Eq)]
+struct FunctionConstantAddress(u64);
+impl FunctionConstantAddress {
+    fn from_captures(c: &Captures<'_>) -> Self {
+        Self(u64::from_str_radix(&c["address"], 16).expect("Failed to parse variable address"))
+    }
 }
 
-impl ShaderFunction {
+struct FunctionConstants {
+    function_constants: Vec<FunctionConstant>,
+    function_constant_addresses: Vec<FunctionConstantAddress>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct FunctionConstantRef(NonZeroU16);
+
+impl From<usize> for FunctionConstantRef {
+    fn from(v: usize) -> Self {
+        assert!(v < (u16::MAX as usize));
+        Self(unsafe { NonZeroU16::new_unchecked((v + 1) as u16) })
+    }
+}
+impl From<&FunctionConstantRef> for usize {
+    fn from(v: &FunctionConstantRef) -> Self {
+        (v.0.get() as usize) - 1
+    }
+}
+
+impl FunctionConstants {
+    fn new() -> Self {
+        Self {
+            function_constants: vec![],
+            function_constant_addresses: vec![],
+        }
+    }
+    fn push(&mut self, fn_const: FunctionConstant, fn_const_addr: FunctionConstantAddress) {
+        self.function_constants.push(fn_const);
+        self.function_constant_addresses.push(fn_const_addr);
+    }
+    fn get_ref(&mut self, addr: FunctionConstantAddress) -> Option<FunctionConstantRef> {
+        for (i, &fn_const_addr) in self.function_constant_addresses.iter().enumerate() {
+            if fn_const_addr == addr {
+                return Some(FunctionConstantRef::from(i));
+            }
+        }
+        None
+    }
+}
+
+#[derive(PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct Function {
+    pub fn_name: String,
+    pub binds: Vec<Binds>,
+    pub shader_type: FunctionType,
+    pub referenced_function_constants: BTreeSet<FunctionConstantRef>,
+}
+
+impl Function {
     fn new(fn_name: &str) -> Self {
         Self {
             fn_name: fn_name.to_owned(),
             binds: vec![],
-            shader_type: ShaderType::Vertex,
+            shader_type: FunctionType::Vertex,
+            referenced_function_constants: BTreeSet::new(),
         }
     }
 }
@@ -171,7 +220,7 @@ vec![
 */
 pub fn parse_shader_functions_from_reader<R: Read>(
     shader_file_reader: R,
-) -> (Vec<FunctionConstant>, Vec<ShaderFunction>) {
+) -> (Vec<FunctionConstant>, Vec<Function>) {
     // TODO: START HERE
     // TODO: START HERE
     // TODO: START HERE
@@ -209,15 +258,19 @@ pub fn parse_shader_functions_from_reader<R: Read>(
     let rx_fn_metal_shader_type_attr =
         Regex::new(r"^\| (?P<last_child>[`|])-Metal(?P<shader_type>Vertex|Fragment)Attr ").unwrap();
 
-    // VARIABLE REGULAR EXPRESSIONS
-    // ----------------------------
-
     // Example: | `-
     let rx_fn_last_child = Regex::new(r"^\| `-").unwrap();
 
+    // Example: | | |         `-DeclRefExpr 0x13e12f4a0 <col:33> 'const constant bool' lvalue Var 0x13e0692d8 'HasDiffuse' 'const constant bool'
+    // Example: | |         | | `-DeclRefExpr 0x12c932980 <col:12> 'const constant bool' lvalue Var 0x12c931ff0 'A_Bool' 'const constant bool'
+    let rx_fn_constant_ref = Regex::new(r"^[\| ]+[`|]-DeclRefExpr 0x[0-9a-f]+ <(line|col)(:\d+)+> 'const constant .* Var 0x(?P<address>[0-9a-f]+) ").unwrap();
+
+    // FUNCTION CONSTANT EXPRESSIONS
+    // -----------------------------
+
     // Example: |-VarDecl 0x13a136af0 <line:7:1, col:26> col:26 HasAmbient 'const constant bool' constexpr
     let rx_var =
-        Regex::new(r"^\|-VarDecl 0x[0-9a-f]+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) 'const constant (metal::)?(?P<data_type>[\w:<>, ]+)'( |:'.* )constexpr$").unwrap();
+        Regex::new(r"^\|-VarDecl 0x(?P<address>[0-9a-f]+) <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ used (?P<name>\w+) 'const constant (metal::)?(?P<data_type>[\w:<>, ]+)'( |:'.* )constexpr$").unwrap();
 
     // Example: | `-MetalFunctionConstantAttr 0x13a136b50 <col:41, col:60>
     let rx_var_metal_func_const = Regex::new(r"^\| `-MetalFunctionConstantAttr ").unwrap();
@@ -233,7 +286,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
     // Example: | `-
     // Example: | | `-
     // Example: | | |`-
-    let rx_last_child_of_any_level = Regex::new(r"^(\| )+`-").unwrap();
+    let rx_last_child_of_any_level = Regex::new(r"^[\| ]+`-").unwrap();
 
     enum FunctionChild {
         Last,
@@ -260,21 +313,24 @@ pub fn parse_shader_functions_from_reader<R: Read>(
     }
     enum State {
         FindingRoot,
-        Function(ShaderFunction),
-        FunctionParam(ShaderFunction, ShaderFunctionParamInfo, FunctionChild),
-        FunctionParamBufferOrTexture(ShaderFunction, ShaderFunctionBind, FunctionChild),
-        Variable(FunctionConstant),
-        VariableValue(FunctionConstant),
+        Function(Function),
+        FunctionParam(Function, ShaderFunctionParamInfo, FunctionChild),
+        FunctionParamBufferOrTexture(Function, Binds, FunctionChild),
+        Variable(FunctionConstant, FunctionConstantAddress),
+        VariableValue(FunctionConstant, FunctionConstantAddress),
     }
-    let mut fn_consts: Vec<FunctionConstant> = vec![];
+    let mut fn_consts = FunctionConstants::new();
     let mut shader_fns = vec![];
     let mut parse_next_state = |state: State, l: String| {
         match state {
             State::FindingRoot => {
                 if let Some(c) = rx_fn.captures(&l) {
-                    return State::Function(ShaderFunction::new(&c["fn_name"]));
+                    return State::Function(Function::new(&c["fn_name"]));
                 } else if let Some(c) = rx_var.captures(&l) {
-                    return State::Variable(FunctionConstant::new(&c["name"], &c["data_type"]));
+                    return State::Variable(
+                        FunctionConstant::new(&c["name"], &c["data_type"]),
+                        FunctionConstantAddress::from_captures(&c),
+                    );
                 }
             }
             State::Function(mut fun) => {
@@ -293,8 +349,8 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                 } else if let Some(c) = rx_fn_metal_shader_type_attr.captures(&l) {
                     let shader_type = &c["shader_type"];
                     match shader_type {
-                        "Vertex" => fun.shader_type = ShaderType::Vertex,
-                        "Fragment" => fun.shader_type = ShaderType::Fragment,
+                        "Vertex" => fun.shader_type = FunctionType::Vertex,
+                        "Fragment" => fun.shader_type = FunctionType::Fragment,
                         _ => panic!("Unexpected Metal function attribute ({shader_type})"),
                     }
                     // TODO: This may not be true for compute or object functions with parameterized attributes
@@ -305,6 +361,13 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                     }
                 } else if rx_fn_last_child.is_match(&l) {
                     return State::FindingRoot;
+                } else {
+                    if let Some(c) = rx_fn_constant_ref.captures(&l) {
+                        let addr = FunctionConstantAddress::from_captures(&c);
+                        if let Some(index) = fn_consts.get_ref(addr) {
+                            fun.referenced_function_constants.insert(index);
+                        }
+                    }
                 }
                 return State::Function(fun);
             }
@@ -318,8 +381,8 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                     return State::FunctionParamBufferOrTexture(
                         fun,
                         if buffer_or_texture == "Buffer" {
-                            ShaderFunctionBind::Buffer {
-                                index: ShaderFunctionBind::INVALID_INDEX,
+                            Binds::Buffer {
+                                index: Binds::INVALID_INDEX,
                                 name: info.name,
                                 data_type: info.data_type,
                                 bind_type: if info.multiplicity == " *" {
@@ -343,8 +406,8 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                             }
                         } else {
                             debug_assert_eq!(buffer_or_texture, "Texture");
-                            ShaderFunctionBind::Texture {
-                                index: ShaderFunctionBind::INVALID_INDEX,
+                            Binds::Texture {
+                                index: Binds::INVALID_INDEX,
                                 name: info.name,
                             }
                         },
@@ -376,18 +439,18 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                 }
                 panic!("Unexpected function param buffer attribute information ({l})");
             }
-            State::Variable(fn_const) => {
+            State::Variable(fn_const, fn_const_addr) => {
                 if rx_var_metal_func_const.is_match(&l) {
-                    return State::VariableValue(fn_const);
+                    return State::VariableValue(fn_const, fn_const_addr);
                 }
                 return State::FindingRoot;
             }
-            State::VariableValue(mut fn_const) => {
+            State::VariableValue(mut fn_const, fn_const_addr) => {
                 if let Some(c) = rx_var_metal_func_const_value.captures(&l) {
                     fn_const.index = c["index"].parse::<u16>().expect(&format!(
                         "Failed to parse function constant index value ({l})"
                     ));
-                    fn_consts.push(fn_const);
+                    fn_consts.push(fn_const, fn_const_addr);
                     return State::FindingRoot;
                 }
                 panic!("Unexpected function constant attribute information ({l})");
@@ -402,7 +465,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
         state = parse_next_state(state, line);
     }
 
-    (fn_consts, shader_fns)
+    (fn_consts.function_constants, shader_fns)
 }
 
 #[cfg(test)]
@@ -416,7 +479,7 @@ mod test {
         fn test<const N_FN_CONSTS: usize, const N_FNS: usize>(
             input: &[u8],
             expected_fn_consts: [FunctionConstant; N_FN_CONSTS],
-            expected_fns: [ShaderFunction; N_FNS],
+            expected_fns: [Function; N_FNS],
         ) {
             let (actual_fn_consts, actual_fns) = parse_shader_functions_from_reader(input);
             pretty_assertions::assert_eq!(&actual_fn_consts, &expected_fn_consts);
@@ -424,7 +487,7 @@ mod test {
         }
 
         #[test]
-        fn test_fn_consts() {
+        fn test_fn_consts_simple() {
             /*
             constant constexpr bool   A_Bool   [[function_constant(9)]];
             constant constexpr float  A_Float  [[function_constant(2)]];
@@ -452,6 +515,96 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 ").as_bytes(),
                 [
                     FunctionConstant {
+                        name: "A_Float".to_owned(),
+                        data_type: "float".to_owned(),
+                        index: 2,
+                    },
+                    FunctionConstant {
+                        name: "A_Uint".to_owned(),
+                        data_type: "uint".to_owned(),
+                        index: 1,
+                    },
+                ],
+                []
+            );
+        }
+
+        #[test]
+        fn test_fn_consts() {
+            /*
+            constant constexpr bool   A_Bool   [[function_constant(9)]];
+            constant constexpr float  A_Float  [[function_constant(2)]];
+            constant constexpr float4 A_Float4 [[function_constant(4)]];
+            constant constexpr uint   A_Uint   [[function_constant(1)]];
+
+            [[vertex]]
+            float4 test_vertex() {
+                return A_Bool && A_Float4.x > 0 ? 1 : 0;
+            }
+            */
+            test(format!("\
+TranslationUnitDecl 0x1598302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x159874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x159830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x1598748f0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x159931f50 <line:3:1, col:17> col:17 Namespace 0x1598749f0 'metal'
+|-VarDecl 0x159931ff0 <line:5:1, col:27> col:27 used A_Bool 'const constant bool' constexpr
+| `-MetalFunctionConstantAttr 0x159932050 <col:38, col:57>
+|   `-IntegerLiteral 0x159931fa0 <col:56> 'int' 9
+|-VarDecl 0x159932118 <line:6:1, col:27> col:27 used A_Float 'const constant float' constexpr
+| `-MetalFunctionConstantAttr 0x159932178 <col:38, col:57>
+|   `-IntegerLiteral 0x1599320b8 <col:56> 'int' 2
+|-VarDecl 0x159932440 <line:7:1, col:27> col:27 used A_Float4 'const constant float4':'float const constant __attribute__((ext_vector_type(4)))' constexpr
+| `-MetalFunctionConstantAttr 0x1599324a0 <col:38, col:57>
+|   `-IntegerLiteral 0x1599323d0 <col:56> 'int' 4
+|-VarDecl 0x159932720 <line:8:1, col:27> col:27 used A_Uint 'const constant uint':'const constant unsigned int' constexpr
+| `-MetalFunctionConstantAttr 0x159932780 <col:38, col:57>
+|   `-IntegerLiteral 0x1599326a8 <col:56> 'int' 1
+|-VarDecl 0x159946e00 <line:9:1, col:27> col:27 A_Unused 'const constant ushort':'const constant unsigned short' constexpr
+| `-MetalFunctionConstantAttr 0x159946e60 <col:38, col:57>
+|   `-IntegerLiteral 0x159932990 <col:56> 'int' 3
+|-FunctionDecl 0x159946f68 <line:12:1, line:14:1> line:12:8 test_vertex 'float4 ()'
+| |-CompoundStmt 0x159947248 <col:22, line:14:1>
+| | `-ReturnStmt 0x159947230 <line:13:5, col:43>
+| |   `-ImplicitCastExpr 0x159947218 <col:12, col:43> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x159947200 <col:12, col:43> 'float' <IntegralToFloating>
+| |       `-ConditionalOperator 0x1599471d0 <col:12, col:43> 'int'
+| |         |-BinaryOperator 0x159947168 <col:12, col:35> 'bool' '&&'
+| |         | |-ImplicitCastExpr 0x159947150 <col:12> 'bool' <LValueToRValue>
+| |         | | `-DeclRefExpr 0x159947060 <col:12> 'const constant bool' lvalue Var 0x159931ff0 'A_Bool' 'const constant bool'
+| |         | `-BinaryOperator 0x159947128 <col:22, col:35> 'bool' '>'
+| |         |   |-ImplicitCastExpr 0x1599470f8 <col:22, col:31> 'float' <LValueToRValue>
+| |         |   | `-ExtVectorElementExpr 0x1599470b0 <col:22, col:31> 'const constant float' lvalue vectorcomponent x
+| |         |   |   `-DeclRefExpr 0x159947088 <col:22> 'const constant float4':'float const constant __attribute__((ext_vector_type(4)))' lvalue Var 0x159932440 'A_Float4' 'const constant float4':'float const constant __attribute__((ext_vector_type(4)))'
+| |         |   `-ImplicitCastExpr 0x159947110 <col:35> 'float' <IntegralToFloating>
+| |         |     `-IntegerLiteral 0x1599470d8 <col:35> 'int' 0
+| |         |-IntegerLiteral 0x159947190 <col:39> 'int' 1
+| |         `-IntegerLiteral 0x1599471b0 <col:43> 'int' 0
+| `-MetalVertexAttr 0x159947008 <line:11:3>
+|-FunctionDecl 0x159947280 <line:17:1, line:19:1> line:17:8 test_fragment 'float4 ()'
+| |-CompoundStmt 0x159947598 <col:24, line:19:1>
+| | `-ReturnStmt 0x159947580 <line:18:5, col:44>
+| |   `-ImplicitCastExpr 0x159947568 <col:12, col:44> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x159947550 <col:12, col:44> 'float' <IntegralToFloating>
+| |       `-ConditionalOperator 0x159947520 <col:12, col:44> 'int'
+| |         |-BinaryOperator 0x1599474b8 <col:12, col:36> 'bool' '&&'
+| |         | |-BinaryOperator 0x1599473f0 <col:12, col:22> 'bool' '<'
+| |         | | |-ImplicitCastExpr 0x1599473c0 <col:12> 'float' <LValueToRValue>
+| |         | | | `-DeclRefExpr 0x159947378 <col:12> 'const constant float' lvalue Var 0x159932118 'A_Float' 'const constant float'
+| |         | | `-ImplicitCastExpr 0x1599473d8 <col:22> 'float' <IntegralToFloating>
+| |         | |   `-IntegerLiteral 0x1599473a0 <col:22> 'int' 0
+| |         | `-BinaryOperator 0x159947490 <col:27, col:36> 'bool' '>'
+| |         |   |-ImplicitCastExpr 0x159947460 <col:27> 'uint':'unsigned int' <LValueToRValue>
+| |         |   | `-DeclRefExpr 0x159947418 <col:27> 'const constant uint':'const constant unsigned int' lvalue Var 0x159932720 'A_Uint' 'const constant uint':'const constant unsigned int'
+| |         |   `-ImplicitCastExpr 0x159947478 <col:36> 'unsigned int' <IntegralCast>
+| |         |     `-IntegerLiteral 0x159947440 <col:36> 'int' 0
+| |         |-IntegerLiteral 0x1599474e0 <col:40> 'int' 1
+| |         `-IntegerLiteral 0x159947500 <col:44> 'int' 0
+| `-MetalFragmentAttr 0x159947320 <line:16:3>
+`-<undeserialized declarations>
+").as_bytes(),
+                [
+                    FunctionConstant {
                         name: "A_Bool".to_owned(),
                         data_type: "bool".to_owned(),
                         index: 9,
@@ -472,7 +625,26 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
                         index: 1,
                     },
                 ],
-                []
+                [
+                    Function {
+                        fn_name: "test_vertex".to_owned(),
+                        binds: vec![],
+                        shader_type: FunctionType::Vertex,
+                        referenced_function_constants: BTreeSet::from([
+                            FunctionConstantRef::from(0),
+                            FunctionConstantRef::from(2),
+                        ])
+                    },
+                    Function {
+                        fn_name: "test_fragment".to_owned(),
+                        binds: vec![],
+                        shader_type: FunctionType::Fragment,
+                        referenced_function_constants: BTreeSet::from([
+                            FunctionConstantRef::from(1),
+                            FunctionConstantRef::from(3),
+                        ])
+                    }
+                ]
             );
         }
 
@@ -502,10 +674,11 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 `-<undeserialized declarations>
 ").as_bytes(),
 [],
-                [ShaderFunction {
+                [Function {
                     fn_name: "test".to_owned(),
                     binds: vec![],
-                    shader_type: ShaderType::Vertex,
+                    shader_type: FunctionType::Vertex,
+                    referenced_function_constants: BTreeSet::new()
                 }]
             );
         }
@@ -514,8 +687,8 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
         fn test_no_binds() {
             for path in ["line", "proj-2-transformations/shader_src/shaders.metal"] {
                 for (metal_attr, expected_shader_type) in [
-                    ("MetalVertexAttr", ShaderType::Vertex),
-                    ("MetalFragmentAttr", ShaderType::Fragment),
+                    ("MetalVertexAttr", FunctionType::Vertex),
+                    ("MetalFragmentAttr", FunctionType::Fragment),
                 ] {
                     /*
                     [[vertex]]
@@ -539,10 +712,11 @@ TranslationUnitDecl 0x11f0302e8 <<invalid sloc>> <invalid sloc>
 `-<undeserialized declarations>
 ").as_bytes(),
 [],
-                    [ShaderFunction {
+                    [Function {
                         fn_name: "test".to_owned(),
                         binds: vec![],
                         shader_type: expected_shader_type,
+                        referenced_function_constants: BTreeSet::new()
                     }]
                 );
                 }
@@ -583,12 +757,13 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 `-<undeserialized declarations>
 ").as_bytes(),
                     [],
-                    [ShaderFunction {
+                    [Function {
                         fn_name: "test".to_owned(),
                         binds: vec![
-                            ShaderFunctionBind::Buffer { index: 0, name: "buf0".to_owned(), data_type: "float4x4".to_owned(), bind_type: expected_bind_type, immutable: expected_immutable }
+                            Binds::Buffer { index: 0, name: "buf0".to_owned(), data_type: "float4x4".to_owned(), bind_type: expected_bind_type, immutable: expected_immutable }
                         ],
-                        shader_type: ShaderType::Vertex,
+                        shader_type: FunctionType::Vertex,
+                        referenced_function_constants: BTreeSet::new()
                     }],
                 );
                 }
@@ -652,18 +827,19 @@ TranslationUnitDecl 0x1210302e8 <<invalid sloc>> <invalid sloc>
 ",
                 [],
                 [
-                    ShaderFunction {
+                    Function {
                         fn_name: "test".to_owned(),
                         binds: vec![
-                            ShaderFunctionBind::Buffer { index: 0, name: "buf0".to_owned(), data_type: "float".to_owned(), bind_type: BindType::Many, immutable: true },
-                            ShaderFunctionBind::Buffer { index: 1, name: "buf1".to_owned(), data_type: "float2".to_owned(), bind_type: BindType::One, immutable: true },
-                            ShaderFunctionBind::Buffer { index: 2, name: "buf2".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::Many, immutable: false },
-                            ShaderFunctionBind::Buffer { index: 3, name: "buf3".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::One, immutable: false },
-                            ShaderFunctionBind::Texture { index: 1, name: "tex1".to_owned() },
-                            ShaderFunctionBind::Buffer { index: 5, name: "buf5".to_owned(), data_type: "TestStruct".to_owned(), bind_type: BindType::One, immutable: true },
-                            ShaderFunctionBind::Buffer { index: 4, name: "buf4".to_owned(), data_type: "TestStruct".to_owned(), bind_type: BindType::Many, immutable: true },
+                            Binds::Buffer { index: 0, name: "buf0".to_owned(), data_type: "float".to_owned(), bind_type: BindType::Many, immutable: true },
+                            Binds::Buffer { index: 1, name: "buf1".to_owned(), data_type: "float2".to_owned(), bind_type: BindType::One, immutable: true },
+                            Binds::Buffer { index: 2, name: "buf2".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::Many, immutable: false },
+                            Binds::Buffer { index: 3, name: "buf3".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::One, immutable: false },
+                            Binds::Texture { index: 1, name: "tex1".to_owned() },
+                            Binds::Buffer { index: 5, name: "buf5".to_owned(), data_type: "TestStruct".to_owned(), bind_type: BindType::One, immutable: true },
+                            Binds::Buffer { index: 4, name: "buf4".to_owned(), data_type: "TestStruct".to_owned(), bind_type: BindType::Many, immutable: true },
                         ],
-                        shader_type: ShaderType::Vertex,
+                        shader_type: FunctionType::Vertex,
+                        referenced_function_constants: BTreeSet::new()
                     }
                 ]
             );
@@ -693,12 +869,13 @@ TranslationUnitDecl 0x1268302e8 <<invalid sloc>> <invalid sloc>
 ").as_bytes(),
                     [],
                     [
-                        ShaderFunction {
-                            shader_type: ShaderType::Fragment,
+                        Function {
+                            shader_type: FunctionType::Fragment,
                             fn_name: "test".to_owned(),
                             binds: vec![
-                                ShaderFunctionBind::Texture { index: 0, name: "tex0".to_owned() },
+                                Binds::Texture { index: 0, name: "tex0".to_owned() },
                             ],
+                            referenced_function_constants: BTreeSet::new()
                         }
                     ]
                 );
@@ -773,19 +950,21 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
 ",
                 [],
                 [
-                    ShaderFunction {
+                    Function {
                         fn_name: "test_vertex".to_owned(),
                         binds: vec![
-                            ShaderFunctionBind::Buffer { index: 0, name: "buf0".to_owned(), data_type: "int".to_owned(), bind_type: BindType::Many, immutable: true },
+                            Binds::Buffer { index: 0, name: "buf0".to_owned(), data_type: "int".to_owned(), bind_type: BindType::Many, immutable: true },
                         ],
-                        shader_type: ShaderType::Vertex,
+                        shader_type: FunctionType::Vertex,
+                        referenced_function_constants: BTreeSet::new()
                     },
-                    ShaderFunction {
+                    Function {
                         fn_name: "test_fragment".to_owned(),
                         binds: vec![
-                            ShaderFunctionBind::Buffer { index: 1, name: "buf1".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::Many, immutable: false },
+                            Binds::Buffer { index: 1, name: "buf1".to_owned(), data_type: "float3".to_owned(), bind_type: BindType::Many, immutable: false },
                         ],
-                        shader_type: ShaderType::Fragment,
+                        shader_type: FunctionType::Fragment,
+                        referenced_function_constants: BTreeSet::new()
                     },
                 ]
             );
@@ -814,49 +993,49 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
         #[test]
         fn test() {
             let expected_fns = vec![
-                ShaderFunction {
+                Function {
                     fn_name: "test_vertex".to_owned(),
                     binds: vec![
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 0,
                             name: "buf0".to_owned(),
                             data_type: "float".to_owned(),
                             bind_type: BindType::Many,
                             immutable: true,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 1,
                             name: "buf1".to_owned(),
                             data_type: "float2".to_owned(),
                             bind_type: BindType::One,
                             immutable: true,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 2,
                             name: "buf2".to_owned(),
                             data_type: "float3".to_owned(),
                             bind_type: BindType::Many,
                             immutable: false,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 3,
                             name: "buf3".to_owned(),
                             data_type: "float3".to_owned(),
                             bind_type: BindType::One,
                             immutable: false,
                         },
-                        ShaderFunctionBind::Texture {
+                        Binds::Texture {
                             index: 1,
                             name: "tex1".to_owned(),
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 5,
                             name: "buf5".to_owned(),
                             data_type: "TestStruct".to_owned(),
                             bind_type: BindType::One,
                             immutable: true,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 4,
                             name: "buf4".to_owned(),
                             data_type: "TestStruct".to_owned(),
@@ -864,51 +1043,52 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                             immutable: true,
                         },
                     ],
-                    shader_type: ShaderType::Vertex,
+                    shader_type: FunctionType::Vertex,
+                    referenced_function_constants: BTreeSet::from([FunctionConstantRef::from(0)]),
                 },
-                ShaderFunction {
+                Function {
                     fn_name: "test_fragment".to_owned(),
                     binds: vec![
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 0,
                             name: "buf0".to_owned(),
                             data_type: "float".to_owned(),
                             bind_type: BindType::Many,
                             immutable: true,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 1,
                             name: "buf1".to_owned(),
                             data_type: "float2".to_owned(),
                             bind_type: BindType::One,
                             immutable: true,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 2,
                             name: "buf2".to_owned(),
                             data_type: "float3".to_owned(),
                             bind_type: BindType::Many,
                             immutable: false,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 3,
                             name: "buf3".to_owned(),
                             data_type: "float3".to_owned(),
                             bind_type: BindType::One,
                             immutable: false,
                         },
-                        ShaderFunctionBind::Texture {
+                        Binds::Texture {
                             index: 1,
                             name: "tex1".to_owned(),
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 5,
                             name: "buf5".to_owned(),
                             data_type: "TestStruct".to_owned(),
                             bind_type: BindType::One,
                             immutable: true,
                         },
-                        ShaderFunctionBind::Buffer {
+                        Binds::Buffer {
                             index: 4,
                             name: "buf4".to_owned(),
                             data_type: "TestStruct".to_owned(),
@@ -916,7 +1096,11 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                             immutable: true,
                         },
                     ],
-                    shader_type: ShaderType::Fragment,
+                    shader_type: FunctionType::Fragment,
+                    referenced_function_constants: BTreeSet::from([
+                        FunctionConstantRef::from(1),
+                        FunctionConstantRef::from(2),
+                    ]),
                 },
             ];
 
@@ -942,11 +1126,6 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                         name: "A_Float".to_owned(),
                         data_type: "float".to_owned(),
                         index: 1,
-                    },
-                    FunctionConstant {
-                        name: "A_Float4".to_owned(),
-                        data_type: "float4".to_owned(),
-                        index: 2,
                     },
                     FunctionConstant {
                         name: "A_Uint".to_owned(),

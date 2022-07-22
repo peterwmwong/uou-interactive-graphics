@@ -1,8 +1,6 @@
 use super::{
     generate_metal_ast::generate_metal_ast,
-    parse_metal_ast::{
-        parse_shader_functions_from_reader, FunctionConstant, ShaderFunction, ShaderFunctionBind,
-    },
+    parse_metal_ast::{parse_shader_functions_from_reader, Binds, Function, FunctionConstant},
 };
 use std::{
     borrow::Cow,
@@ -42,69 +40,19 @@ pub fn generate_shader_function_bindings_from_reader<R: Read, W: Write>(
             .expect("Unable to write shader_bindings.rs file (shader function bindings)");
     };
     let (fn_consts, fns) = parse_shader_functions_from_reader(shader_file_reader);
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // Having on set of Function Constants for **all** functions may be too simplistic/unrealistic.
-    // - Looking at proj-3, light_vertex and light_fragment functions can be created **WITHOUT** any function constants!
-    // 1. Parsing: Collect all referenced Function Constants in a function and create a type from that
-    // 2. RenderPipeline API: new() takes a Function objects that contain an instance of Function Constants
-    //    - Like `RenderPipeline::new(.., main_vertex(main_vertex_function_constants { ... }), );`
-    // 3. Generator: Update according to 1 and 2.
-    let fn_consts_type = if fn_consts.is_empty() {
-        "NoFunctionConstants"
-    } else {
-        w(r#"
-/******************
- Function Constants
-*******************/
-
-pub struct FunctionConstants {"#);
-        for FunctionConstant {
-            name, data_type, ..
-        } in &fn_consts
-        {
-            w(&format!(
-                r#"
-    pub {name}: {data_type},"#
-            ));
-        }
-        w(r#"
-}
-impl FunctionConstantsFactory for FunctionConstants {
-    #[inline]
-    fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {
-        let fcv = FunctionConstantValues::new();"#);
-        for FunctionConstant {
-            name,
-            data_type,
-            index,
-        } in &fn_consts
-        {
-            w(&format!(
-                r#"
-        fcv.set_constant_value_at_index((&self.{name} as *const _) as _, {data_type}::MTL_DATA_TYPE, {index});"#
-            ));
-        }
-        w(r#"
-        Some(fcv)
-    }
-}
-"#);
-        "FunctionConstants"
-    };
     w(r#"
 /****************
  Shader functions
 *****************/
 "#);
-    for ShaderFunction {
+    for Function {
         fn_name,
         binds,
         shader_type,
+        referenced_function_constants,
     } in fns
     {
-        use ShaderFunctionBind::*;
+        use Binds::*;
         let rust_shader_name = escape_name(&fn_name);
         let shader_type_titlecase = shader_type.titlecase();
         let rust_function_binds_name = if binds.is_empty() {
@@ -178,15 +126,55 @@ impl FunctionBinds for {fn_name}_binds<'_> {{
         w(&format!(
             r#"
 #[allow(non_camel_case_types)]
-pub struct {rust_shader_name};
+pub struct {rust_shader_name}"#
+        ));
+        if referenced_function_constants.is_empty() {
+            w(";");
+        } else {
+            w(" {");
+            for fn_const_ref in &referenced_function_constants {
+                let FunctionConstant {
+                    name, data_type, ..
+                } = &fn_consts[usize::from(fn_const_ref)];
+                w(&format!(
+                    r#"
+    pub {name}: {data_type},"#
+                ));
+            }
+            w(&r#"
+}"#);
+        }
+
+        w(&format!(
+            r#"
 impl metal_app::render_pipeline::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {rust_function_binds_name};
-    type Type = {shader_type_titlecase}FunctionType;
-    type FunctionConstantsType = {fn_consts_type};
-}}
-"#
+    type Type = {shader_type_titlecase}FunctionType;"#
         ));
+        if !referenced_function_constants.is_empty() {
+            w(r#"
+    #[inline]
+    fn get_function_constants(&self) -> Option<FunctionConstantValues> {
+        let fcv = FunctionConstantValues::new();"#);
+            for fn_const_ref in &referenced_function_constants {
+                let FunctionConstant {
+                    name,
+                    data_type,
+                    index,
+                } = &fn_consts[usize::from(fn_const_ref)];
+                w(&format!(
+                    r#"
+        fcv.set_constant_value_at_index((&self.{name} as *const _) as _, {data_type}::MTL_DATA_TYPE, {index});"#
+                ));
+            }
+            w(r#"
+        Some(fcv)
+    }"#);
+        }
+        w(r#"
+}
+"#);
     }
 }
 
@@ -202,28 +190,6 @@ mod test {
         fn test() {
             let expected = &format!(
                 r#"
-/******************
- Function Constants
-*******************/
-
-pub struct FunctionConstants {{
-    pub A_Bool: bool,
-    pub A_Float: float,
-    pub A_Float4: float4,
-    pub A_Uint: uint,
-}}
-impl FunctionConstantsFactory for FunctionConstants {{
-    #[inline]
-    fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {{
-        let fcv = FunctionConstantValues::new();
-        fcv.set_constant_value_at_index((&self.A_Bool as *const _) as _, bool::MTL_DATA_TYPE, 0);
-        fcv.set_constant_value_at_index((&self.A_Float as *const _) as _, float::MTL_DATA_TYPE, 1);
-        fcv.set_constant_value_at_index((&self.A_Float4 as *const _) as _, float4::MTL_DATA_TYPE, 2);
-        fcv.set_constant_value_at_index((&self.A_Uint as *const _) as _, uint::MTL_DATA_TYPE, 3);
-        Some(fcv)
-    }}
-}}
-
 /****************
  Shader functions
 *****************/
@@ -252,12 +218,19 @@ impl FunctionBinds for test_vertex_binds<'_> {{
 }}
 
 #[allow(non_camel_case_types)]
-pub struct test_vertex;
+pub struct test_vertex {{
+    pub A_Bool: bool,
+}}
 impl metal_app::render_pipeline::Function for test_vertex {{
     const FUNCTION_NAME: &'static str = "test_vertex";
     type Binds<'c> = test_vertex_binds<'c>;
     type Type = VertexFunctionType;
-    type FunctionConstantsType = FunctionConstants;
+    #[inline]
+    fn get_function_constants(&self) -> Option<FunctionConstantValues> {{
+        let fcv = FunctionConstantValues::new();
+        fcv.set_constant_value_at_index((&self.A_Bool as *const _) as _, bool::MTL_DATA_TYPE, 0);
+        Some(fcv)
+    }}
 }}
 
 #[allow(non_camel_case_types)]
@@ -284,12 +257,21 @@ impl FunctionBinds for test_fragment_binds<'_> {{
 }}
 
 #[allow(non_camel_case_types)]
-pub struct test_fragment;
+pub struct test_fragment {{
+    pub A_Float: float,
+    pub A_Uint: uint,
+}}
 impl metal_app::render_pipeline::Function for test_fragment {{
     const FUNCTION_NAME: &'static str = "test_fragment";
     type Binds<'c> = test_fragment_binds<'c>;
     type Type = FragmentFunctionType;
-    type FunctionConstantsType = FunctionConstants;
+    #[inline]
+    fn get_function_constants(&self) -> Option<FunctionConstantValues> {{
+        let fcv = FunctionConstantValues::new();
+        fcv.set_constant_value_at_index((&self.A_Float as *const _) as _, float::MTL_DATA_TYPE, 1);
+        fcv.set_constant_value_at_index((&self.A_Uint as *const _) as _, uint::MTL_DATA_TYPE, 3);
+        Some(fcv)
+    }}
 }}
 "#
             );
@@ -347,7 +329,6 @@ impl metal_app::render_pipeline::Function for test {
     const FUNCTION_NAME: &'static str = "test";
     type Binds<'c> = NoBinds;
     type Type = VertexFunctionType;
-    type FunctionConstantsType = NoFunctionConstants;
 }
 "#
             );
@@ -473,7 +454,6 @@ impl metal_app::render_pipeline::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
     type Type = VertexFunctionType;
-    type FunctionConstantsType = NoFunctionConstants;
 }}
 "#)
                         }
@@ -527,7 +507,6 @@ impl metal_app::render_pipeline::Function for {fn_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
     type Type = FragmentFunctionType;
-    type FunctionConstantsType = NoFunctionConstants;
 }}
 "#),
             );

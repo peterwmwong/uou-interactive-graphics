@@ -17,8 +17,7 @@ struct Delegate {
     device: Device,
     model: Model<Geometry, NoMaterial>,
     needs_render: bool,
-    render_pipeline:
-        RenderPipeline<1, NoFunctionConstants, main_vertex, main_fragment, NoDepth, NoStencil>,
+    render_pipeline: RenderPipeline<1, main_vertex, main_fragment, NoDepth, NoStencil>,
     vertex_input: VertexInput,
 }
 
@@ -60,7 +59,8 @@ impl RendererDelgate for Delegate {
                     &device,
                     &library,
                     [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
-                    NoFunctionConstants,
+                    main_vertex,
+                    main_fragment,
                     NoDepth,
                     NoStencil,
                 )

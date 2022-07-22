@@ -225,36 +225,6 @@ fn bindgen_test_layout_ProjectedSpace() {
     }
     test_field_position_world();
 }
-#[repr(u8)]
-#[derive(Copy, Clone, Hash, PartialEq, Eq)]
-pub enum ShadingMode {
-    HasAmbient = 0,
-    HasDiffuse = 1,
-    OnlyNormals = 2,
-    HasSpecular = 3,
-}
-
-/******************
- Function Constants
-*******************/
-
-pub struct FunctionConstants {
-    pub HasAmbient: bool,
-    pub HasDiffuse: bool,
-    pub OnlyNormals: bool,
-    pub HasSpecular: bool,
-}
-impl FunctionConstantsFactory for FunctionConstants {
-    #[inline]
-    fn create_function_constant_values(&self) -> Option<FunctionConstantValues> {
-        let fcv = FunctionConstantValues::new();
-        fcv.set_constant_value_at_index((&self.HasAmbient as *const _) as _, bool::MTL_DATA_TYPE, 0);
-        fcv.set_constant_value_at_index((&self.HasDiffuse as *const _) as _, bool::MTL_DATA_TYPE, 1);
-        fcv.set_constant_value_at_index((&self.OnlyNormals as *const _) as _, bool::MTL_DATA_TYPE, 2);
-        fcv.set_constant_value_at_index((&self.HasSpecular as *const _) as _, bool::MTL_DATA_TYPE, 3);
-        Some(fcv)
-    }
-}
 
 /****************
  Shader functions
@@ -279,7 +249,6 @@ impl metal_app::render_pipeline::Function for main_vertex {
     const FUNCTION_NAME: &'static str = "main_vertex";
     type Binds<'c> = main_vertex_binds<'c>;
     type Type = VertexFunctionType;
-    type FunctionConstantsType = FunctionConstants;
 }
 
 #[allow(non_camel_case_types)]
@@ -296,12 +265,25 @@ impl FunctionBinds for main_fragment_binds<'_> {
 }
 
 #[allow(non_camel_case_types)]
-pub struct main_fragment;
+pub struct main_fragment {
+    pub HasAmbient: bool,
+    pub HasDiffuse: bool,
+    pub OnlyNormals: bool,
+    pub HasSpecular: bool,
+}
 impl metal_app::render_pipeline::Function for main_fragment {
     const FUNCTION_NAME: &'static str = "main_fragment";
     type Binds<'c> = main_fragment_binds<'c>;
     type Type = FragmentFunctionType;
-    type FunctionConstantsType = FunctionConstants;
+    #[inline]
+    fn get_function_constants(&self) -> Option<FunctionConstantValues> {
+        let fcv = FunctionConstantValues::new();
+        fcv.set_constant_value_at_index((&self.HasAmbient as *const _) as _, bool::MTL_DATA_TYPE, 0);
+        fcv.set_constant_value_at_index((&self.HasDiffuse as *const _) as _, bool::MTL_DATA_TYPE, 1);
+        fcv.set_constant_value_at_index((&self.OnlyNormals as *const _) as _, bool::MTL_DATA_TYPE, 2);
+        fcv.set_constant_value_at_index((&self.HasSpecular as *const _) as _, bool::MTL_DATA_TYPE, 3);
+        Some(fcv)
+    }
 }
 
 #[allow(non_camel_case_types)]
@@ -323,7 +305,6 @@ impl metal_app::render_pipeline::Function for light_vertex {
     const FUNCTION_NAME: &'static str = "light_vertex";
     type Binds<'c> = light_vertex_binds<'c>;
     type Type = VertexFunctionType;
-    type FunctionConstantsType = FunctionConstants;
 }
 
 #[allow(non_camel_case_types)]
@@ -332,5 +313,4 @@ impl metal_app::render_pipeline::Function for light_fragment {
     const FUNCTION_NAME: &'static str = "light_fragment";
     type Binds<'c> = NoBinds;
     type Type = FragmentFunctionType;
-    type FunctionConstantsType = FunctionConstants;
 }

@@ -18,7 +18,7 @@ float4 test_vertex(
     constant TestStruct &    buf5      [[buffer(5)]],
     constant TestStruct *    buf4      [[buffer(4)]]
 ) {
-    return float4(buf1, buf2[0].x, buf4->one);
+    return A_Bool ? float4(buf1, buf2[0].x, buf4->one) : 0;
 }
 
 
@@ -34,5 +34,5 @@ float4 test_fragment(
     constant TestStruct *    buf4      [[buffer(4)]],
              float4          position  [[position]]
 ) {
-    return float4(buf1, buf2[0].x, buf4->one);;
+    return A_Float > 0.5 && A_Uint == 0 ? float4(buf1, buf2[0].x, buf4->one) : 0;
 }
