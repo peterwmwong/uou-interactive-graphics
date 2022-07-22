@@ -94,7 +94,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 arg.normals = normals_buffer;
                 arg.tx_coords = tx_coords_buffer;
             },
-            HasMaterial::new(
+            HasMaterial(
                 |arg: &mut Material,
                  MaterialToEncode {
                      ambient_texture,

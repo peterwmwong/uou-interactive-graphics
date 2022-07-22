@@ -456,15 +456,6 @@ impl<
         depth_kind.setup_pipeline_attachment(&pipeline_desc);
         stencil_kind.setup_pipeline_attachment(&pipeline_desc);
 
-        // TODO: Set vertex/fragment shader buffer arguments as immutable, where appropriate.
-
-        // TODO: Is it any faster to manually clone and avoid calling Obj-C `retain`?
-        // - Does this double drop?
-        //   - Can we work around this with a std::mem::forget?
-        // let fcs_v = function_constants.create_function_constant_values();
-        // let fcs_f = fcs_v
-        //     .as_ref()
-        //     .map(|m| unsafe { FunctionConstantValues::from_ptr(m.as_ptr()) });
         VS::Type::setup_render_pipeline(&vertex_function.get_function(library), &pipeline_desc);
         FS::Type::setup_render_pipeline(&fragment_function.get_function(library), &pipeline_desc);
 
