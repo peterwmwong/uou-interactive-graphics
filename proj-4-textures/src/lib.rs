@@ -26,20 +26,21 @@ const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 const LIGHT_DISTANCE: f32 = 0.5;
 
 pub struct Delegate<const RENDER_LIGHT: bool> {
-    camera: Camera,
     camera_space: ProjectedSpace,
+    camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: DepthTexture,
+    device: Device,
     library: Library,
     light_pipeline: RenderPipeline<1, light_vertex, light_fragment, HasDepth, NoStencil>,
-    light: Camera,
     light_position: float4,
+    light: Camera,
     matrix_model_to_world: f32x4x4,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil>,
+    model_space: ModelSpace,
     model: Model<Geometry, HasMaterial<Material>>,
     needs_render: bool,
-    device: Device,
     shading_mode: ShadingModeSelector,
 }
 
@@ -168,6 +169,14 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             ),
             matrix_model_to_world,
             model,
+            model_space: ModelSpace {
+                matrix_model_to_projection: f32x4x4::identity(),
+                // IMPORTANT: Not a mistake, using Model-to-World 4x4 Matrix for Normal-to-World 3x3
+                // Matrix. Conceptually, we want a matrix that ONLY applies rotation (no
+                // translation). Since normals are directions (not positions, relative to a point on
+                // a surface), translations are meaningless.
+                matrix_normal_to_world: matrix_model_to_world.into(),
+            },
             model_pipeline,
             needs_render: false,
             shading_mode: mode,
@@ -205,19 +214,12 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         // Render Model
         {
             encoder.push_debug_group("Model");
-            self.model_pipeline.setup_binds(
+            encoder.push_debug_group("Common Binds");
+            self.model_pipeline.bind(
                 encoder,
                 main_vertex_binds {
                     geometry: BindOne::Skip,
-                    model: BindOne::Bytes(&ModelSpace {
-                        matrix_model_to_projection: self.camera_space.matrix_world_to_projection
-                            * self.matrix_model_to_world,
-                        // IMPORTANT: Not a mistake, using Model-to-World Rotation 4x4 Matrix for
-                        // Normal-to-World 3x3 Matrix. Conceptually, we want a matrix that ONLY applies rotation
-                        // (no translation). Since normals are directions (not positions, relative to a
-                        // point on a surface), translations are meaningless.
-                        matrix_normal_to_world: self.matrix_model_to_world.into(),
-                    }),
+                    model: BindOne::Bytes(&self.model_space),
                 },
                 main_fragment_binds {
                     material: BindOne::Skip,
@@ -225,28 +227,29 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                     light_pos: BindOne::Bytes(&self.light_position),
                 },
             );
-            for (
-                i,
-                DrawIteratorItem {
-                    num_vertices,
-                    geometry,
-                    material,
-                },
-            ) in self.model.get_draws().enumerate()
+            encoder.pop_debug_group();
+            for DrawItem {
+                name,
+                vertex_count,
+                geometry,
+                material,
+            } in self.model.draws()
             {
-                self.model_pipeline.setup_binds(
+                encoder.push_debug_group(name);
+                self.model_pipeline.bind(
                     encoder,
                     main_vertex_binds {
                         geometry: BindOne::buffer_with_rolling_offset(geometry),
                         model: BindOne::Skip,
                     },
                     main_fragment_binds {
-                        material: { BindOne::iterating_buffer_offset(i, material) },
+                        material: BindOne::iterating_buffer_offset(geometry.1, material),
                         camera: BindOne::Skip,
                         light_pos: BindOne::Skip,
                     },
                 );
-                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, num_vertices as _);
+                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, vertex_count as _);
+                encoder.pop_debug_group();
             }
             encoder.pop_debug_group();
         }
@@ -254,7 +257,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         if RENDER_LIGHT {
             encoder.push_debug_group("Light");
             encoder.set_render_pipeline_state(&self.light_pipeline.pipeline);
-            self.light_pipeline.setup_binds(
+            self.light_pipeline.bind(
                 encoder,
                 light_vertex_binds {
                     camera: BindOne::Bytes(&self.camera_space),
@@ -270,10 +273,14 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(update) = self.camera.on_event(event) {
-            self.camera_space.position_world = update.position_world.into();
-            self.camera_space.matrix_screen_to_world = update.matrix_screen_to_world;
-            self.camera_space.matrix_world_to_projection = update.matrix_world_to_projection;
+        if let Some(u) = self.camera.on_event(event) {
+            self.camera_space = ProjectedSpace {
+                matrix_world_to_projection: u.matrix_world_to_projection,
+                matrix_screen_to_world: u.matrix_screen_to_world,
+                position_world: u.position_world.into(),
+            };
+            self.model_space.matrix_model_to_projection =
+                self.camera_space.matrix_world_to_projection * self.matrix_model_to_world;
             self.needs_render = true;
         }
         if let Some(CameraUpdate { position_world, .. }) = self.light.on_event(event) {

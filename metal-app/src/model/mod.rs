@@ -4,141 +4,163 @@ mod materials;
 use crate::metal::*;
 use crate::time::debug_time;
 use crate::typed_buffer::TypedBuffer;
-pub use geometry::{DrawInfo, DrawInfoWithMaterial, GeometryToEncode, MaxBounds};
 use geometry::{Geometry, GeometryBuffers};
+pub use geometry::{GeometryToEncode, MaxBounds};
 pub use materials::MaterialToEncode;
-use materials::Materials;
+use materials::{MaterialResults, Materials};
 use std::path::{Path, PathBuf};
 use tobj::LoadOptions;
 
-pub struct DrawIteratorItem<'a, G: Sized + Copy + Clone, MI> {
-    pub num_vertices: usize,
+pub trait MaterialKind {
+    type Sizer<'a>;
+    type Allocated;
+    type Draw;
+    type DrawItem<'a, G: Sized + Copy + Clone + 'a>;
+
+    fn size<'a, P: AsRef<Path>>(
+        &self,
+        device: &Device,
+        materials_dir: P,
+        materials: &'a [tobj::Material],
+    ) -> (usize, Self::Sizer<'a>);
+
+    fn allocate(&self, heap: &Heap, sized: Self::Sizer<'_>) -> Self::Allocated;
+
+    fn new_draw(name: String, vertex_count: usize, material_id: Option<usize>) -> Self::Draw;
+
+    fn new_draw_item<'a, G: Sized + Copy + Clone>(
+        materials: &'a Self::Allocated,
+        geometries: &'a TypedBuffer<G>,
+        draw: &'a Self::Draw,
+        draw_index: usize,
+    ) -> Self::DrawItem<'a, G>;
+}
+
+pub struct DrawItem<'a, G: Sized + Copy + Clone + 'a, M: Sized + Copy + Clone + 'a> {
+    pub name: &'a str,
+    pub vertex_count: usize,
     pub geometry: (&'a TypedBuffer<G>, usize),
-    pub material: MI,
+    pub material: (&'a TypedBuffer<M>, usize),
 }
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Try to remove MaterialLocator
-// - I suspect if we could pass Geometry a "DrawFactory", then we wouldn't need both a DrawIteratorItem and a DrawInfo
-// - And we might be able to remove the `material` field all together when NoMaterial is selected.
-pub trait MaterialLocator<D: DrawInfo> {
-    type T<'a>
-    where
-        Self: 'a;
-    fn get_material<'a>(&'a self, draw: &D) -> Self::T<'a>;
+pub struct Draw {
+    name: String,
+    vertex_count: usize,
+    material_id: usize,
 }
 
-pub struct HasMaterialLocator<M: Sized + Copy + Clone + 'static> {
-    materials: self::materials::MaterialResults<M>,
-}
+pub struct HasMaterial<M: Sized + Copy + Clone + 'static>(pub fn(&mut M, MaterialToEncode));
+impl<M: Sized + Copy + Clone + 'static> MaterialKind for HasMaterial<M> {
+    type Sizer<'a> = Materials<'a, M>;
+    type Allocated = MaterialResults<M>;
+    type Draw = Draw;
+    type DrawItem<'a, G: Sized + Copy + Clone + 'a> = DrawItem<'a, G, M>;
 
-impl<M: Sized + Copy + Clone + 'static> MaterialLocator<DrawInfoWithMaterial>
-    for HasMaterialLocator<M>
-{
-    type T<'a> = (&'a TypedBuffer<M>, usize)
-    where
-        Self: 'a;
-    fn get_material<'a>(&'a self, draw: &DrawInfoWithMaterial) -> Self::T<'a> {
-        (&self.materials.arguments_buffer, draw.material_id())
+    #[inline(always)]
+    fn size<'a, P: AsRef<Path>>(
+        &self,
+        device: &Device,
+        materials_dir: P,
+        materials: &'a [tobj::Material],
+    ) -> (usize, Self::Sizer<'a>) {
+        let m = Materials::new(device, materials_dir, materials);
+        (m.heap_size(), m)
     }
-}
 
-pub trait MaterialsInitialized<Locator> {
-    fn allocate_materials(self, heap: &Heap) -> Locator;
-}
+    #[inline(always)]
+    fn allocate(&self, heap: &Heap, mut sized_materials: Self::Sizer<'_>) -> Self::Allocated {
+        sized_materials.allocate_and_encode(heap, self.0)
+    }
 
-pub struct HasMaterialInitialized<'a, M: Sized + Copy + Clone> {
-    encoder: fn(&mut M, MaterialToEncode),
-    materials: Materials<'a, M>,
-}
+    #[inline(always)]
+    fn new_draw(name: String, vertex_count: usize, material_id: Option<usize>) -> Self::Draw {
+        Draw {
+            name,
+            vertex_count,
+            material_id: material_id
+                .expect("Expected geometry mesh to have an associated material"),
+        }
+    }
 
-impl<'a, M: Sized + Copy + Clone> MaterialsInitialized<HasMaterialLocator<M>>
-    for HasMaterialInitialized<'a, M>
-{
-    fn allocate_materials(mut self, heap: &Heap) -> HasMaterialLocator<M> {
-        HasMaterialLocator {
-            materials: self.materials.allocate_and_encode(heap, self.encoder),
+    #[inline(always)]
+    fn new_draw_item<'a, G: Sized + Copy + Clone>(
+        materials: &'a Self::Allocated,
+        geometries: &'a TypedBuffer<G>,
+        draw: &'a Self::Draw,
+        draw_index: usize,
+    ) -> Self::DrawItem<'a, G> {
+        DrawItem {
+            name: &draw.name,
+            vertex_count: draw.vertex_count,
+            geometry: (geometries, draw_index),
+            material: (&materials.arguments_buffer, draw.material_id),
         }
     }
 }
 
-pub trait MaterialKind {
-    type Argument: Sized + Copy + 'static;
-    type Initialized<'a>: MaterialsInitialized<Self::Locator>;
-    type DrawInfo: DrawInfo;
-    type Locator: MaterialLocator<Self::DrawInfo>;
-    fn initialize_materials<'a, P: AsRef<Path>>(
-        self,
-        device: &Device,
-        material_file_dir: P,
-        tobj_materials: &'a [tobj::Material],
-    ) -> (usize, Self::Initialized<'a>);
+pub struct DrawNoMaterial {
+    name: String,
+    vertex_count: usize,
 }
 
-pub struct HasMaterial<M: Sized + Copy + Clone + 'static>(pub fn(&mut M, MaterialToEncode));
-
-impl<M: Sized + Copy + Clone + 'static> MaterialKind for HasMaterial<M> {
-    type Argument = M;
-    type Initialized<'a> = HasMaterialInitialized<'a, Self::Argument>;
-    type Locator = HasMaterialLocator<M>;
-    type DrawInfo = DrawInfoWithMaterial;
-
-    fn initialize_materials<'a, P: AsRef<Path>>(
-        self,
-        device: &Device,
-        material_file_dir: P,
-        tobj_materials: &'a [tobj::Material],
-    ) -> (usize, Self::Initialized<'a>) {
-        let materials = Materials::new(device, material_file_dir, tobj_materials);
-        let heap_size = materials.heap_size();
-        (
-            heap_size,
-            HasMaterialInitialized {
-                encoder: self.0,
-                materials,
-            },
-        )
-    }
+pub struct DrawItemNoMaterial<'a, G: Sized + Copy + Clone> {
+    pub name: &'a str,
+    pub vertex_count: usize,
+    pub geometry: (&'a TypedBuffer<G>, usize),
 }
 
 pub struct NoMaterial;
-impl MaterialKind for NoMaterial {
-    type Argument = ();
-    type Initialized<'a> = NoMaterial;
-    type Locator = NoMaterial;
-    type DrawInfo = DrawInfoWithMaterial;
 
-    fn initialize_materials<'a, P: AsRef<Path>>(
-        self,
+impl MaterialKind for NoMaterial {
+    type Sizer<'a> = ();
+    type Allocated = ();
+    type Draw = DrawNoMaterial;
+    type DrawItem<'a, G: Sized + Copy + Clone + 'a> = DrawItemNoMaterial<'a, G>;
+
+    #[inline(always)]
+    fn size<'a, P: AsRef<Path>>(
+        &self,
         _device: &Device,
-        _material_file_dir: P,
-        _tobj_materials: &'a [tobj::Material],
-    ) -> (usize, Self::Initialized<'a>) {
-        (0, NoMaterial)
+        _materials_dir: P,
+        _materials: &'a [tobj::Material],
+    ) -> (usize, Self::Sizer<'a>) {
+        (0, ())
+    }
+
+    #[inline(always)]
+    fn allocate(&self, _heap: &Heap, mut _sized_materials: Self::Sizer<'_>) -> Self::Allocated {
+        ()
+    }
+
+    #[inline(always)]
+    fn new_draw(name: String, vertex_count: usize, _material_id: Option<usize>) -> Self::Draw {
+        DrawNoMaterial { name, vertex_count }
+    }
+
+    #[inline(always)]
+    fn new_draw_item<'a, G: Sized + Copy + Clone>(
+        _materials: &'a Self::Allocated,
+        geometries: &'a TypedBuffer<G>,
+        draw: &'a Self::Draw,
+        draw_index: usize,
+    ) -> Self::DrawItem<'a, G> {
+        DrawItemNoMaterial {
+            name: &draw.name,
+            vertex_count: draw.vertex_count,
+            geometry: (geometries, draw_index),
+        }
     }
 }
-impl MaterialsInitialized<NoMaterial> for NoMaterial {
-    fn allocate_materials(self, _heap: &Heap) -> NoMaterial {
-        NoMaterial
-    }
-}
-impl MaterialLocator<DrawInfoWithMaterial> for NoMaterial {
-    type T<'a> = ()
-    where
-        Self: 'a;
-    fn get_material(&self, _draw: &DrawInfoWithMaterial) -> () {}
-}
-pub struct Model<G: Sized + Copy + Clone + 'static, MK: MaterialKind> {
+
+pub struct Model<G: Sized + Copy + Clone, MK: MaterialKind> {
     heap: Heap,
-    draws: Vec<MK::DrawInfo>,
+    draws: Vec<MK::Draw>,
     pub geometry_max_bounds: MaxBounds,
     geometry_buffers: GeometryBuffers<G>,
-    material_locator: MK::Locator,
+    materials: MK::Allocated,
 }
 
-impl<G: Sized + Copy + Clone + 'static, MK: MaterialKind> Model<G, MK> {
+impl<G: Sized + Copy + Clone, MK: MaterialKind> Model<G, MK> {
     pub fn from_file<T: AsRef<Path>, EG: FnMut(&mut G, GeometryToEncode)>(
         obj_file: T,
         device: &Device,
@@ -166,10 +188,12 @@ impl<G: Sized + Copy + Clone + 'static, MK: MaterialKind> Model<G, MK> {
                 .expect("Failed to get obj file's parent directory"),
         );
         // Size Heap for Geometry and Materials
-        let (heap_size, initialized_materials) = debug_time("Model - Size Material", || {
-            material_kind.initialize_materials(device, material_file_dir, &materials)
+        let (heap_size, sized_materials) = debug_time("Model - Size Material", || {
+            material_kind.size(device, material_file_dir, &materials)
         });
-        let mut geometry = debug_time("Model - Size Geometry", || Geometry::new(&models, device));
+        let mut geometry = debug_time("Model - Size Geometry", || {
+            Geometry::new(&models, device, MK::new_draw)
+        });
 
         // Allocate Heap for Geometry and Materials
         let desc = HeapDescriptor::new();
@@ -181,8 +205,8 @@ impl<G: Sized + Copy + Clone + 'static, MK: MaterialKind> Model<G, MK> {
 
         // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
         // (specifically alignment padding) assume this.
-        let material_locator = debug_time("Model - Load Material textures", || {
-            initialized_materials.allocate_materials(&heap)
+        let materials = debug_time("Model - Load Material textures", || {
+            material_kind.allocate(&heap, sized_materials)
         });
         let geometry_buffers = debug_time("Model - Load Geometry", || {
             geometry.allocate_and_encode(&heap, encode_geometry_arg)
@@ -193,7 +217,7 @@ impl<G: Sized + Copy + Clone + 'static, MK: MaterialKind> Model<G, MK> {
             draws: geometry.draws,
             geometry_buffers,
             geometry_max_bounds: geometry.max_bounds,
-            material_locator,
+            materials,
         }
     }
 
@@ -204,19 +228,11 @@ impl<G: Sized + Copy + Clone + 'static, MK: MaterialKind> Model<G, MK> {
             MTLRenderStages::Vertex | MTLRenderStages::Fragment,
         )
     }
+
     #[inline]
-    pub fn get_draws(
-        &self,
-    ) -> impl Iterator<
-        Item = DrawIteratorItem<'_, G, <MK::Locator as MaterialLocator<MK::DrawInfo>>::T<'_>>,
-    > {
-        self.draws
-            .iter()
-            .enumerate()
-            .map(|(i, d)| DrawIteratorItem {
-                num_vertices: d.num_indices(),
-                geometry: (&self.geometry_buffers.arguments, i),
-                material: self.material_locator.get_material(d),
-            })
+    pub fn draws(&self) -> impl Iterator<Item = MK::DrawItem<'_, G>> {
+        self.draws.iter().enumerate().map(|(i, d)| {
+            MK::new_draw_item(&self.materials, &self.geometry_buffers.arguments, d, i)
+        })
     }
 }

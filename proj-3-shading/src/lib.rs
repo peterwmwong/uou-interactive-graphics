@@ -37,6 +37,7 @@ struct Delegate {
     matrix_model_to_world: f32x4x4,
     model: Model<Geometry, NoMaterial>,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil>,
+    model_space: ModelSpace,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
 }
@@ -144,6 +145,10 @@ impl RendererDelgate for Delegate {
             matrix_model_to_world,
             model,
             model_pipeline: create_model_pipeline(&device, &library, shading_mode),
+            model_space: ModelSpace {
+                matrix_model_to_projection: f32x4x4::identity(),
+                matrix_normal_to_world: matrix_model_to_world.into(),
+            },
             needs_render: false,
             shading_mode,
             device,
@@ -159,61 +164,66 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        {
-            let encoder = self.model_pipeline.new_render_command_encoder(
-                "Model and Light",
-                command_buffer,
-                [(
-                    render_target,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::Store,
-                )],
-                (
-                    self.depth_texture.texture(),
-                    1.,
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::DontCare,
-                ),
-                NoStencil,
-            );
-            self.model.encode_use_resources(encoder);
-            encoder.set_depth_stencil_state(&self.depth_state);
+        let encoder = self.model_pipeline.new_render_command_encoder(
+            "Model and Light",
+            command_buffer,
+            [(
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )],
+            (
+                self.depth_texture.texture(),
+                1.,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
+            NoStencil,
+        );
+        self.model.encode_use_resources(encoder);
+        encoder.set_depth_stencil_state(&self.depth_state);
 
-            // Render Teapot
-            for DrawIteratorItem {
-                num_vertices,
+        // Render Teapot
+        {
+            encoder.push_debug_group("Model");
+            self.model_pipeline.bind(
+                encoder,
+                main_vertex_binds {
+                    geometry: BindOne::Skip,
+                    model: BindOne::Bytes(&self.model_space),
+                },
+                main_fragment_binds {
+                    camera: BindOne::Bytes(&self.camera_space),
+                    light_pos: BindOne::Bytes(&self.light_world_position),
+                },
+            );
+            for DrawItemNoMaterial {
+                vertex_count,
                 geometry,
                 ..
-            } in self.model.get_draws()
+            } in self.model.draws()
             {
-                // TODO: START HERE
-                // TODO: START HERE
-                // TODO: START HERE
-                // Look at proj-4 for optimal binds (bind model, camera, light_pos once, outside of loop)
-                self.model_pipeline.setup_binds(
+                self.model_pipeline.bind(
                     encoder,
                     main_vertex_binds {
                         geometry: BindOne::buffer_with_rolling_offset(geometry),
-                        model: BindOne::Bytes(&ModelSpace {
-                            matrix_model_to_projection: (self
-                                .camera_space
-                                .matrix_world_to_projection
-                                * self.matrix_model_to_world),
-                            matrix_normal_to_world: self.matrix_model_to_world.into(),
-                        }),
+                        model: BindOne::Skip,
                     },
                     main_fragment_binds {
-                        camera: BindOne::Bytes(&self.camera_space),
-                        light_pos: BindOne::Bytes(&self.light_world_position),
+                        camera: BindOne::Skip,
+                        light_pos: BindOne::Skip,
                     },
                 );
-                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, num_vertices as _);
+                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, vertex_count as _);
             }
-
-            // Render Light
+            encoder.pop_debug_group();
+        }
+        // Render Light
+        {
+            encoder.push_debug_group("Light");
             encoder.set_render_pipeline_state(&self.light_pipeline.pipeline);
-            self.light_pipeline.setup_binds(
+            self.light_pipeline.bind(
                 encoder,
                 light_vertex_binds {
                     camera: BindOne::Bytes(&self.camera_space),
@@ -222,18 +232,21 @@ impl RendererDelgate for Delegate {
                 NoBinds,
             );
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
-            encoder.end_encoding();
+            encoder.pop_debug_group();
         }
+        encoder.end_encoding();
         command_buffer
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(update) = self.camera.on_event(event) {
+        if let Some(u) = self.camera.on_event(event) {
             self.camera_space = ProjectedSpace {
-                matrix_world_to_projection: update.matrix_world_to_projection,
-                matrix_screen_to_world: update.matrix_screen_to_world,
-                position_world: update.position_world.into(),
+                matrix_world_to_projection: u.matrix_world_to_projection,
+                matrix_screen_to_world: u.matrix_screen_to_world,
+                position_world: u.position_world.into(),
             };
+            self.model_space.matrix_model_to_projection =
+                self.camera_space.matrix_world_to_projection * self.matrix_model_to_world;
             self.needs_render = true;
         }
         if let Some(update) = self.light.on_event(event) {

@@ -5,6 +5,10 @@ use crate::{
     typed_buffer::{TypedBuffer, TypedBufferSizer},
     MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Compare asm with BTreeMap
 use std::{collections::HashMap, ops::Deref, path::Path};
 
 type RGB32 = [f32; 3];
@@ -16,7 +20,7 @@ pub struct MaterialToEncode {
     pub specular_shineness: f32,
 }
 
-pub(crate) struct MaterialResults<T: Sized + Copy + Clone> {
+pub struct MaterialResults<T: Sized + Copy + Clone> {
     pub(crate) arguments_buffer: TypedBuffer<T>,
     // Needs to be owned and not dropped (causing deallocation from heap).
     _textures: Vec<Texture>,
@@ -160,7 +164,7 @@ struct Material<'a> {
     specular_shineness: f32,
 }
 
-pub(crate) struct Materials<'a, T: Sized + Copy + Clone> {
+pub struct Materials<'a, T: Sized + Copy + Clone> {
     arguments_sizer: TypedBufferSizer<T>,
     heap_size: usize,
     materials: Vec<Material<'a>>,

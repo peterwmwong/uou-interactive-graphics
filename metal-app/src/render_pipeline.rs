@@ -120,6 +120,7 @@ pub trait BindEncoder {
         bind: BindTexture<'a>,
         bind_index: u64,
     );
+    #[inline(always)]
     fn encode_one<'a, T: Sized + Copy + Clone>(
         encoder: &RenderCommandEncoderRef,
         bind: BindOne<'a, T>,
@@ -144,6 +145,7 @@ pub trait BindEncoder {
 
 pub struct VertexBindEncoder;
 impl BindEncoder for VertexBindEncoder {
+    #[inline(always)]
     fn encode<'a, T: Sized + Copy + Clone>(
         encoder: &RenderCommandEncoderRef,
         bind: BindMany<'a, T>,
@@ -158,6 +160,7 @@ impl BindEncoder for VertexBindEncoder {
             bind_index,
         )
     }
+    #[inline(always)]
     fn encode_texture<'a>(
         encoder: &RenderCommandEncoderRef,
         bind: BindTexture<'a>,
@@ -169,6 +172,7 @@ impl BindEncoder for VertexBindEncoder {
 
 pub struct FragmentBindEncoder;
 impl BindEncoder for FragmentBindEncoder {
+    #[inline(always)]
     fn encode<'a, T: Sized + Copy + Clone>(
         encoder: &RenderCommandEncoderRef,
         bind: BindMany<'a, T>,
@@ -183,6 +187,7 @@ impl BindEncoder for FragmentBindEncoder {
             bind_index,
         )
     }
+    #[inline(always)]
     fn encode_texture<'a>(
         encoder: &RenderCommandEncoderRef,
         bind: BindTexture<'a>,
@@ -208,7 +213,7 @@ type ColorAttachementRenderPassDesc<'a> = (
 
 pub struct ColorAttachement;
 impl ColorAttachement {
-    #[inline]
+    #[inline(always)]
     fn setup_pipeline_attachment<'a>(
         desc: ColorAttachementPipelineDesc,
         pass: &RenderPipelineColorAttachmentDescriptorRef,
@@ -218,7 +223,7 @@ impl ColorAttachement {
         pass.set_blending_enabled(matches!(blend_mode, BlendMode::Blend));
     }
 
-    #[inline]
+    #[inline(always)]
     fn setup_render_pass_attachment<'a>(
         desc: ColorAttachementRenderPassDesc<'a>,
         a: &RenderPassColorAttachmentDescriptorRef,
@@ -234,9 +239,9 @@ impl ColorAttachement {
 pub trait DepthAttachmentKind {
     type RenderPassDesc<'a>;
 
-    #[inline]
+    #[inline(always)]
     fn setup_pipeline_attachment(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
-    #[inline]
+    #[inline(always)]
     fn setup_render_pass_attachment<'a>(
         _desc: Self::RenderPassDesc<'a>,
         _pass: &RenderPassDescriptorRef,
@@ -247,12 +252,12 @@ pub struct HasDepth(pub MTLPixelFormat);
 impl DepthAttachmentKind for HasDepth {
     type RenderPassDesc<'a> = (&'a TextureRef, f32, MTLLoadAction, MTLStoreAction);
 
-    #[inline]
+    #[inline(always)]
     fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
         pipeline_descriptor.set_depth_attachment_pixel_format(self.0);
     }
 
-    #[inline]
+    #[inline(always)]
     fn setup_render_pass_attachment<'a>(
         (texture, clear_depth, load_action, store_action): Self::RenderPassDesc<'a>,
         desc: &RenderPassDescriptorRef,
@@ -284,12 +289,12 @@ pub struct HasStencil(pub MTLPixelFormat);
 impl StencilAttachmentKind for HasStencil {
     type RenderPassDesc<'a> = (&'a TextureRef, u32, MTLLoadAction, MTLStoreAction);
 
-    #[inline]
+    #[inline(always)]
     fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
         pipeline_descriptor.set_stencil_attachment_pixel_format(self.0);
     }
 
-    #[inline]
+    #[inline(always)]
     fn setup_render_pass_attachment<'a>(
         (texture, clear_value, load_action, store_action): Self::RenderPassDesc<'a>,
         desc: &RenderPassDescriptorRef,
@@ -307,10 +312,10 @@ pub struct NoStencil;
 impl StencilAttachmentKind for NoStencil {
     type RenderPassDesc<'a> = NoStencil;
 
-    #[inline]
+    #[inline(always)]
     fn setup_pipeline_attachment(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
 
-    #[inline]
+    #[inline(always)]
     fn setup_render_pass_attachment<'a>(
         _desc: Self::RenderPassDesc<'a>,
         _pass: &RenderPassDescriptorRef,
@@ -324,7 +329,7 @@ pub trait FunctionBinds {
 
 pub struct NoBinds;
 impl FunctionBinds for NoBinds {
-    #[inline]
+    #[inline(always)]
     fn encode_binds<E: BindEncoder>(self, _encoder: &RenderCommandEncoderRef) {}
 }
 
@@ -334,6 +339,7 @@ pub trait FunctionType {
 
 pub struct VertexFunctionType;
 impl FunctionType for VertexFunctionType {
+    #[inline(always)]
     fn setup_render_pipeline(func: &FunctionRef, pipeline_desc: &RenderPipelineDescriptorRef) {
         pipeline_desc.set_vertex_function(Some(&func));
     }
@@ -341,6 +347,7 @@ impl FunctionType for VertexFunctionType {
 
 pub struct FragmentFunctionType;
 impl FunctionType for FragmentFunctionType {
+    #[inline(always)]
     fn setup_render_pipeline(func: &FunctionRef, pipeline_desc: &RenderPipelineDescriptorRef) {
         pipeline_desc.set_fragment_function(Some(&func));
     }
@@ -351,7 +358,7 @@ pub trait Function {
     type Binds<'a>: FunctionBinds;
     type Type: FunctionType;
 
-    #[inline]
+    #[inline(always)]
     fn get_function(&self, lib: &LibraryRef) -> metal::Function {
         lib.get_function(Self::FUNCTION_NAME, self.get_function_constants())
             .expect("Failed to get vertex function from library")
@@ -502,7 +509,7 @@ impl<
         encoder
     }
 
-    pub fn setup_binds<'a, 'b, 'c>(
+    pub fn bind<'a, 'b, 'c>(
         &'a self,
         encoder: &RenderCommandEncoderRef,
         vertex_binds: VS::Binds<'b>,
@@ -525,7 +532,6 @@ mod test {
         v_bind1: BindMany<'a, f32>,
     }
     impl FunctionBinds for Vertex1Binds<'_> {
-        #[inline]
         fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {
             E::encode(encoder, self.v_bind1, 0);
         }
@@ -555,7 +561,6 @@ mod test {
         f_tex2: BindTexture<'a>,
     }
     impl FunctionBinds for Frag1Binds<'_> {
-        #[inline]
         fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {
             E::encode_one(encoder, self.f_bind1, 0);
             E::encode_texture(encoder, self.f_tex2, 1);
@@ -653,7 +658,7 @@ mod test {
                 NoDepth,
                 NoStencil,
             );
-            p.setup_binds(
+            p.bind(
                 encoder,
                 Vertex1Binds {
                     v_bind1: BindMany::Bytes(&[0.]),
@@ -664,7 +669,7 @@ mod test {
                 },
             );
 
-            p.setup_binds(
+            p.bind(
                 encoder,
                 Vertex1Binds {
                     v_bind1: BindMany::BufferAndOffset(&f32_buffer, 0),
@@ -713,7 +718,7 @@ mod test {
                 NoDepth,
                 NoStencil,
             );
-            p.setup_binds(
+            p.bind(
                 encoder,
                 Vertex1Binds {
                     v_bind1: BindMany::Bytes(&[0.]),
@@ -753,7 +758,7 @@ mod test {
                 (depth, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
                 (stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
             );
-            p.setup_binds(
+            p.bind(
                 encoder,
                 Vertex1Binds {
                     v_bind1: BindMany::Bytes(&[0.]),

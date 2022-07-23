@@ -96,20 +96,29 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
         );
-        for d in self.model.get_draws() {
-            self.render_pipeline.setup_binds(
+        self.render_pipeline.bind(
+            encoder,
+            main_vertex_binds {
+                r#in: BindOne::Bytes(&self.vertex_input),
+                geometry: BindOne::Skip,
+            },
+            NoBinds,
+        );
+        for DrawItemNoMaterial {
+            vertex_count,
+            geometry,
+            ..
+        } in self.model.draws()
+        {
+            self.render_pipeline.bind(
                 encoder,
                 main_vertex_binds {
-                    // TODO: START HERE
-                    // TODO: START HERE
-                    // TODO: START HERE
-                    // Look at proj-4 for optimal binds (bind r#in once, outside of loop)
-                    r#in: BindOne::Bytes(&self.vertex_input),
-                    geometry: BindOne::buffer_with_rolling_offset(d.geometry),
+                    r#in: BindOne::Skip,
+                    geometry: BindOne::buffer_with_rolling_offset(geometry),
                 },
                 NoBinds,
             );
-            encoder.draw_primitives(MTLPrimitiveType::Point, 0, d.num_vertices as _);
+            encoder.draw_primitives(MTLPrimitiveType::Point, 0, vertex_count as _);
         }
         encoder.end_encoding();
         command_buffer

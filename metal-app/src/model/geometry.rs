@@ -12,58 +12,6 @@ pub struct MaxBounds {
     pub size: f32x4,
 }
 
-pub trait DrawInfo {
-    fn new(debug_group_name: String, num_indices: usize, material_id: Option<usize>) -> Self;
-    fn debug_group_name(&self) -> &str;
-    fn num_indices(&self) -> usize;
-}
-
-pub struct DrawInfoWithMaterial {
-    debug_group_name: String,
-    num_indices: usize,
-    material_id: usize,
-}
-impl DrawInfo for DrawInfoWithMaterial {
-    fn new(debug_group_name: String, num_indices: usize, material_id: Option<usize>) -> Self {
-        Self {
-            debug_group_name,
-            num_indices,
-            material_id: material_id.expect("Expected Material ID from Geometry mesh."),
-        }
-    }
-    fn debug_group_name(&self) -> &str {
-        &self.debug_group_name
-    }
-    fn num_indices(&self) -> usize {
-        self.num_indices
-    }
-}
-
-impl DrawInfoWithMaterial {
-    pub fn material_id(&self) -> usize {
-        self.material_id
-    }
-}
-
-pub struct DrawInfoNoMaterial {
-    debug_group_name: String,
-    num_indices: usize,
-}
-impl DrawInfo for DrawInfoNoMaterial {
-    fn new(debug_group_name: String, num_indices: usize, _material_id: Option<usize>) -> Self {
-        Self {
-            debug_group_name,
-            num_indices,
-        }
-    }
-    fn debug_group_name(&self) -> &str {
-        &self.debug_group_name
-    }
-    fn num_indices(&self) -> usize {
-        self.num_indices
-    }
-}
-
 pub struct GeometryToEncode {
     pub indices_buffer: MetalGPUAddress,
     pub positions_buffer: MetalGPUAddress,
@@ -80,7 +28,7 @@ pub(crate) struct GeometryBuffers<T: Sized + Copy + Clone> {
     _tx_coords: TypedBuffer<f32>,
 }
 
-pub(crate) struct Geometry<'a, T: Sized + Copy + Clone, D: DrawInfo> {
+pub(crate) struct Geometry<'a, T: Sized + Copy + Clone, DI> {
     objects: &'a [tobj::Model],
     arguments_sizer: TypedBufferSizer<T>,
     indices_sizer: TypedBufferSizer<u32>,
@@ -89,12 +37,16 @@ pub(crate) struct Geometry<'a, T: Sized + Copy + Clone, D: DrawInfo> {
     tx_coords_sizer: TypedBufferSizer<f32>,
     heap_size: usize,
     pub(crate) max_bounds: MaxBounds,
-    pub(crate) draws: Vec<D>,
+    pub(crate) draws: Vec<DI>,
     _p: PhantomData<T>,
 }
 
-impl<'a, T: Sized + Copy + Clone, D: DrawInfo> Geometry<'a, T, D> {
-    pub(crate) fn new(objects: &'a [tobj::Model], device: &Device) -> Self {
+impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
+    pub(crate) fn new<D: Fn(String, usize, Option<usize>) -> DI>(
+        objects: &'a [tobj::Model],
+        device: &Device,
+        new_draw_item: D,
+    ) -> Self {
         let mut heap_size = 0;
 
         // Create a shared buffer (shared between all objects).
@@ -105,7 +57,7 @@ impl<'a, T: Sized + Copy + Clone, D: DrawInfo> Geometry<'a, T, D> {
         let mut tx_coords_sizer = TypedBufferSizer::new(0, DEFAULT_RESOURCE_OPTIONS);
         let mut mins = f32x4::splat(f32::MAX);
         let mut maxs = f32x4::splat(f32::MIN);
-        let mut draws = Vec::<D>::with_capacity(objects.len());
+        let mut draws = Vec::<DI>::with_capacity(objects.len());
         for tobj::Model { mesh, name, .. } in objects {
             assert!(
                 (mesh.indices.len() % 3) == 0 &&
@@ -124,7 +76,7 @@ impl<'a, T: Sized + Copy + Clone, D: DrawInfo> Geometry<'a, T, D> {
             positions_sizer.num_of_elements += mesh.positions.len();
             normals_sizer.num_of_elements += mesh.normals.len();
             tx_coords_sizer.num_of_elements += mesh.texcoords.len();
-            draws.push(D::new(
+            draws.push(new_draw_item(
                 name.to_owned(),
                 mesh.indices.len(),
                 mesh.material_id,
