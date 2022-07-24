@@ -10,6 +10,20 @@
 
 # metal-app
 
+- Move `shaders.metallib` generation and access into metal-app
+    - Currently...
+        1. `metal-build` generates the `metallib` into `OUT_DIR`
+        2. Project includes the bytes...
+            ```rs
+           const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"))
+            ```
+        3. Project passes it to the `metal` to create a `metal::Library`
+        4. Project passes the library to RenderPipeline
+    - What if it were treated like everything else that `metal-build` generates (bindings and bindings hash)?
+    - Instead...
+        1. Project uses `get_metal_library() -> metal::Library` from shader_bindings.
+        2. Project passes the library to RenderPipeline
+    - We could also rememove release build checks `library.get_function()` result.
 - Encapsulate Render Pipeline
     - PSO's split setup and encoding... but they have to line-up exactly...
         - Attachments: Color Pixel Format, Depth Pixel Format
