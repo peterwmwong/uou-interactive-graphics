@@ -22,9 +22,9 @@ struct Vertex1Binds<'a> {
 impl FunctionBinds for Vertex1Binds<'_> {
     fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {
         E::encode(encoder, self.v_bind1, 0);
-        E::encode(encoder, self.v_bind2, 0);
-        E::encode(encoder, self.v_bind3, 0);
-        E::encode(encoder, self.v_bind4, 0);
+        E::encode(encoder, self.v_bind2, 1);
+        E::encode(encoder, self.v_bind3, 2);
+        E::encode(encoder, self.v_bind4, 4);
     }
 }
 struct Vertex1 {
