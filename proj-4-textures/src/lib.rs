@@ -14,7 +14,7 @@ use std::{
     f32::consts::PI,
     ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4},
+    simd::{f32x2, f32x4, SimdFloat},
 };
 
 const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;

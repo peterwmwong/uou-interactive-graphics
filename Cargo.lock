@@ -664,50 +664,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proj-5-render-buffers"
-version = "0.1.0"
-dependencies = [
- "metal-app",
- "metal-build",
- "proj-4-textures",
-]
-
-[[package]]
-name = "proj-6-environment-mapping"
-version = "0.1.0"
-dependencies = [
- "asset-compiler",
- "build-hash",
- "metal-app",
- "metal-build",
- "png",
-]
-
-[[package]]
-name = "proj-7-shadow-mapping"
-version = "0.1.0"
-dependencies = [
- "metal-app",
- "metal-build",
-]
-
-[[package]]
-name = "proj-8-tesselation"
-version = "0.1.0"
-dependencies = [
- "metal-app",
- "metal-build",
-]
-
-[[package]]
-name = "proj-final"
-version = "0.1.0"
-dependencies = [
- "metal-app",
- "metal-build",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

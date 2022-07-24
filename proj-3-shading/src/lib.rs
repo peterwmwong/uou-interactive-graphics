@@ -13,7 +13,7 @@ use std::ops::Neg;
 use std::{
     f32::consts::PI,
     path::PathBuf,
-    simd::{f32x2, f32x4},
+    simd::{f32x2, f32x4, SimdFloat},
 };
 
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;

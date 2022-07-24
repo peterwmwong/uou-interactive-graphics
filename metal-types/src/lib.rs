@@ -13,7 +13,7 @@ pub use rust_bindgen_only_metal_types_list::*;
 use std::{
     fmt::Debug,
     ops::{Mul, Sub},
-    simd::{f32x2, f32x4, u16x2},
+    simd::{f32x2, f32x4, u16x2, SimdFloat},
 };
 
 #[allow(non_camel_case_types)]
@@ -341,13 +341,14 @@ impl From<f32x4x4> for float3x3 {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::simd::SimdPartialOrd;
 
     mod test_f32x4_extras {
         use super::*;
 
         fn assert_eq_f32x4(actual: f32x4, expected: f32x4) {
-            const TOLERANCE: f32x4 = f32x4::splat(1e-6);
-            let pass = (actual - expected).abs().lanes_lt(TOLERANCE).all();
+            const TOLERANCE: f32x4 = f32x4::from_array([1e-6; 4]);
+            let pass = (actual - expected).abs().simd_lt(TOLERANCE).all();
             if !pass {
                 dbg!(expected, actual);
             }
@@ -388,7 +389,6 @@ mod test {
 
     mod test_f32x4x4 {
         use super::*;
-        use std::simd::f32x4;
 
         #[test]
         fn test_inverse() {
@@ -399,10 +399,10 @@ mod test {
             let actual = inv_m * m;
             let diff = actual - expected;
 
-            const TOLERANCE: f32x4 = f32x4::splat(3.82e-6);
+            const TOLERANCE: f32x4 = f32x4::from_array([3.82e-6; 4]);
             for c in diff.columns {
                 let c: f32x4 = c.into();
-                assert!(c.abs().lanes_lt(TOLERANCE).all());
+                assert!(c.abs().simd_lt(TOLERANCE).all());
             }
         }
 

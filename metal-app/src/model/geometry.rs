@@ -5,7 +5,11 @@ use crate::{
     typed_buffer::{TypedBuffer, TypedBufferSizer},
     MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
-use std::{marker::PhantomData, ops::Deref, simd::f32x4};
+use std::{
+    marker::PhantomData,
+    ops::Deref,
+    simd::{f32x4, SimdFloat},
+};
 
 pub struct MaxBounds {
     pub center: f32x4,
@@ -83,8 +87,8 @@ impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
             ));
             for &[x, y, z] in mesh.positions.as_chunks::<3>().0 {
                 let input = f32x4::from_array([x, y, z, 0.0]);
-                mins = mins.min(input);
-                maxs = maxs.max(input);
+                mins = mins.simd_min(input);
+                maxs = maxs.simd_max(input);
             }
         }
         heap_size += indices_sizer.heap_aligned_byte_size(device);

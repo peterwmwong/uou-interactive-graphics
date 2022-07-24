@@ -41,7 +41,7 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
                 invert_drag,
                 min_distance,
             },
-            screen_size: f32x2::splat(1.),
+            screen_size: f32x2::from_array([1.; 2]),
         }
     }
 

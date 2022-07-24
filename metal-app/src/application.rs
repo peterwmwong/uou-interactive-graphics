@@ -112,7 +112,7 @@ fn init_and_attach_view<R: RendererDelgate + 'static>(
                     use MouseButton::*;
                     use NSEventType::*;
                     use UserEvent::*;
-                    static mut LAST_DRAG_POSITION: f32x2 = f32x2::splat(0.0);
+                    static mut LAST_DRAG_POSITION: f32x2 = f32x2::from_array([0.; 2]);
 
                     // We have to do this to have access to the `NSView` trait...
                     let view: id = this;
