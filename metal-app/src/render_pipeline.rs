@@ -83,7 +83,7 @@ impl<'a, T: Sized + Copy + Clone> BindOne<'a, T> {
         }
     }
 }
-pub struct BindTexture<'a>(&'a Texture);
+pub struct BindTexture<'a>(pub &'a Texture);
 
 #[inline]
 fn encode_impl<'a, T: Sized + Copy + Clone>(
