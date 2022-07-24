@@ -84,7 +84,7 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = self.render_pipeline.new_render_command_encoder(
+        let encoder = self.render_pipeline.new_pass(
             "Render Teapot",
             command_buffer,
             [(

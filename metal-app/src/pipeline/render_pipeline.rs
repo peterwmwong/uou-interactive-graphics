@@ -1,11 +1,6 @@
+use super::{function, pipeline_function::*};
 use crate::{debug_time, typed_buffer::TypedBuffer};
-use metal::{
-    BufferRef, CommandBufferRef, DeviceRef, FunctionConstantValues, FunctionRef, LibraryRef,
-    MTLClearColor, MTLDataType, MTLLoadAction, MTLPixelFormat, MTLStoreAction, NSUInteger,
-    RenderCommandEncoderRef, RenderPassColorAttachmentDescriptorRef, RenderPassDescriptor,
-    RenderPassDescriptorRef, RenderPipelineColorAttachmentDescriptorRef, RenderPipelineDescriptor,
-    RenderPipelineDescriptorRef, RenderPipelineState, Texture, TextureRef,
-};
+use metal::*;
 use std::marker::PhantomData;
 
 // TODO: START HERE 2
@@ -20,192 +15,15 @@ use std::marker::PhantomData;
 // - Looking at the asm, every `match` on a Bind* enum... generates branches.
 // - It was assumed some inlining and constant propagation would be sufficent...
 // - Consider switching from an enum to a type for each variant (bytes, buffer/offset, buffer offset, skip)
-
-#[derive(Copy, Clone)]
-pub enum BindMany<'a, T: Sized + Copy + Clone> {
-    Bytes(&'a [T]),
-    BufferAndOffset(&'a TypedBuffer<T>, usize),
-    BufferOffset(usize),
-    Skip,
-}
-impl<'a, T: Sized + Copy + Clone> BindMany<'a, T> {
-    #[inline(always)]
-    pub fn buffer_with_rolling_offset(
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if element_offset == 0 {
-            Self::BufferAndOffset(buffer, 0)
-        } else {
-            Self::BufferOffset(element_offset)
-        }
-    }
-
-    #[inline(always)]
-    pub fn iterating_buffer_offset(
-        iteration: usize,
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if iteration == 0 {
-            Self::BufferAndOffset(buffer, element_offset)
-        } else {
-            Self::BufferOffset(element_offset)
-        }
-    }
-}
-#[derive(Copy, Clone)]
-pub enum BindOne<'a, T: Sized + Copy + Clone> {
-    Bytes(&'a T),
-    BufferAndOffset(&'a TypedBuffer<T>, usize),
-    BufferOffset(usize),
-    Skip,
-}
-impl<'a, T: Sized + Copy + Clone> BindOne<'a, T> {
-    #[inline(always)]
-    pub fn buffer_with_rolling_offset(
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if element_offset == 0 {
-            Self::BufferAndOffset(buffer, 0)
-        } else {
-            Self::BufferOffset(element_offset)
-        }
-    }
-
-    #[inline(always)]
-    pub fn iterating_buffer_offset(
-        iteration: usize,
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if iteration == 0 {
-            Self::BufferAndOffset(buffer, element_offset)
-        } else {
-            Self::BufferOffset(element_offset)
-        }
-    }
-}
-pub struct BindTexture<'a>(pub &'a Texture);
-
-#[inline]
-fn encode_impl<'a, T: Sized + Copy + Clone>(
-    encoder: &RenderCommandEncoderRef,
-    encode_bytes: impl FnOnce(&RenderCommandEncoderRef, NSUInteger, NSUInteger, *const std::ffi::c_void),
-    encode_buffer_and_offset: impl FnOnce(
-        &RenderCommandEncoderRef,
-        NSUInteger,
-        Option<&'a BufferRef>,
-        NSUInteger,
-    ),
-    encode_buffer_offset: impl FnOnce(&RenderCommandEncoderRef, NSUInteger, NSUInteger),
-    bind: BindMany<'a, T>,
-    bind_index: u64,
-) {
-    match bind {
-        BindMany::Bytes(v) => encode_bytes(
-            encoder,
-            bind_index,
-            std::mem::size_of_val(v) as _,
-            v.as_ptr() as *const _,
-        ),
-        BindMany::BufferAndOffset(tb, o) => encode_buffer_and_offset(
-            encoder,
-            bind_index,
-            Some(&tb.buffer),
-            (std::mem::size_of::<T>() * o) as _,
-        ),
-        BindMany::BufferOffset(o) => {
-            encode_buffer_offset(encoder, bind_index, (std::mem::size_of::<T>() * o) as _)
-        }
-        _ => {}
-    }
-}
-
-pub trait BindEncoder {
-    fn encode<'a, T: Sized + Copy + Clone>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindMany<'a, T>,
-        bind_index: u64,
-    );
-    fn encode_texture<'a>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindTexture<'a>,
-        bind_index: u64,
-    );
-    #[inline(always)]
-    fn encode_one<'a, T: Sized + Copy + Clone>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindOne<'a, T>,
-        bind_index: u64,
-    ) {
-        let tmp: [T; 1];
-        Self::encode(
-            encoder,
-            match bind {
-                BindOne::Bytes(&v) => {
-                    tmp = [v];
-                    BindMany::Bytes(&tmp)
-                }
-                BindOne::BufferAndOffset(b, o) => BindMany::BufferAndOffset(b, o),
-                BindOne::BufferOffset(o) => BindMany::BufferOffset(o),
-                BindOne::Skip => BindMany::Skip,
-            },
-            bind_index,
-        );
-    }
-}
-
-pub struct VertexBindEncoder;
-impl BindEncoder for VertexBindEncoder {
-    #[inline(always)]
-    fn encode<'a, T: Sized + Copy + Clone>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindMany<'a, T>,
-        bind_index: u64,
-    ) {
-        encode_impl(
-            encoder,
-            RenderCommandEncoderRef::set_vertex_bytes,
-            RenderCommandEncoderRef::set_vertex_buffer,
-            RenderCommandEncoderRef::set_vertex_buffer_offset,
-            bind,
-            bind_index,
-        )
-    }
-    #[inline(always)]
-    fn encode_texture<'a>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindTexture<'a>,
-        bind_index: u64,
-    ) {
-        encoder.set_vertex_texture(bind_index, Some(&bind.0));
-    }
-}
-
-pub struct FragmentBindEncoder;
-impl BindEncoder for FragmentBindEncoder {
-    #[inline(always)]
-    fn encode<'a, T: Sized + Copy + Clone>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindMany<'a, T>,
-        bind_index: u64,
-    ) {
-        encode_impl(
-            encoder,
-            RenderCommandEncoderRef::set_fragment_bytes,
-            RenderCommandEncoderRef::set_fragment_buffer,
-            RenderCommandEncoderRef::set_fragment_buffer_offset,
-            bind,
-            bind_index,
-        )
-    }
-    #[inline(always)]
-    fn encode_texture<'a>(
-        encoder: &RenderCommandEncoderRef,
-        bind: BindTexture<'a>,
-        bind_index: u64,
-    ) {
-        encoder.set_fragment_texture(bind_index, Some(&bind.0));
-    }
-}
+// 0. Stash changes
+// 1. Take a test example (ex. Vertex1/Fragment1) and create metal-app main()
+// 2. Commit
+// 3. Generate asm before
+// 4. Reapply stashed changes
+// 5. Adapt test example
+// 6. Generate asm after
+// 7. asm diff and assess code generated is much better
+// 8. Update generate_rust_bindings
 
 #[derive(Copy, Clone)]
 pub enum BlendMode {
@@ -333,58 +151,115 @@ impl StencilAttachmentKind for NoStencil {
     }
 }
 
-pub trait FunctionBinds {
-    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef);
-}
-
-pub struct NoBinds;
-impl FunctionBinds for NoBinds {
-    #[inline(always)]
-    fn encode_binds<E: BindEncoder>(self, _encoder: &RenderCommandEncoderRef) {}
-}
-
-pub trait FunctionType {
-    fn setup_render_pipeline(func: &FunctionRef, pipeline_desc: &RenderPipelineDescriptorRef);
-}
-
 pub struct VertexFunctionType;
-impl FunctionType for VertexFunctionType {
+impl PipelineFunctionType for VertexFunctionType {
+    type Descriptor = RenderPipelineDescriptorRef;
+    type CommandEncoder = RenderCommandEncoderRef;
+
     #[inline(always)]
-    fn setup_render_pipeline(func: &FunctionRef, pipeline_desc: &RenderPipelineDescriptorRef) {
+    fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
         pipeline_desc.set_vertex_function(Some(&func));
+    }
+
+    #[inline(always)]
+    fn bytes<'a, 'b, T: Sized + Copy + Clone>(
+        encoder: &'a RenderCommandEncoderRef,
+        index: usize,
+        value: &'b [T],
+    ) {
+        encoder.set_vertex_bytes(
+            index as _,
+            std::mem::size_of_val(value) as _,
+            value.as_ptr() as *const _,
+        )
+    }
+    #[inline(always)]
+    fn buffer_and_offset<'a, 'b, T: Sized + Copy + Clone>(
+        encoder: &'a RenderCommandEncoderRef,
+        index: usize,
+        (buffer, offset): (&'b TypedBuffer<T>, usize),
+    ) {
+        encoder.set_vertex_buffer(
+            index as _,
+            Some(&buffer.buffer),
+            (std::mem::size_of::<T>() * offset) as _,
+        );
+    }
+    #[inline(always)]
+    fn buffer_offset<'a, 'b, T: Sized + Copy + Clone>(
+        encoder: &'a RenderCommandEncoderRef,
+        index: usize,
+        offset: usize,
+    ) {
+        encoder.set_vertex_buffer_offset(index as _, (std::mem::size_of::<T>() * offset) as _);
+    }
+    #[inline(always)]
+    fn texture<'a, 'b>(
+        encoder: &'a RenderCommandEncoderRef,
+        index: usize,
+        texture: &'b TextureRef,
+    ) {
+        encoder.set_vertex_texture(index as _, Some(texture));
     }
 }
 
 pub struct FragmentFunctionType;
-impl FunctionType for FragmentFunctionType {
+impl PipelineFunctionType for FragmentFunctionType {
+    type Descriptor = RenderPipelineDescriptorRef;
+    type CommandEncoder = RenderCommandEncoderRef;
+
     #[inline(always)]
-    fn setup_render_pipeline(func: &FunctionRef, pipeline_desc: &RenderPipelineDescriptorRef) {
+    fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
         pipeline_desc.set_fragment_function(Some(&func));
     }
-}
-
-pub trait Function {
-    const FUNCTION_NAME: &'static str;
-    type Binds<'a>: FunctionBinds;
-    type Type: FunctionType;
 
     #[inline(always)]
-    fn get_function(&self, lib: &LibraryRef) -> metal::Function {
-        lib.get_function(Self::FUNCTION_NAME, self.get_function_constants())
-            .expect("Failed to get vertex function from library")
+    fn bytes<'a, 'b, T: Sized + Copy + Clone>(
+        encoder: &'a Self::CommandEncoder,
+        index: usize,
+        value: &'b [T],
+    ) {
+        encoder.set_fragment_bytes(
+            index as _,
+            std::mem::size_of_val(value) as _,
+            value.as_ptr() as *const _,
+        )
     }
-
     #[inline(always)]
-    fn get_function_constants(&self) -> Option<FunctionConstantValues> {
-        None
+    fn buffer_and_offset<'a, 'b, T: Sized + Copy + Clone>(
+        encoder: &'a Self::CommandEncoder,
+        index: usize,
+        (buffer, offset): (&'b TypedBuffer<T>, usize),
+    ) {
+        encoder.set_fragment_buffer(
+            index as _,
+            Some(&buffer.buffer),
+            (std::mem::size_of::<T>() * offset) as _,
+        );
+    }
+    #[inline(always)]
+    fn buffer_offset<'a, 'b, T: Sized + Copy + Clone>(
+        encoder: &'a Self::CommandEncoder,
+        index: usize,
+        offset: usize,
+    ) {
+        encoder.set_fragment_buffer_offset(index as _, (std::mem::size_of::<T>() * offset) as _);
+    }
+    #[inline(always)]
+    fn texture<'a, 'b>(encoder: &'a Self::CommandEncoder, index: usize, texture: &'b TextureRef) {
+        encoder.set_fragment_texture(index as _, Some(texture));
     }
 }
 
-pub struct NoFragmentShader;
-impl Function for NoFragmentShader {
-    type Binds<'a> = NoBinds;
+pub struct NoFragmentFunction;
+impl function::Function for NoFragmentFunction {
     const FUNCTION_NAME: &'static str = "<NoFragmentShader>";
-    type Type = FragmentFunctionType;
+}
+impl PipelineFunction<FragmentFunctionType> for NoFragmentFunction {
+    type Binder<'a> = ();
+}
+impl<'a> FunctionBinder<'a, FragmentFunctionType> for () {
+    fn new(_: &'a <FragmentFunctionType as PipelineFunctionType>::CommandEncoder) -> Self {}
 }
 
 pub trait HasMTLDataType {
@@ -428,24 +303,30 @@ into_mtl_data_type!(metal_types::short, MTLDataType::Short);
 // 1. Sketch out what this would look like
 // 2. Does it actually worth the code generation complexity?
 
+pub struct RenderPass<'a, VB: 'a, FB: 'a> {
+    pub encoder: &'a RenderCommandEncoderRef,
+    pub vertex_fn: VB,
+    pub fragment_fn: FB,
+}
+
 pub struct RenderPipeline<
     const NUM_COLOR_ATTACHMENTS: usize,
-    VS: Function<Type = VertexFunctionType>,
-    FS: Function<Type = FragmentFunctionType>,
+    VS: PipelineFunction<VertexFunctionType>,
+    FS: PipelineFunction<FragmentFunctionType>,
     D: DepthAttachmentKind,
     S: StencilAttachmentKind,
 > {
     pub pipeline: RenderPipelineState,
-    _vertex_fn: PhantomData<VS>,
-    _fragment_fn: PhantomData<FS>,
+    _vertex_function: PhantomData<VS>,
+    _fragment_function: PhantomData<FS>,
     _depth_kind: PhantomData<D>,
     _stencil_kind: PhantomData<S>,
 }
 
 impl<
         const NUM_COLOR_ATTACHMENTS: usize,
-        VS: Function<Type = VertexFunctionType>,
-        FS: Function<Type = FragmentFunctionType>,
+        VS: PipelineFunction<VertexFunctionType>,
+        FS: PipelineFunction<FragmentFunctionType>,
         D: DepthAttachmentKind,
         S: StencilAttachmentKind,
     > RenderPipeline<NUM_COLOR_ATTACHMENTS, VS, FS, D, S>
@@ -473,33 +354,29 @@ impl<
             }
             depth_kind.setup_pipeline_attachment(&pipeline_desc);
             stencil_kind.setup_pipeline_attachment(&pipeline_desc);
-
-            VS::Type::setup_render_pipeline(&vertex_function.get_function(library), &pipeline_desc);
-            FS::Type::setup_render_pipeline(
-                &fragment_function.get_function(library),
-                &pipeline_desc,
-            );
+            vertex_function.setup_pipeline(library, &pipeline_desc);
+            fragment_function.setup_pipeline(library, &pipeline_desc);
             let pipeline = device
                 .new_render_pipeline_state(&pipeline_desc)
                 .expect("Failed to create pipeline state");
             Self {
                 pipeline,
-                _vertex_fn: PhantomData,
-                _fragment_fn: PhantomData,
+                _vertex_function: PhantomData,
+                _fragment_function: PhantomData,
                 _depth_kind: PhantomData,
                 _stencil_kind: PhantomData,
             }
         })
     }
 
-    pub fn new_render_command_encoder<'a, 'b, 'c>(
+    pub fn new_pass<'a, 'b, 'c>(
         &self,
         label: &'static str,
         command_buffer: &'a CommandBufferRef,
         color_attachments: [ColorAttachementRenderPassDesc; NUM_COLOR_ATTACHMENTS],
         depth_attachment: D::RenderPassDesc<'b>,
         stencil_attachment: S::RenderPassDesc<'c>,
-    ) -> &'a RenderCommandEncoderRef {
+    ) -> RenderPass<'a, VS::Binder<'a>, FS::Binder<'a>> {
         let desc = RenderPassDescriptor::new();
         for i in 0..NUM_COLOR_ATTACHMENTS {
             let c = color_attachments[i];
@@ -515,44 +392,44 @@ impl<
         encoder.set_label(label);
         encoder.set_render_pipeline_state(&self.pipeline);
         // TODO: How to handle depth/stencil state?
-        encoder
-    }
-
-    pub fn bind<'a, 'b, 'c>(
-        &'a self,
-        encoder: &RenderCommandEncoderRef,
-        vertex_binds: VS::Binds<'b>,
-        fragment_binds: FS::Binds<'c>,
-    ) {
-        vertex_binds.encode_binds::<VertexBindEncoder>(encoder);
-        fragment_binds.encode_binds::<FragmentBindEncoder>(encoder);
+        RenderPass {
+            encoder,
+            vertex_fn: VS::Binder::new(encoder),
+            fragment_fn: FS::Binder::new(encoder),
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use metal::{Device, MTLResourceOptions, TextureDescriptor};
+    use crate::{
+        pipeline::{bind::*, compute_pipeline::ComputeFunctionType},
+        typed_buffer::TypedBuffer,
+    };
     use metal_types::float4;
     use std::simd::f32x4;
 
     // Assumed to be generated by metal-build (shader_function_parser/generate_shader_binds)
-    struct Vertex1Binds<'a> {
-        v_bind1: BindMany<'a, f32>,
+    struct Vertex1Binds<V: BindMany<f32>> {
+        v_bind1: V,
     }
-    impl FunctionBinds for Vertex1Binds<'_> {
-        fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {
-            E::encode(encoder, self.v_bind1, 0);
+    struct Vertex1Binder<'a>(&'a RenderCommandEncoderRef);
+    impl<'a> FunctionBinder<'a, VertexFunctionType> for Vertex1Binder<'a> {
+        fn new(e: &'a <VertexFunctionType as PipelineFunctionType>::CommandEncoder) -> Self {
+            Self(e)
+        }
+    }
+    impl Vertex1Binder<'_> {
+        fn bind<V: BindMany<f32>>(&self, binds: Vertex1Binds<V>) {
+            binds.v_bind1.bind::<VertexFunctionType>(self.0, 0);
         }
     }
     struct Vertex1 {
         function_constant_1: bool,
     }
-    impl Function for Vertex1 {
+    impl function::Function for Vertex1 {
         const FUNCTION_NAME: &'static str = "vertex1";
-        type Binds<'a> = Vertex1Binds<'a>;
-        type Type = VertexFunctionType;
-
         fn get_function_constants(&self) -> Option<FunctionConstantValues> {
             let fcv = FunctionConstantValues::new();
             fcv.set_constant_value_at_index(
@@ -563,26 +440,31 @@ mod test {
             Some(fcv)
         }
     }
+    impl PipelineFunction<VertexFunctionType> for Vertex1 {
+        type Binder<'a> = Vertex1Binder<'a>;
+    }
 
     // Assumed to be generated by metal-build (shader_function_parser/generate_shader_binds)
-    struct Frag1Binds<'a> {
-        f_bind1: BindOne<'a, float4>,
+    struct Frag1Binds<'a, F1: BindOne<float4>> {
+        f_bind1: F1,
         f_tex2: BindTexture<'a>,
     }
-    impl FunctionBinds for Frag1Binds<'_> {
-        fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {
-            E::encode_one(encoder, self.f_bind1, 0);
-            E::encode_texture(encoder, self.f_tex2, 1);
+    struct Fragment1Binder<'a, F: PipelineFunctionType>(&'a F::CommandEncoder);
+    impl<'a, F: PipelineFunctionType> FunctionBinder<'a, F> for Fragment1Binder<'a, F> {
+        fn new(e: &'a F::CommandEncoder) -> Self {
+            Self(e)
+        }
+    }
+    impl<F: PipelineFunctionType> Fragment1Binder<'_, F> {
+        fn bind<F1: BindOne<float4>>(&self, binds: Frag1Binds<F1>) {
+            binds.f_bind1.bind::<F>(self.0, 0);
         }
     }
     struct Fragment1 {
         function_constant_2: bool,
     }
-    impl Function for Fragment1 {
+    impl function::Function for Fragment1 {
         const FUNCTION_NAME: &'static str = "fragment1";
-        type Binds<'a> = Frag1Binds<'a>;
-        type Type = FragmentFunctionType;
-
         fn get_function_constants(&self) -> Option<FunctionConstantValues> {
             let fcv = FunctionConstantValues::new();
             fcv.set_constant_value_at_index(
@@ -593,12 +475,24 @@ mod test {
             Some(fcv)
         }
     }
+    impl PipelineFunction<FragmentFunctionType> for Fragment1 {
+        type Binder<'a> = Fragment1Binder<'a, FragmentFunctionType>;
+    }
+    // TODO: Just an example of function being able to be used as 2 types.
+    // For example, tile render pipeline function vs compute function. Both are `[[kernel]]` in
+    // Metal but can be applied to 2 different types of pipelines/command encoders. We won't know
+    // which way is applicable, so we need to allow function/binds to be used in either way.
+    impl PipelineFunction<ComputeFunctionType> for Fragment1 {
+        type Binder<'a> = Fragment1Binder<'a, ComputeFunctionType>;
+    }
 
+    // Assumed to be generated by metal-build (shader_function_parser/generate_shader_binds)
     struct Vertex2NoFunctionConstants;
-    impl Function for Vertex2NoFunctionConstants {
+    impl function::Function for Vertex2NoFunctionConstants {
         const FUNCTION_NAME: &'static str = "vertex1";
-        type Binds<'a> = Vertex1Binds<'a>;
-        type Type = VertexFunctionType;
+    }
+    impl PipelineFunction<VertexFunctionType> for Vertex2NoFunctionConstants {
+        type Binder<'a> = Vertex1Binder<'a>;
     }
 
     // TODO: START HERE 3
@@ -655,7 +549,7 @@ mod test {
                 NoDepth,
                 NoStencil,
             );
-            let encoder = p.new_render_command_encoder(
+            let pass = p.new_pass(
                 "test label",
                 command_buffer,
                 [(
@@ -667,27 +561,20 @@ mod test {
                 NoDepth,
                 NoStencil,
             );
-            p.bind(
-                encoder,
-                Vertex1Binds {
-                    v_bind1: BindMany::Bytes(&[0.]),
-                },
-                Frag1Binds {
-                    f_bind1: BindOne::Bytes(&f32x4::splat(1.).into()),
-                    f_tex2: BindTexture(&texture),
-                },
-            );
-
-            p.bind(
-                encoder,
-                Vertex1Binds {
-                    v_bind1: BindMany::BufferAndOffset(&f32_buffer, 0),
-                },
-                Frag1Binds {
-                    f_bind1: BindOne::BufferAndOffset(&float4_buffer, 0),
-                    f_tex2: BindTexture(&texture),
-                },
-            );
+            pass.vertex_fn.bind(Vertex1Binds {
+                v_bind1: BindBytesMany(&[0_f32]),
+            });
+            pass.fragment_fn.bind(Frag1Binds {
+                f_bind1: BindBytes(&f32x4::splat(0.).into()),
+                f_tex2: BindTexture(&texture),
+            });
+            pass.vertex_fn.bind(Vertex1Binds {
+                v_bind1: BindBufferAndOffset(&f32_buffer, 0),
+            });
+            pass.fragment_fn.bind(Frag1Binds {
+                f_bind1: BindBufferAndOffset(&float4_buffer, 0),
+                f_tex2: BindTexture(&texture),
+            });
         }
         {
             let p: RenderPipeline<2, Vertex1, Fragment1, NoDepth, NoStencil> = RenderPipeline::new(
@@ -707,7 +594,7 @@ mod test {
                 NoDepth,
                 NoStencil,
             );
-            let encoder = p.new_render_command_encoder(
+            let pass = p.new_pass(
                 "test label",
                 command_buffer,
                 [
@@ -727,22 +614,19 @@ mod test {
                 NoDepth,
                 NoStencil,
             );
-            p.bind(
-                encoder,
-                Vertex1Binds {
-                    v_bind1: BindMany::Bytes(&[0.]),
-                },
-                Frag1Binds {
-                    f_bind1: BindOne::Bytes(&f32x4::splat(1.).into()),
-                    f_tex2: BindTexture(&texture),
-                },
-            );
+            pass.vertex_fn.bind(Vertex1Binds {
+                v_bind1: BindBytesMany(&[0.]),
+            });
+            pass.fragment_fn.bind(Frag1Binds {
+                f_bind1: BindBytes(&f32x4::splat(1.).into()),
+                f_tex2: BindTexture(&texture),
+            });
         }
         {
             let p: RenderPipeline<
                 1,
                 Vertex2NoFunctionConstants,
-                NoFragmentShader,
+                NoFragmentFunction,
                 HasDepth,
                 HasStencil,
             > = RenderPipeline::new(
@@ -751,11 +635,11 @@ mod test {
                 &lib,
                 [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
                 Vertex2NoFunctionConstants,
-                NoFragmentShader,
+                NoFragmentFunction,
                 HasDepth(MTLPixelFormat::Depth16Unorm),
                 HasStencil(MTLPixelFormat::Stencil8),
             );
-            let encoder = p.new_render_command_encoder(
+            let pass = p.new_pass(
                 "test label",
                 command_buffer,
                 [(
@@ -767,13 +651,9 @@ mod test {
                 (depth, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
                 (stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
             );
-            p.bind(
-                encoder,
-                Vertex1Binds {
-                    v_bind1: BindMany::Bytes(&[0.]),
-                },
-                NoBinds,
-            );
+            pass.vertex_fn.bind(Vertex1Binds {
+                v_bind1: BindBytesMany(&[0.]),
+            });
         }
     }
 }

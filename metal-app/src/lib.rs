@@ -17,7 +17,7 @@ pub mod math_helpers;
 mod metal_helpers;
 mod model;
 mod objc_helpers;
-pub mod render_pipeline;
+pub mod pipeline;
 mod renderer;
 mod time;
 pub mod typed_buffer;
