@@ -221,11 +221,6 @@ vec![
 pub fn parse_shader_functions_from_reader<R: Read>(
     shader_file_reader: R,
 ) -> (Vec<FunctionConstant>, Vec<Function>) {
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // Parse Function Constants!
-
     // FUNCTION REGULAR EXPRESSIONS
     // ----------------------------
 

@@ -167,9 +167,9 @@ impl<G: Sized + Copy + Clone, MK: MaterialKind> Model<G, MK> {
         encode_geometry_arg: EG,
         material_kind: MK,
     ) -> Self {
-        let obj_file_ref = obj_file.as_ref();
-        let (models, materials) = debug_time("Model - Load OBJ", || {
-            tobj::load_obj(
+        debug_time("Model::from_file", || {
+            let obj_file_ref = obj_file.as_ref();
+            let (models, materials) = tobj::load_obj(
                 obj_file_ref,
                 &LoadOptions {
                     single_index: true,
@@ -178,47 +178,40 @@ impl<G: Sized + Copy + Clone, MK: MaterialKind> Model<G, MK> {
                     ignore_lines: true,
                 },
             )
-            .expect("Failed to load OBJ file")
-        });
+            .expect("Failed to load OBJ file");
 
-        let materials = materials.expect("Failed to load materials data");
-        let material_file_dir = PathBuf::from(
-            obj_file_ref
-                .parent()
-                .expect("Failed to get obj file's parent directory"),
-        );
-        // Size Heap for Geometry and Materials
-        let (heap_size, sized_materials) = debug_time("Model - Size Material", || {
-            material_kind.size(device, material_file_dir, &materials)
-        });
-        let mut geometry = debug_time("Model - Size Geometry", || {
-            Geometry::new(&models, device, MK::new_draw)
-        });
+            let materials = materials.expect("Failed to load materials data");
+            let material_file_dir = PathBuf::from(
+                obj_file_ref
+                    .parent()
+                    .expect("Failed to get obj file's parent directory"),
+            );
+            // Size Heap for Geometry and Materials
+            let (heap_size, sized_materials) =
+                material_kind.size(device, material_file_dir, &materials);
+            let mut geometry = Geometry::new(&models, device, MK::new_draw);
 
-        // Allocate Heap for Geometry and Materials
-        let desc = HeapDescriptor::new();
-        desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
-        desc.set_storage_mode(MTLStorageMode::Shared);
-        desc.set_size((heap_size + geometry.heap_size()) as _);
-        let heap = debug_time("Model - Allocate Model Heap", || device.new_heap(&desc));
-        heap.set_label("Model Heap");
+            // Allocate Heap for Geometry and Materials
+            let desc = HeapDescriptor::new();
+            desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
+            desc.set_storage_mode(MTLStorageMode::Shared);
+            desc.set_size((heap_size + geometry.heap_size()) as _);
+            let heap = device.new_heap(&desc);
+            heap.set_label("Model Heap");
 
-        // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
-        // (specifically alignment padding) assume this.
-        let materials = debug_time("Model - Load Material textures", || {
-            material_kind.allocate(&heap, sized_materials)
-        });
-        let geometry_buffers = debug_time("Model - Load Geometry", || {
-            geometry.allocate_and_encode(&heap, encode_geometry_arg)
-        });
+            // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
+            // (specifically alignment padding) assume this.
+            let materials = material_kind.allocate(&heap, sized_materials);
+            let geometry_buffers = geometry.allocate_and_encode(&heap, encode_geometry_arg);
 
-        Self {
-            heap,
-            draws: geometry.draws,
-            geometry_buffers,
-            geometry_max_bounds: geometry.max_bounds,
-            materials,
-        }
+            Self {
+                heap,
+                draws: geometry.draws,
+                geometry_buffers,
+                geometry_max_bounds: geometry.max_bounds,
+                materials,
+            }
+        })
     }
 
     #[inline]

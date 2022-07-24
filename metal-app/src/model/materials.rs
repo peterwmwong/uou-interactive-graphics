@@ -5,10 +5,6 @@ use crate::{
     typed_buffer::{TypedBuffer, TypedBufferSizer},
     MetalGPUAddress, DEFAULT_RESOURCE_OPTIONS,
 };
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Compare asm with BTreeMap
 use std::{collections::HashMap, ops::Deref, path::Path};
 
 type RGB32 = [f32; 3];

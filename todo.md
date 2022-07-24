@@ -23,7 +23,10 @@
     - Instead...
         1. Project uses `get_metal_library() -> metal::Library` from shader_bindings.
         2. Project passes the library to RenderPipeline
-    - We could also rememove release build checks `library.get_function()` result.
+    - Unlocks...
+        - Remove release build checks `library.get_function()` result
+        - If we wrap `metal::Library` with our own type, we could prevent shader functions from
+          other libraries being mixed up.
 - Encapsulate Render Pipeline
     - PSO's split setup and encoding... but they have to line-up exactly...
         - Attachments: Color Pixel Format, Depth Pixel Format

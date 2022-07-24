@@ -1,4 +1,4 @@
-use crate::typed_buffer::TypedBuffer;
+use crate::{debug_time, typed_buffer::TypedBuffer};
 use metal::{
     BufferRef, CommandBufferRef, DeviceRef, FunctionConstantValues, FunctionRef, LibraryRef,
     MTLClearColor, MTLDataType, MTLLoadAction, MTLPixelFormat, MTLStoreAction, NSUInteger,
@@ -8,8 +8,18 @@ use metal::{
 };
 use std::marker::PhantomData;
 
-// TODO: Consider a TypedTexture, to enforce the pipeline and the render pass have the same pixel
-// format.
+// TODO: START HERE 2
+// TODO: START HERE 2
+// TODO: START HERE 2
+// Create a TypedTexture, to enforce the pipeline and the render pass have the same pixel format.
+
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// RenderPipeline::binds() generates terrible code
+// - Looking at the asm, every `match` on a Bind* enum... generates branches.
+// - It was assumed some inlining and constant propagation would be sufficent...
+// - Consider switching from an enum to a type for each variant (bytes, buffer/offset, buffer offset, skip)
 
 #[derive(Copy, Clone)]
 pub enum BindMany<'a, T: Sized + Copy + Clone> {
@@ -450,37 +460,36 @@ impl<
         depth_kind: D,
         stencil_kind: S,
     ) -> Self {
-        let pipeline_desc = RenderPipelineDescriptor::new();
-        pipeline_desc.set_label(label);
+        debug_time("RenderPipeline", || {
+            let pipeline_desc = RenderPipelineDescriptor::new();
+            pipeline_desc.set_label(label);
 
-        for i in 0..NUM_COLOR_ATTACHMENTS {
-            let desc = pipeline_desc
-                .color_attachments()
-                .object_at(i as u64)
-                .expect("Failed to access color attachment on pipeline descriptor");
-            ColorAttachement::setup_pipeline_attachment(colors[i], &desc);
-        }
-        depth_kind.setup_pipeline_attachment(&pipeline_desc);
-        stencil_kind.setup_pipeline_attachment(&pipeline_desc);
+            for i in 0..NUM_COLOR_ATTACHMENTS {
+                let desc = pipeline_desc
+                    .color_attachments()
+                    .object_at(i as u64)
+                    .expect("Failed to access color attachment on pipeline descriptor");
+                ColorAttachement::setup_pipeline_attachment(colors[i], &desc);
+            }
+            depth_kind.setup_pipeline_attachment(&pipeline_desc);
+            stencil_kind.setup_pipeline_attachment(&pipeline_desc);
 
-        VS::Type::setup_render_pipeline(&vertex_function.get_function(library), &pipeline_desc);
-        FS::Type::setup_render_pipeline(&fragment_function.get_function(library), &pipeline_desc);
-
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // TODO: START HERE 2
-        // Add back non-release profile bind checking
-
-        let pipeline = device
-            .new_render_pipeline_state(&pipeline_desc)
-            .expect("Failed to create pipeline state");
-        Self {
-            pipeline,
-            _vertex_fn: PhantomData,
-            _fragment_fn: PhantomData,
-            _depth_kind: PhantomData,
-            _stencil_kind: PhantomData,
-        }
+            VS::Type::setup_render_pipeline(&vertex_function.get_function(library), &pipeline_desc);
+            FS::Type::setup_render_pipeline(
+                &fragment_function.get_function(library),
+                &pipeline_desc,
+            );
+            let pipeline = device
+                .new_render_pipeline_state(&pipeline_desc)
+                .expect("Failed to create pipeline state");
+            Self {
+                pipeline,
+                _vertex_fn: PhantomData,
+                _fragment_fn: PhantomData,
+                _depth_kind: PhantomData,
+                _stencil_kind: PhantomData,
+            }
+        })
     }
 
     pub fn new_render_command_encoder<'a, 'b, 'c>(

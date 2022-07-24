@@ -1,5 +1,9 @@
 use std::time::Instant;
 
+// TODO: Consider using a macro to limit the performance impact.
+// - Even with inlining, can cause wildly different/bad code generation.
+// - Reducing the number of debug_time's in Model, yielded a dramatic code reduction.
+#[inline]
 pub fn debug_time<T>(label: &'static str, f: impl FnOnce() -> T) -> T {
     #[cfg(debug_assertions)]
     {

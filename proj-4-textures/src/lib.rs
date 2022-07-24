@@ -50,7 +50,7 @@ fn create_model_pipeline(
     mode: ShadingModeSelector,
 ) -> RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil> {
     RenderPipeline::new(
-        "Plane",
+        "Model",
         &device,
         &library,
         [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
