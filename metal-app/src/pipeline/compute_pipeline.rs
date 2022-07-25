@@ -9,7 +9,7 @@ impl PipelineFunctionType for ComputeFunctionType {
 
     #[inline(always)]
     fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
-        pipeline_desc.set_compute_function(Some(&func));
+        pipeline_desc.set_compute_function(Some(func));
     }
 
     #[inline(always)]

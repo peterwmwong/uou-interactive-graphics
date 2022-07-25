@@ -8,23 +8,6 @@ use std::marker::PhantomData;
 // TODO: START HERE 2
 // Create a TypedTexture, to enforce the pipeline and the render pass have the same pixel format.
 
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// RenderPipeline::binds() generates terrible code
-// - Looking at the asm, every `match` on a Bind* enum... generates branches.
-// - It was assumed some inlining and constant propagation would be sufficent...
-// - Consider switching from an enum to a type for each variant (bytes, buffer/offset, buffer offset, skip)
-// 0. Stash changes
-// 1. Take a test example (ex. Vertex1/Fragment1) and create metal-app main()
-// 2. Commit
-// 3. Generate asm before
-// 4. Reapply stashed changes
-// 5. Adapt test example
-// 6. Generate asm after
-// 7. asm diff and assess code generated is much better
-// 8. Update generate_rust_bindings
-
 #[derive(Copy, Clone)]
 pub enum BlendMode {
     NoBlend,
@@ -163,7 +146,7 @@ impl PipelineFunctionType for VertexFunctionType {
 
     #[inline(always)]
     fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
-        pipeline_desc.set_vertex_function(Some(&func));
+        pipeline_desc.set_vertex_function(Some(func));
     }
 
     #[inline(always)]
@@ -215,7 +198,7 @@ impl PipelineFunctionType for FragmentFunctionType {
 
     #[inline(always)]
     fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
-        pipeline_desc.set_fragment_function(Some(&func));
+        pipeline_desc.set_fragment_function(Some(func));
     }
 
     #[inline(always)]
@@ -408,6 +391,7 @@ impl<
     // 1. vertex/fragment binds
     // 2. #[inline(always)] to make sure binds have perfect/near-perfect codegen
     // 3. A slice/array of Resource's (new trait) to power use_resource/use_heap_at/etc.
+    #[inline(always)]
     pub fn new_pass<'a, 'b, 'c>(
         &self,
         label: &'static str,
@@ -438,6 +422,7 @@ impl<
             _stencil: PhantomData,
         }
     }
+    #[inline(always)]
     pub fn new_subpass<
         'a,
         VPrev: PipelineFunction<VertexFunctionType>,
