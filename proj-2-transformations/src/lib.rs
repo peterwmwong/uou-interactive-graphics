@@ -1,7 +1,12 @@
 #![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
-use metal_app::{components::Camera, metal::*, render_pipeline::*, *};
+use metal_app::{
+    components::Camera,
+    metal::*,
+    pipeline::{bind::*, render_pipeline::*},
+    *,
+};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
@@ -84,7 +89,7 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = self.render_pipeline.new_pass(
+        let pass = self.render_pipeline.new_pass(
             "Render Teapot",
             command_buffer,
             [(
@@ -96,11 +101,11 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
         );
-        self.render_pipeline.bind(
-            encoder,
+        let encoder = pass.encoder;
+        pass.bind(
             main_vertex_binds {
-                r#in: BindOne::Bytes(&self.vertex_input),
-                geometry: BindOne::Skip,
+                r#in: Bind::Value(&self.vertex_input),
+                geometry: Bind::Skip,
             },
             NoBinds,
         );
@@ -110,11 +115,10 @@ impl RendererDelgate for Delegate {
             ..
         } in self.model.draws()
         {
-            self.render_pipeline.bind(
-                encoder,
+            pass.bind(
                 main_vertex_binds {
-                    r#in: BindOne::Skip,
-                    geometry: BindOne::buffer_with_rolling_offset(geometry),
+                    r#in: Bind::Skip,
+                    geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(geometry)),
                 },
                 NoBinds,
             );

@@ -312,53 +312,64 @@ into_mtl_data_type!(metal_types::short, MTLDataType::Short);
 
 pub struct RenderPass<
     'a,
-    VF: PipelineFunction<VertexFunctionType>,
-    FF: PipelineFunction<FragmentFunctionType>,
+    const NUM_COLOR_ATTACHMENTS: usize,
+    V: PipelineFunction<VertexFunctionType>,
+    F: PipelineFunction<FragmentFunctionType>,
+    D: DepthAttachmentKind,
+    S: StencilAttachmentKind,
 > {
     pub encoder: &'a RenderCommandEncoderRef,
-    pub _vertex: PhantomData<VF>,
-    pub _fragment: PhantomData<FF>,
+    _vertex: PhantomData<V>,
+    _fragment: PhantomData<F>,
+    _depth: PhantomData<D>,
+    _stencil: PhantomData<S>,
 }
 
-impl<'a, VF: PipelineFunction<VertexFunctionType>, FF: PipelineFunction<FragmentFunctionType>>
-    RenderPass<'a, VF, FF>
+impl<
+        'a,
+        const NUM_COLOR_ATTACHMENTS: usize,
+        V: PipelineFunction<VertexFunctionType>,
+        F: PipelineFunction<FragmentFunctionType>,
+        D: DepthAttachmentKind,
+        S: StencilAttachmentKind,
+    > RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, D, S>
 {
     #[inline(always)]
-    pub fn bind<'b>(&'a self, vertex_binds: VF::Binds<'b>, fragment_binds: FF::Binds<'b>) {
-        VF::bind(self.encoder, vertex_binds);
-        FF::bind(self.encoder, fragment_binds);
+    pub fn bind<'b>(&'a self, vertex_binds: V::Binds<'b>, fragment_binds: F::Binds<'b>) {
+        V::bind(self.encoder, vertex_binds);
+        F::bind(self.encoder, fragment_binds);
     }
 }
 
 pub struct RenderPipeline<
     const NUM_COLOR_ATTACHMENTS: usize,
-    VS: PipelineFunction<VertexFunctionType>,
-    FS: PipelineFunction<FragmentFunctionType>,
+    V: PipelineFunction<VertexFunctionType>,
+    F: PipelineFunction<FragmentFunctionType>,
     D: DepthAttachmentKind,
     S: StencilAttachmentKind,
 > {
     pub pipeline: RenderPipelineState,
-    _vertex_function: PhantomData<VS>,
-    _fragment_function: PhantomData<FS>,
+    _vertex_function: PhantomData<V>,
+    _fragment_function: PhantomData<F>,
     _depth_kind: PhantomData<D>,
     _stencil_kind: PhantomData<S>,
 }
 
 impl<
         const NUM_COLOR_ATTACHMENTS: usize,
-        VS: PipelineFunction<VertexFunctionType>,
-        FS: PipelineFunction<FragmentFunctionType>,
+        V: PipelineFunction<VertexFunctionType>,
+        F: PipelineFunction<FragmentFunctionType>,
         D: DepthAttachmentKind,
         S: StencilAttachmentKind,
-    > RenderPipeline<NUM_COLOR_ATTACHMENTS, VS, FS, D, S>
+    > RenderPipeline<NUM_COLOR_ATTACHMENTS, V, F, D, S>
 {
     pub fn new(
         label: &str,
         device: &DeviceRef,
         library: &LibraryRef,
         colors: [ColorAttachementPipelineDesc; NUM_COLOR_ATTACHMENTS],
-        vertex_function: VS,
-        fragment_function: FS,
+        vertex_function: V,
+        fragment_function: F,
         depth_kind: D,
         stencil_kind: S,
     ) -> Self {
@@ -404,7 +415,7 @@ impl<
         color_attachments: [ColorAttachementRenderPassDesc; NUM_COLOR_ATTACHMENTS],
         depth_attachment: D::RenderPassDesc<'b>,
         stencil_attachment: S::RenderPassDesc<'c>,
-    ) -> RenderPass<'a, VS, FS> {
+    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, D, S> {
         let desc = RenderPassDescriptor::new();
         for i in 0..NUM_COLOR_ATTACHMENTS {
             let c = color_attachments[i];
@@ -423,6 +434,26 @@ impl<
             encoder,
             _vertex: PhantomData,
             _fragment: PhantomData,
+            _depth: PhantomData,
+            _stencil: PhantomData,
+        }
+    }
+    pub fn new_subpass<
+        'a,
+        VPrev: PipelineFunction<VertexFunctionType>,
+        FPrev: PipelineFunction<FragmentFunctionType>,
+    >(
+        &'a self,
+        prev: RenderPass<'a, NUM_COLOR_ATTACHMENTS, VPrev, FPrev, D, S>,
+    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, D, S> {
+        let encoder = prev.encoder;
+        encoder.set_render_pipeline_state(&self.pipeline);
+        RenderPass {
+            encoder,
+            _vertex: PhantomData,
+            _fragment: PhantomData,
+            _depth: PhantomData,
+            _stencil: PhantomData,
         }
     }
 }

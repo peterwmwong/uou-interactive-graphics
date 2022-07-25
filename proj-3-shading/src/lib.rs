@@ -3,11 +3,12 @@
 mod shader_bindings;
 
 use metal_app::components::{Camera, DepthTexture, ShadingModeSelector};
-use metal_app::render_pipeline::{
-    BindOne, BlendMode, HasDepth, NoBinds, NoStencil, RenderPipeline,
+use metal_app::{
+    metal::*,
+    metal_types::*,
+    pipeline::{bind::*, render_pipeline::*},
+    *,
 };
-use metal_app::*;
-use metal_app::{metal::*, metal_types::*};
 use shader_bindings::*;
 use std::ops::Neg;
 use std::{
@@ -164,7 +165,7 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = self.model_pipeline.new_pass(
+        let pass = self.model_pipeline.new_pass(
             "Model and Light",
             command_buffer,
             [(
@@ -181,21 +182,21 @@ impl RendererDelgate for Delegate {
             ),
             NoStencil,
         );
+        let encoder = pass.encoder;
         self.model.encode_use_resources(encoder);
         encoder.set_depth_stencil_state(&self.depth_state);
 
         // Render Teapot
         {
             encoder.push_debug_group("Model");
-            self.model_pipeline.bind(
-                encoder,
+            pass.bind(
                 main_vertex_binds {
-                    geometry: BindOne::Skip,
-                    model: BindOne::Bytes(&self.model_space),
+                    geometry: Bind::Skip,
+                    model: Bind::Value(&self.model_space),
                 },
                 main_fragment_binds {
-                    camera: BindOne::Bytes(&self.camera_space),
-                    light_pos: BindOne::Bytes(&self.light_world_position),
+                    camera: Bind::Value(&self.camera_space),
+                    light_pos: Bind::Value(&self.light_world_position),
                 },
             );
             for DrawItemNoMaterial {
@@ -204,15 +205,14 @@ impl RendererDelgate for Delegate {
                 ..
             } in self.model.draws()
             {
-                self.model_pipeline.bind(
-                    encoder,
+                pass.bind(
                     main_vertex_binds {
-                        geometry: BindOne::buffer_with_rolling_offset(geometry),
-                        model: BindOne::Skip,
+                        geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(geometry)),
+                        model: Bind::Skip,
                     },
                     main_fragment_binds {
-                        camera: BindOne::Skip,
-                        light_pos: BindOne::Skip,
+                        camera: Bind::Skip,
+                        light_pos: Bind::Skip,
                     },
                 );
                 encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, vertex_count as _);
@@ -220,14 +220,13 @@ impl RendererDelgate for Delegate {
             encoder.pop_debug_group();
         }
         // Render Light
+        let pass = self.light_pipeline.new_subpass(pass);
         {
             encoder.push_debug_group("Light");
-            encoder.set_render_pipeline_state(&self.light_pipeline.pipeline);
-            self.light_pipeline.bind(
-                encoder,
+            pass.bind(
                 light_vertex_binds {
-                    camera: BindOne::Bytes(&self.camera_space),
-                    light_pos: BindOne::Bytes(&self.light_world_position),
+                    camera: Bind::Value(&self.camera_space),
+                    light_pos: Bind::Value(&self.light_world_position),
                 },
                 NoBinds,
             );
