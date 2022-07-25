@@ -1,81 +1,90 @@
 use super::pipeline_function::PipelineFunctionType;
 use crate::typed_buffer::TypedBuffer;
 use metal::TextureRef;
-use std::marker::PhantomData;
 
-pub struct BindTexture<'a>(pub &'a TextureRef);
-impl<'a> BindTexture<'a> {
-    pub fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
-        F::texture(encoder, index, self.0);
-    }
+pub trait Binds {
+    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder);
 }
 
 pub trait AnyBind<T: Sized + Copy + Clone> {
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize);
 }
 
-// Marker trait identifying Bind implementations that applicable for singular (by reference) Metal
-// function binds. For example, a Metal function binding considered singular and be marked with
-// BindOne...
-//
-//      [[vertex]]
-//      float4 main(
-//          constant float4 & a_float4 [[buffer(0)]]
-//                       // ^--- by reference / singular
-//      ) { ... }
-//
-pub trait Bind<T: Sized + Copy + Clone>: AnyBind<T> {}
-
-// Marker trait identifying Bind implementations that applicable for multiple (by pointer) Metal
-// function binds. For example, a Metal function binding considered multiple and be marked with
-// BindMany...
-//
-//      [[vertex]]
-//      float4 main(
-//          constant float4 * many_float4s [[buffer(0)]]
-//                       // ^--- by pointer / multiple
-//      ) { ... }
-//
-pub trait BindMany<T: Sized + Copy + Clone>: AnyBind<T> {}
-
-pub struct BindBytes<'a, T: Sized + Copy + Clone>(pub &'a T);
-impl<T: Sized + Copy + Clone> AnyBind<T> for BindBytes<'_, T> {
+pub enum BindBuffer<'a, T: Sized + Copy + Clone> {
+    WithOffset(&'a TypedBuffer<T>, usize),
+    Offset(usize),
+}
+impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindBuffer<'a, T> {
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
-        F::bytes(encoder, index, &[*self.0])
+        match self {
+            BindBuffer::WithOffset(buf, offset) => {
+                F::buffer_and_offset(encoder, index, (buf, offset))
+            }
+            BindBuffer::Offset(offset) => F::buffer_offset::<T>(encoder, index, offset),
+        }
     }
 }
-impl<T: Sized + Copy + Clone> Bind<T> for BindBytes<'_, T> {}
+impl<'a, T: Sized + Copy + Clone> BindBuffer<'a, T> {
+    #[inline(always)]
+    pub fn buffer_with_rolling_offset(
+        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+    ) -> Self {
+        if element_offset == 0 {
+            Self::WithOffset(buffer, 0)
+        } else {
+            Self::Offset(element_offset)
+        }
+    }
 
-pub struct BindBytesMany<'a, T: Sized + Copy + Clone>(pub &'a [T]);
-impl<T: Sized + Copy + Clone> AnyBind<T> for BindBytesMany<'_, T> {
+    #[inline(always)]
+    pub fn iterating_buffer_offset(
+        iteration: usize,
+        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+    ) -> Self {
+        if iteration == 0 {
+            Self::WithOffset(buffer, element_offset)
+        } else {
+            Self::Offset(element_offset)
+        }
+    }
+}
+
+pub enum Bind<'a, T: Sized + Copy + Clone> {
+    Value(&'a T),
+    Buffer(BindBuffer<'a, T>),
+    Skip,
+}
+impl<'a, T: Sized + Copy + Clone> AnyBind<T> for Bind<'a, T> {
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
-        F::bytes(encoder, index, self.0)
+        match self {
+            Bind::Value(&v) => F::bytes(encoder, index, &[v]),
+            Bind::Buffer(bind_buf) => bind_buf.bind::<F>(encoder, index),
+            _ => {}
+        }
     }
 }
-impl<T: Sized + Copy + Clone> BindMany<T> for BindBytesMany<'_, T> {}
-
-pub struct BindBufferAndOffset<'a, T: Sized + Copy + Clone>(pub &'a TypedBuffer<T>, pub usize);
-impl<T: Sized + Copy + Clone> AnyBind<T> for BindBufferAndOffset<'_, T> {
+pub enum BindMany<'a, T: Sized + Copy + Clone> {
+    Values(&'a [T]),
+    Buffer(BindBuffer<'a, T>),
+    Skip,
+}
+impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindMany<'a, T> {
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
-        F::buffer_and_offset(encoder, index, (self.0, self.1 as _))
+        match self {
+            BindMany::Values(v) => F::bytes(encoder, index, v),
+            BindMany::Buffer(bind_buf) => bind_buf.bind::<F>(encoder, index),
+            _ => {}
+        }
     }
 }
-impl<'a, T: Sized + Copy + Clone> BindMany<T> for BindBufferAndOffset<'a, T> {}
-impl<'a, T: Sized + Copy + Clone> Bind<T> for BindBufferAndOffset<'a, T> {}
 
-pub struct BindBufferOffsetType<T: Sized + Copy + Clone>(usize, PhantomData<T>);
-impl<T: Sized + Copy + Clone> AnyBind<T> for BindBufferOffsetType<T> {
+pub struct BindTexture<'a>(pub &'a TextureRef);
+impl<'a> BindTexture<'a> {
     #[inline(always)]
-    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
-        F::buffer_offset::<T>(encoder, index, self.0)
+    pub fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
+        F::texture(encoder, index, self.0);
     }
-}
-impl<T: Sized + Copy + Clone> BindMany<T> for BindBufferOffsetType<T> {}
-impl<T: Sized + Copy + Clone> Bind<T> for BindBufferOffsetType<T> {}
-#[allow(non_snake_case)]
-pub fn BindBufferOffset<T: Sized + Copy + Clone>(offset: usize) -> BindBufferOffsetType<T> {
-    BindBufferOffsetType(offset, PhantomData)
 }

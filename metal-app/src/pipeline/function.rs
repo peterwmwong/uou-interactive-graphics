@@ -1,7 +1,9 @@
+use super::bind::Binds;
 use metal::{FunctionConstantValues, LibraryRef};
 
 pub trait Function {
     const FUNCTION_NAME: &'static str;
+    type Binds<'a>: Binds;
 
     #[inline(always)]
     fn get_function(&self, lib: &LibraryRef) -> metal::Function {

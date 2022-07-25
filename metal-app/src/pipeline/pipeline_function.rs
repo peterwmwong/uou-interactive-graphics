@@ -1,4 +1,4 @@
-use super::function::Function;
+use super::{bind::Binds, function::Function};
 use crate::typed_buffer::TypedBuffer;
 use metal::{FunctionRef, LibraryRef, TextureRef};
 
@@ -26,13 +26,14 @@ pub trait PipelineFunctionType {
     fn texture<'a, 'b>(encoder: &'a Self::CommandEncoder, index: usize, texture: &'b TextureRef);
 }
 
-pub trait FunctionBinder<'a, T: PipelineFunctionType> {
-    fn new(encoder: &'a T::CommandEncoder) -> Self;
-}
-
 pub trait PipelineFunction<F: PipelineFunctionType>: Function {
-    type Binder<'a>: FunctionBinder<'a, F>;
+    #[inline(always)]
     fn setup_pipeline(&self, library: &LibraryRef, pipeline_desc: &F::Descriptor) {
         F::setup_pipeline(&self.get_function(library), pipeline_desc);
+    }
+
+    #[inline(always)]
+    fn bind<'a, 'b>(encoder: &'a F::CommandEncoder, binds: Self::Binds<'b>) {
+        binds.bind::<F>(encoder);
     }
 }

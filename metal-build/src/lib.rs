@@ -81,7 +81,7 @@ fn generate_rust_shader_bindings<P: AsRef<Path>>(metal_shaders_file: P) {
  Structs and Enums are generated based on `shader_src/shader_bindings.h`.
 ***************************************************************************************************/
 #[allow(unused_imports)]
-use metal_app::{metal::*, metal_types::*, render_pipeline::*};
+use metal_app::{metal::*, metal_types::*, pipeline::{bind::*, pipeline_function::*, render_pipeline::*}};
 "#
                     .as_bytes(),
                 )

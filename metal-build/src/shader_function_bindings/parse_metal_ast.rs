@@ -18,8 +18,8 @@ impl Display for BindType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(
             match self {
-                BindType::One => "One",
-                BindType::Many => "Many",
+                BindType::One => "Bind",
+                BindType::Many => "BindMany",
             },
             f,
         )
