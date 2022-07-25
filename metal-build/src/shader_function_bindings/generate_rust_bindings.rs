@@ -147,7 +147,7 @@ pub struct {rust_shader_name}"#
 
         w(&format!(
             r#"
-impl metal_app::render_pipeline::Function for {rust_shader_name} {{
+impl metal_app::pipeline::function::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {rust_function_binds_name};
     type Type = {shader_type_titlecase}FunctionType;"#
@@ -195,25 +195,56 @@ mod test {
 *****************/
 
 #[allow(non_camel_case_types)]
-pub struct test_vertex_binds<'c> {{
-    pub buf0: BindMany<'c, float>,
-    pub buf1: BindOne<'c, float2>,
-    pub buf2: BindMany<'c, float3>,
-    pub buf3: BindOne<'c, float3>,
-    pub tex1: BindTexture<'c>,
-    pub buf5: BindOne<'c, TestStruct>,
-    pub buf4: BindMany<'c, TestStruct>,
+pub struct test_vertex_binds<
+    'a,
+    Buf0_T: BindMany<float>,
+    Buf1_T: Bind<float2>,
+    Buf2_T: BindMany<float3>,
+    Buf3_T: Bind<float3>,
+    Buf5_T: Bind<TestStruct>,
+    Buf4_T: BindMany<TestStruct>,
+> {{
+    pub buf0: Buf0_T,
+    pub buf1: Buf1_T,
+    pub buf2: Buf2_T,
+    pub buf3: Buf3_T,
+    pub tex1: BindTexture<'a>,
+    pub buf5: Buf5_T,
+    pub buf4: Buf4_T,
 }}
-impl FunctionBinds for test_vertex_binds<'_> {{
-    #[inline]
-    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{
-        E::encode_many(encoder, self.buf0, 0);
-        E::encode_one(encoder, self.buf1, 1);
-        E::encode_many(encoder, self.buf2, 2);
-        E::encode_one(encoder, self.buf3, 3);
-        E::encode_texture(encoder, self.tex1, 1);
-        E::encode_one(encoder, self.buf5, 5);
-        E::encode_many(encoder, self.buf4, 4);
+struct test_vertex_binder<'a, F: PipelineFunctionType>(&'a F::CommandEncoder);
+impl<'a, F: PipelineFunctionType> FunctionBinder<'a, F> for test_vertex_binder<'a, F> {{
+    fn new(e: &'a F::CommandEncoder) -> Self {{
+        Self(e)
+    }}
+}}
+impl<F: PipelineFunctionType> test_vertex_binder<'_, F> {{
+    fn bind<
+        'a,
+        Buf0_T: BindMany<float>,
+        Buf1_T: Bind<float2>,
+        Buf2_T: BindMany<float3>,
+        Buf3_T: Bind<float3>,
+        Buf5_T: Bind<TestStruct>,
+        Buf4_T: BindMany<TestStruct>,
+    >(
+        &self,
+        binds: test_vertex_binds<
+            Buf0_T,
+            Buf1_T,
+            Buf2_T,
+            Buf3_T,
+            Buf5_T,
+            Buf4_T
+        >,
+    ) {{
+        binds.buf0.bind::<F>(self.0, 0);
+        binds.buf1.bind::<F>(self.0, 1);
+        binds.buf2.bind::<F>(self.0, 2);
+        binds.buf3.bind::<F>(self.0, 3);
+        binds.tex1.bind::<F>(self.0, 1);
+        binds.buf5.bind::<F>(self.0, 5);
+        binds.buf4.bind::<F>(self.0, 4);
     }}
 }}
 
@@ -221,10 +252,8 @@ impl FunctionBinds for test_vertex_binds<'_> {{
 pub struct test_vertex {{
     pub A_Bool: bool,
 }}
-impl metal_app::render_pipeline::Function for test_vertex {{
+impl metal_app::pipeline::function::Function for test_vertex {{
     const FUNCTION_NAME: &'static str = "test_vertex";
-    type Binds<'c> = test_vertex_binds<'c>;
-    type Type = VertexFunctionType;
     #[inline]
     fn get_function_constants(&self) -> Option<FunctionConstantValues> {{
         let fcv = FunctionConstantValues::new();
@@ -232,27 +261,61 @@ impl metal_app::render_pipeline::Function for test_vertex {{
         Some(fcv)
     }}
 }}
+impl PipelineFunction<VertexFunctionType> for test_vertex {{
+    type Binder<'a> = test_vertex_binder<'a>;
+}}
 
 #[allow(non_camel_case_types)]
-pub struct test_fragment_binds<'c> {{
-    pub buf0: BindMany<'c, float>,
-    pub buf1: BindOne<'c, float2>,
-    pub buf2: BindMany<'c, float3>,
-    pub buf3: BindOne<'c, float3>,
-    pub tex1: BindTexture<'c>,
-    pub buf5: BindOne<'c, TestStruct>,
-    pub buf4: BindMany<'c, TestStruct>,
+pub struct test_fragment_binds<
+    'a,
+    Buf0_T: BindMany<float>,
+    Buf1_T: Bind<float2>,
+    Buf2_T: BindMany<float3>,
+    Buf3_T: Bind<float3>,
+    Buf5_T: Bind<TestStruct>,
+    Buf4_T: BindMany<TestStruct>,
+> {{
+    pub buf0: Buf0_T,
+    pub buf1: Buf1_T,
+    pub buf2: Buf2_T,
+    pub buf3: Buf3_T,
+    pub tex1: BindTexture<'a>,
+    pub buf5: Buf5_T,
+    pub buf4: Buf4_T,
 }}
-impl FunctionBinds for test_fragment_binds<'_> {{
-    #[inline]
-    fn encode_binds<E: BindEncoder>(self, encoder: &RenderCommandEncoderRef) {{
-        E::encode_many(encoder, self.buf0, 0);
-        E::encode_one(encoder, self.buf1, 1);
-        E::encode_many(encoder, self.buf2, 2);
-        E::encode_one(encoder, self.buf3, 3);
-        E::encode_texture(encoder, self.tex1, 1);
-        E::encode_one(encoder, self.buf5, 5);
-        E::encode_many(encoder, self.buf4, 4);
+struct test_fragment_binder<'a, F: PipelineFunctionType>(&'a F::CommandEncoder);
+impl<'a, F: PipelineFunctionType> FunctionBinder<'a, F> for test_fragment_binder<'a, F> {{
+    fn new(e: &'a F::CommandEncoder) -> Self {{
+        Self(e)
+    }}
+}}
+impl<F: PipelineFunctionType> test_fragment_binder<'_, F> {{
+    fn bind<
+        'a,
+        Buf0_T: BindMany<float>,
+        Buf1_T: Bind<float2>,
+        Buf2_T: BindMany<float3>,
+        Buf3_T: Bind<float3>,
+        Buf5_T: Bind<TestStruct>,
+        Buf4_T: BindMany<TestStruct>,
+    >(
+        &self,
+        binds: test_vertex_binds<
+            Buf0_T,
+            Buf1_T,
+            Buf2_T,
+            Buf3_T,
+            Buf5_T,
+            Buf4_T
+        >,
+    ) {{
+        binds.buf0.bind::<F>(self.0, 0);
+        binds.buf1.bind::<F>(self.0, 1);
+        binds.buf2.bind::<F>(self.0, 2);
+        binds.buf3.bind::<F>(self.0, 3);
+        binds.tex1.bind::<F>(self.0, 1);
+        binds.buf5.bind::<F>(self.0, 5);
+        binds.buf4.bind::<F>(self.0, 4);
     }}
 }}
 
@@ -261,10 +324,8 @@ pub struct test_fragment {{
     pub A_Float: float,
     pub A_Uint: uint,
 }}
-impl metal_app::render_pipeline::Function for test_fragment {{
+impl metal_app::pipeline::function::Function for test_fragment {{
     const FUNCTION_NAME: &'static str = "test_fragment";
-    type Binds<'c> = test_fragment_binds<'c>;
-    type Type = FragmentFunctionType;
     #[inline]
     fn get_function_constants(&self) -> Option<FunctionConstantValues> {{
         let fcv = FunctionConstantValues::new();
@@ -272,6 +333,9 @@ impl metal_app::render_pipeline::Function for test_fragment {{
         fcv.set_constant_value_at_index((&self.A_Uint as *const _) as _, uint::MTL_DATA_TYPE, 3);
         Some(fcv)
     }}
+}}
+impl PipelineFunction<VertexFunctionType> for test_fragment {{
+    type Binder<'a> = test_fragment_binder<'a>;
 }}
 "#
             );
@@ -325,7 +389,7 @@ TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 
 #[allow(non_camel_case_types)]
 pub struct test;
-impl metal_app::render_pipeline::Function for test {
+impl metal_app::pipeline::function::Function for test {
     const FUNCTION_NAME: &'static str = "test";
     type Binds<'c> = NoBinds;
     type Type = VertexFunctionType;
@@ -450,7 +514,7 @@ impl FunctionBinds for {fn_name}_binds<'_> {{
 
 #[allow(non_camel_case_types)]
 pub struct {rust_shader_name};
-impl metal_app::render_pipeline::Function for {rust_shader_name} {{
+impl metal_app::pipeline::function::Function for {rust_shader_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
     type Type = VertexFunctionType;
@@ -503,7 +567,7 @@ impl FunctionBinds for {fn_name}_binds<'_> {{
 
 #[allow(non_camel_case_types)]
 pub struct {fn_name};
-impl metal_app::render_pipeline::Function for {fn_name} {{
+impl metal_app::pipeline::function::Function for {fn_name} {{
     const FUNCTION_NAME: &'static str = "{fn_name}";
     type Binds<'c> = {fn_name}_binds<'c>;
     type Type = FragmentFunctionType;
