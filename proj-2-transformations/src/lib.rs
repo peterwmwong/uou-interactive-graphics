@@ -88,7 +88,7 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let pass = self.render_pipeline.new_pass(
+        let p = self.render_pipeline.new_pass(
             "Render Teapot",
             command_buffer,
             [(
@@ -107,23 +107,22 @@ impl RendererDelgate for Delegate {
             NoBinds,
             &[],
         );
-        let encoder = pass.encoder;
         for DrawItemNoMaterial {
             vertex_count,
             geometry,
             ..
         } in self.model.draws()
         {
-            pass.bind(
+            p.bind(
                 main_vertex_binds {
                     r#in: Bind::Skip,
                     geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(geometry)),
                 },
                 NoBinds,
             );
-            encoder.draw_primitives(MTLPrimitiveType::Point, 0, vertex_count as _);
+            p.draw_primitives(MTLPrimitiveType::Point, 0, vertex_count as _);
         }
-        encoder.end_encoding();
+        p.end_encoding();
         command_buffer
     }
 

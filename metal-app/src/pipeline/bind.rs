@@ -15,7 +15,7 @@ pub enum BindBuffer<'a, T: Sized + Copy + Clone> {
     Offset(usize),
 }
 impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindBuffer<'a, T> {
-    #[inline(always)]
+    #[inline]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
         match self {
             BindBuffer::WithOffset(buf, offset) => {
@@ -26,7 +26,7 @@ impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindBuffer<'a, T> {
     }
 }
 impl<'a, T: Sized + Copy + Clone> BindBuffer<'a, T> {
-    #[inline(always)]
+    #[inline]
     pub fn buffer_with_rolling_offset(
         (buffer, element_offset): (&'a TypedBuffer<T>, usize),
     ) -> Self {
@@ -37,7 +37,7 @@ impl<'a, T: Sized + Copy + Clone> BindBuffer<'a, T> {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn iterating_buffer_offset(
         iteration: usize,
         (buffer, element_offset): (&'a TypedBuffer<T>, usize),
@@ -56,7 +56,7 @@ pub enum Bind<'a, T: Sized + Copy + Clone> {
     Skip,
 }
 impl<'a, T: Sized + Copy + Clone> AnyBind<T> for Bind<'a, T> {
-    #[inline(always)]
+    #[inline]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
         match self {
             Bind::Value(&v) => F::bytes(encoder, index, &[v]),
@@ -71,7 +71,7 @@ pub enum BindMany<'a, T: Sized + Copy + Clone> {
     Skip,
 }
 impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindMany<'a, T> {
-    #[inline(always)]
+    #[inline]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
         match self {
             BindMany::Values(v) => F::bytes(encoder, index, v),
@@ -83,7 +83,7 @@ impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindMany<'a, T> {
 
 pub struct BindTexture<'a>(pub &'a TextureRef);
 impl<'a> BindTexture<'a> {
-    #[inline(always)]
+    #[inline]
     pub fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
         F::texture(encoder, index, self.0);
     }

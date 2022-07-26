@@ -27,11 +27,14 @@ pub trait PipelineFunctionType {
 }
 
 pub trait PipelineFunction<F: PipelineFunctionType>: Function {
-    #[inline(always)]
+    #[inline]
     fn setup_pipeline(&self, library: &LibraryRef, pipeline_desc: &F::Descriptor) {
         F::setup_pipeline(&self.get_function(library), pipeline_desc);
     }
 
+    // IMPORTANT: As of writing (7/25/2022), `inline(always)` is very crucial for generating decent
+    // code. With only `inline`, the compiler misjudges, doesn't inline and generates a bunch of
+    // branches associated with the `match` Bind/BindMany enum variant in `binds.bind()`.
     #[inline(always)]
     fn bind<'a, 'b>(encoder: &'a F::CommandEncoder, binds: Self::Binds<'b>) {
         binds.bind::<F>(encoder);

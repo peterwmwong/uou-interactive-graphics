@@ -24,8 +24,8 @@ type ColorAttachementRenderPassDesc<'a> = (
 
 pub struct ColorAttachement;
 impl ColorAttachement {
-    #[inline(always)]
-    fn setup_pipeline_attachment<'a>(
+    #[inline]
+    fn setup_pipeline(
         desc: ColorAttachementPipelineDesc,
         pass: &RenderPipelineColorAttachmentDescriptorRef,
     ) {
@@ -34,8 +34,8 @@ impl ColorAttachement {
         pass.set_blending_enabled(matches!(blend_mode, BlendMode::Blend));
     }
 
-    #[inline(always)]
-    fn setup_render_pass_attachment<'a>(
+    #[inline]
+    fn setup_render_pass<'a>(
         desc: ColorAttachementRenderPassDesc<'a>,
         a: &RenderPassColorAttachmentDescriptorRef,
     ) {
@@ -47,29 +47,25 @@ impl ColorAttachement {
     }
 }
 
-pub trait DepthAttachmentKind {
+pub trait DepthKind {
     type RenderPassDesc<'a>;
 
-    #[inline(always)]
-    fn setup_pipeline_attachment(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
-    #[inline(always)]
-    fn setup_render_pass_attachment<'a>(
-        _desc: Self::RenderPassDesc<'a>,
-        _pass: &RenderPassDescriptorRef,
-    ) {
-    }
+    #[inline]
+    fn setup_pipeline(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
+    #[inline]
+    fn setup_render_pass<'a>(_desc: Self::RenderPassDesc<'a>, _pass: &RenderPassDescriptorRef) {}
 }
-pub struct HasDepth(pub MTLPixelFormat);
-impl DepthAttachmentKind for HasDepth {
+pub struct Depth(pub MTLPixelFormat);
+impl DepthKind for Depth {
     type RenderPassDesc<'a> = (&'a TextureRef, f32, MTLLoadAction, MTLStoreAction);
 
-    #[inline(always)]
-    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
+    #[inline]
+    fn setup_pipeline(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
         pipeline_descriptor.set_depth_attachment_pixel_format(self.0);
     }
 
-    #[inline(always)]
-    fn setup_render_pass_attachment<'a>(
+    #[inline]
+    fn setup_render_pass<'a>(
         (texture, clear_depth, load_action, store_action): Self::RenderPassDesc<'a>,
         desc: &RenderPassDescriptorRef,
     ) {
@@ -83,30 +79,27 @@ impl DepthAttachmentKind for HasDepth {
     }
 }
 pub struct NoDepth;
-impl DepthAttachmentKind for NoDepth {
+impl DepthKind for NoDepth {
     type RenderPassDesc<'a> = NoDepth;
 }
 
-pub trait StencilAttachmentKind {
+pub trait StencilKind {
     type RenderPassDesc<'a>;
 
-    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef);
-    fn setup_render_pass_attachment<'a>(
-        desc: Self::RenderPassDesc<'a>,
-        pass: &RenderPassDescriptorRef,
-    );
+    fn setup_pipeline(&self, pipeline_descriptor: &RenderPipelineDescriptorRef);
+    fn setup_render_pass<'a>(desc: Self::RenderPassDesc<'a>, pass: &RenderPassDescriptorRef);
 }
-pub struct HasStencil(pub MTLPixelFormat);
-impl StencilAttachmentKind for HasStencil {
+pub struct Stencil(pub MTLPixelFormat);
+impl StencilKind for Stencil {
     type RenderPassDesc<'a> = (&'a TextureRef, u32, MTLLoadAction, MTLStoreAction);
 
-    #[inline(always)]
-    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
+    #[inline]
+    fn setup_pipeline(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
         pipeline_descriptor.set_stencil_attachment_pixel_format(self.0);
     }
 
-    #[inline(always)]
-    fn setup_render_pass_attachment<'a>(
+    #[inline]
+    fn setup_render_pass<'a>(
         (texture, clear_value, load_action, store_action): Self::RenderPassDesc<'a>,
         desc: &RenderPassDescriptorRef,
     ) {
@@ -120,18 +113,14 @@ impl StencilAttachmentKind for HasStencil {
     }
 }
 pub struct NoStencil;
-impl StencilAttachmentKind for NoStencil {
+impl StencilKind for NoStencil {
     type RenderPassDesc<'a> = NoStencil;
 
-    #[inline(always)]
-    fn setup_pipeline_attachment(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
+    #[inline]
+    fn setup_pipeline(&self, _pipeline_descriptor: &RenderPipelineDescriptorRef) {}
 
-    #[inline(always)]
-    fn setup_render_pass_attachment<'a>(
-        _desc: Self::RenderPassDesc<'a>,
-        _pass: &RenderPassDescriptorRef,
-    ) {
-    }
+    #[inline]
+    fn setup_render_pass<'a>(_desc: Self::RenderPassDesc<'a>, _pass: &RenderPassDescriptorRef) {}
 }
 
 pub trait DepthState {
@@ -139,7 +128,7 @@ pub trait DepthState {
 }
 
 impl DepthState for &DepthStencilStateRef {
-    #[inline(always)]
+    #[inline]
     fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef) {
         encoder.set_depth_stencil_state(self)
     }
@@ -147,79 +136,77 @@ impl DepthState for &DepthStencilStateRef {
 
 pub struct NoDepthState;
 impl DepthState for NoDepthState {
-    #[inline(always)]
+    #[inline]
     fn setup_render_pass<'a>(&self, _: &'a RenderCommandEncoderRef) {}
 }
 
 pub trait DepthStencilKind {
-    type DepthKind: DepthAttachmentKind;
-    type StencilKind: StencilAttachmentKind;
+    type DepthKind: DepthKind;
+    type StencilKind: StencilKind;
     type DepthState<'a>: DepthState;
 
-    #[inline(always)]
-    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
-        self.depth_kind()
-            .setup_pipeline_attachment(pipeline_descriptor);
-        self.stencil_kind()
-            .setup_pipeline_attachment(pipeline_descriptor);
+    #[inline]
+    fn setup_pipeline(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
+        self.depth_kind().setup_pipeline(pipeline_descriptor);
+        self.stencil_kind().setup_pipeline(pipeline_descriptor);
     }
-    #[inline(always)]
-    fn setup_render_pass_attachment<'a>(
-        depth_desc: <Self::DepthKind as DepthAttachmentKind>::RenderPassDesc<'a>,
-        stencil_desc: <Self::StencilKind as StencilAttachmentKind>::RenderPassDesc<'a>,
+    #[inline]
+    fn setup_render_pass<'a>(
+        depth_desc: <Self::DepthKind as DepthKind>::RenderPassDesc<'a>,
+        stencil_desc: <Self::StencilKind as StencilKind>::RenderPassDesc<'a>,
         pass: &'a RenderPassDescriptorRef,
     ) {
-        Self::DepthKind::setup_render_pass_attachment(depth_desc, pass);
-        Self::StencilKind::setup_render_pass_attachment(stencil_desc, pass);
+        Self::DepthKind::setup_render_pass(depth_desc, pass);
+        Self::StencilKind::setup_render_pass(stencil_desc, pass);
     }
 
     fn depth_kind(&self) -> &Self::DepthKind;
     fn stencil_kind(&self) -> &Self::StencilKind;
 }
 
-impl DepthStencilKind for (HasDepth, HasStencil) {
-    type DepthKind = HasDepth;
-    type StencilKind = HasStencil;
+impl DepthStencilKind for (Depth, Stencil) {
+    type DepthKind = Depth;
+    type StencilKind = Stencil;
     type DepthState<'a> = &'a DepthStencilStateRef;
 
-    #[inline(always)]
+    #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
         &self.0
     }
 
-    #[inline(always)]
+    #[inline]
     fn stencil_kind(&self) -> &Self::StencilKind {
         &self.1
     }
 }
 
-impl DepthStencilKind for (HasDepth, NoStencil) {
-    type DepthKind = HasDepth;
+impl DepthStencilKind for (Depth, NoStencil) {
+    type DepthKind = Depth;
     type StencilKind = NoStencil;
     type DepthState<'a> = &'a DepthStencilStateRef;
 
-    #[inline(always)]
+    #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
         &self.0
     }
 
-    #[inline(always)]
+    #[inline]
     fn stencil_kind(&self) -> &Self::StencilKind {
         &NoStencil
     }
 }
 
-impl DepthStencilKind for (NoDepth, HasStencil) {
+impl DepthStencilKind for (NoDepth, Stencil) {
     type DepthKind = NoDepth;
-    type StencilKind = HasStencil;
+    type StencilKind = Stencil;
     type DepthState<'a> = &'a DepthStencilStateRef;
 
-    #[inline(always)]
+    #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
         &NoDepth
     }
 
-    #[inline(always)]
+    #[inline]
     fn stencil_kind(&self) -> &Self::StencilKind {
         &self.1
     }
@@ -230,12 +217,12 @@ impl DepthStencilKind for (NoDepth, NoStencil) {
     type StencilKind = NoStencil;
     type DepthState<'a> = NoDepthState;
 
-    #[inline(always)]
+    #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
         &NoDepth
     }
 
-    #[inline(always)]
+    #[inline]
     fn stencil_kind(&self) -> &Self::StencilKind {
         &NoStencil
     }
@@ -246,12 +233,12 @@ impl PipelineFunctionType for VertexFunctionType {
     type Descriptor = RenderPipelineDescriptorRef;
     type CommandEncoder = RenderCommandEncoderRef;
 
-    #[inline(always)]
+    #[inline]
     fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
         pipeline_desc.set_vertex_function(Some(func));
     }
 
-    #[inline(always)]
+    #[inline]
     fn bytes<'a, 'b, T: Sized + Copy + Clone>(
         encoder: &'a RenderCommandEncoderRef,
         index: usize,
@@ -263,7 +250,7 @@ impl PipelineFunctionType for VertexFunctionType {
             value.as_ptr() as *const _,
         )
     }
-    #[inline(always)]
+    #[inline]
     fn buffer_and_offset<'a, 'b, T: Sized + Copy + Clone>(
         encoder: &'a RenderCommandEncoderRef,
         index: usize,
@@ -275,7 +262,7 @@ impl PipelineFunctionType for VertexFunctionType {
             (std::mem::size_of::<T>() * offset) as _,
         );
     }
-    #[inline(always)]
+    #[inline]
     fn buffer_offset<'a, 'b, T: Sized + Copy + Clone>(
         encoder: &'a RenderCommandEncoderRef,
         index: usize,
@@ -283,7 +270,7 @@ impl PipelineFunctionType for VertexFunctionType {
     ) {
         encoder.set_vertex_buffer_offset(index as _, (std::mem::size_of::<T>() * offset) as _);
     }
-    #[inline(always)]
+    #[inline]
     fn texture<'a, 'b>(
         encoder: &'a RenderCommandEncoderRef,
         index: usize,
@@ -298,12 +285,12 @@ impl PipelineFunctionType for FragmentFunctionType {
     type Descriptor = RenderPipelineDescriptorRef;
     type CommandEncoder = RenderCommandEncoderRef;
 
-    #[inline(always)]
+    #[inline]
     fn setup_pipeline(func: &FunctionRef, pipeline_desc: &Self::Descriptor) {
         pipeline_desc.set_fragment_function(Some(func));
     }
 
-    #[inline(always)]
+    #[inline]
     fn bytes<'a, 'b, T: Sized + Copy + Clone>(
         encoder: &'a Self::CommandEncoder,
         index: usize,
@@ -315,7 +302,7 @@ impl PipelineFunctionType for FragmentFunctionType {
             value.as_ptr() as *const _,
         )
     }
-    #[inline(always)]
+    #[inline]
     fn buffer_and_offset<'a, 'b, T: Sized + Copy + Clone>(
         encoder: &'a Self::CommandEncoder,
         index: usize,
@@ -327,7 +314,7 @@ impl PipelineFunctionType for FragmentFunctionType {
             (std::mem::size_of::<T>() * offset) as _,
         );
     }
-    #[inline(always)]
+    #[inline]
     fn buffer_offset<'a, 'b, T: Sized + Copy + Clone>(
         encoder: &'a Self::CommandEncoder,
         index: usize,
@@ -335,7 +322,7 @@ impl PipelineFunctionType for FragmentFunctionType {
     ) {
         encoder.set_fragment_buffer_offset(index as _, (std::mem::size_of::<T>() * offset) as _);
     }
-    #[inline(always)]
+    #[inline]
     fn texture<'a, 'b>(encoder: &'a Self::CommandEncoder, index: usize, texture: &'b TextureRef) {
         encoder.set_fragment_texture(index as _, Some(texture));
     }
@@ -350,7 +337,7 @@ impl function::Function for NoFragmentFunction {
 impl PipelineFunction<FragmentFunctionType> for NoFragmentFunction {}
 
 impl Binds for NoBinds {
-    #[inline(always)]
+    #[inline]
     fn bind<F: PipelineFunctionType>(self, _: &F::CommandEncoder) {}
 }
 
@@ -395,6 +382,12 @@ into_mtl_data_type!(metal_types::short, MTLDataType::Short);
 // 1. Sketch out what this would look like
 // 2. Does it actually worth the code generation complexity?
 
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Try alternatives for push/pop debug group and end_encoding
+// 1. closure
+// 2. Drop
 pub struct RenderPass<
     'a,
     const NUM_COLOR_ATTACHMENTS: usize,
@@ -402,7 +395,7 @@ pub struct RenderPass<
     F: PipelineFunction<FragmentFunctionType>,
     DS: DepthStencilKind,
 > {
-    pub encoder: &'a RenderCommandEncoderRef,
+    encoder: &'a RenderCommandEncoderRef,
     _vertex: PhantomData<V>,
     _fragment: PhantomData<F>,
     _depth_stencil: PhantomData<DS>,
@@ -416,12 +409,76 @@ impl<
         DS: DepthStencilKind,
     > RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS>
 {
-    #[inline(always)]
+    #[inline]
     pub fn bind<'b>(&'a self, vertex_binds: V::Binds<'b>, fragment_binds: F::Binds<'b>) {
         V::bind(self.encoder, vertex_binds);
         F::bind(self.encoder, fragment_binds);
     }
+
+    #[inline]
+    pub fn into_subpass<
+        'b,
+        VNew: PipelineFunction<VertexFunctionType>,
+        FNew: PipelineFunction<FragmentFunctionType>,
+    >(
+        self,
+        subpass_pipeline: &'b RenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
+        new_depth_state: Option<DS::DepthState<'b>>,
+        vertex_binds: VNew::Binds<'b>,
+        fragment_binds: FNew::Binds<'b>,
+    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS> {
+        let encoder = self.encoder;
+        encoder.set_render_pipeline_state(&subpass_pipeline.pipeline);
+        if let Some(depth_state) = new_depth_state {
+            depth_state.setup_render_pass(encoder)
+        }
+        VNew::bind(encoder, vertex_binds);
+        FNew::bind(encoder, fragment_binds);
+        // std::mem::forget(self);
+        RenderPass {
+            encoder,
+            _vertex: PhantomData,
+            _fragment: PhantomData,
+            _depth_stencil: PhantomData,
+        }
+    }
+    #[inline]
+    pub fn push_debug_group(&self, label: &str) {
+        self.encoder.push_debug_group(label);
+    }
+    #[inline]
+    pub fn pop_debug_group(&self) {
+        self.encoder.pop_debug_group();
+    }
+    #[inline]
+    pub fn draw_primitives(
+        &self,
+        primitive_type: MTLPrimitiveType,
+        vertex_start: usize,
+        vertex_count: usize,
+    ) {
+        self.encoder
+            .draw_primitives(primitive_type, vertex_start as _, vertex_count as _);
+    }
+    #[inline]
+    pub fn end_encoding(self) {
+        self.encoder.end_encoding();
+    }
 }
+
+// impl<
+//         'a,
+//         const NUM_COLOR_ATTACHMENTS: usize,
+//         V: PipelineFunction<VertexFunctionType>,
+//         F: PipelineFunction<FragmentFunctionType>,
+//         DS: DepthStencilKind,
+//     > Drop for RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS>
+// {
+//     #[inline(always)]
+//     fn drop(&mut self) {
+//         self.encoder.end_encoding();
+//     }
+// }
 
 pub trait ResourceUsage {
     fn use_resource<'b>(&self, encoder: &'b RenderCommandEncoderRef);
@@ -433,7 +490,7 @@ pub struct BufferUsage<'a, T: Sized + Copy + Clone>(
     pub MTLRenderStages,
 );
 impl<T: Sized + Copy + Clone> ResourceUsage for BufferUsage<'_, T> {
-    #[inline(always)]
+    #[inline]
     fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
         encoder.use_resource_at(&self.0.buffer, self.1, self.2)
     }
@@ -441,7 +498,7 @@ impl<T: Sized + Copy + Clone> ResourceUsage for BufferUsage<'_, T> {
 
 pub struct HeapUsage<'a>(pub &'a HeapRef, pub MTLRenderStages);
 impl ResourceUsage for HeapUsage<'_> {
-    #[inline(always)]
+    #[inline]
     fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
         encoder.use_heap_at(self.0, self.1)
     }
@@ -453,7 +510,7 @@ pub struct TextureUsage<'a>(
     pub MTLRenderStages,
 );
 impl ResourceUsage for TextureUsage<'_> {
-    #[inline(always)]
+    #[inline]
     fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
         encoder.use_resource_at(&self.0, self.1, self.2)
     }
@@ -496,9 +553,9 @@ impl<
                     .color_attachments()
                     .object_at(i as u64)
                     .expect("Failed to access color attachment on pipeline descriptor");
-                ColorAttachement::setup_pipeline_attachment(colors[i], &desc);
+                ColorAttachement::setup_pipeline(colors[i], &desc);
             }
-            depth_stencil_kind.setup_pipeline_attachment(&pipeline_desc);
+            depth_stencil_kind.setup_pipeline(&pipeline_desc);
             vertex_function.setup_pipeline(library, &pipeline_desc);
             fragment_function.setup_pipeline(library, &pipeline_desc);
             let pipeline = device
@@ -513,19 +570,22 @@ impl<
         })
     }
 
-    #[inline(always)]
-    pub fn new_pass<'a, 'b>(
+    #[inline]
+    pub fn new_pass<'a, 'b, 'c>(
         &'a self,
         label: &'static str,
         command_buffer: &'a CommandBufferRef,
         color_attachments: [ColorAttachementRenderPassDesc; NUM_COLOR_ATTACHMENTS],
-        depth_attachment: <DS::DepthKind as DepthAttachmentKind>::RenderPassDesc<'b>,
-        stencil_attachment: <DS::StencilKind as StencilAttachmentKind>::RenderPassDesc<'b>,
+        depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
+        stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
         depth_state: DS::DepthState<'b>,
         vertex_binds: V::Binds<'b>,
         fragment_binds: F::Binds<'b>,
         resources: &[&dyn ResourceUsage],
-    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS> {
+    ) -> RenderPass<'c, NUM_COLOR_ATTACHMENTS, V, F, DS>
+    where
+        'a: 'c,
+    {
         let desc = RenderPassDescriptor::new();
         for i in 0..NUM_COLOR_ATTACHMENTS {
             let c = color_attachments[i];
@@ -533,43 +593,16 @@ impl<
                 .color_attachments()
                 .object_at(i as _)
                 .expect("Failed to access color attachment on render pass descriptor");
-            ColorAttachement::setup_render_pass_attachment(c, a);
+            ColorAttachement::setup_render_pass(c, a);
         }
-        DS::setup_render_pass_attachment(depth_attachment, stencil_attachment, desc);
+        DS::setup_render_pass(depth_attachment, stencil_attachment, desc);
         let encoder = command_buffer.new_render_command_encoder(desc);
         encoder.set_label(label);
-        encoder.set_render_pipeline_state(&self.pipeline);
-        depth_state.setup_render_pass(encoder);
-        V::bind(encoder, vertex_binds);
-        F::bind(encoder, fragment_binds);
         for r in resources {
             r.use_resource(encoder)
         }
-        RenderPass {
-            encoder,
-            _vertex: PhantomData,
-            _fragment: PhantomData,
-            _depth_stencil: PhantomData,
-        }
-    }
-    #[inline(always)]
-    pub fn new_subpass<
-        'a,
-        'b,
-        VPrev: PipelineFunction<VertexFunctionType>,
-        FPrev: PipelineFunction<FragmentFunctionType>,
-    >(
-        &'a self,
-        prev: RenderPass<'a, NUM_COLOR_ATTACHMENTS, VPrev, FPrev, DS>,
-        new_depth_state: Option<DS::DepthState<'b>>,
-        vertex_binds: V::Binds<'b>,
-        fragment_binds: F::Binds<'b>,
-    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS> {
-        let encoder = prev.encoder;
         encoder.set_render_pipeline_state(&self.pipeline);
-        if let Some(depth_state) = new_depth_state {
-            depth_state.setup_render_pass(encoder)
-        }
+        depth_state.setup_render_pass(encoder);
         V::bind(encoder, vertex_binds);
         F::bind(encoder, fragment_binds);
         RenderPass {
@@ -867,7 +900,7 @@ mod test {
                 1,
                 Vertex1,
                 Fragment1,
-                (HasDepth, NoStencil),
+                (Depth, NoStencil),
             > = RenderPipeline::new(
                 "Test",
                 &device,
@@ -879,7 +912,7 @@ mod test {
                 Fragment1 {
                     function_constant_2: true,
                 },
-                (HasDepth(MTLPixelFormat::Depth16Unorm), NoStencil),
+                (Depth(MTLPixelFormat::Depth16Unorm), NoStencil),
             );
             let pass = p1.new_pass(
                 "test label",
@@ -902,8 +935,8 @@ mod test {
                 },
                 &[],
             );
-            let pass2 = p2.new_subpass(
-                pass,
+            let pass2 = pass.into_subpass(
+                &p2,
                 None,
                 Vertex1Binds {
                     v_bind1: BindMany::Values(&[0.]),
@@ -934,7 +967,7 @@ mod test {
                 1,
                 Vertex2NoFunctionConstants,
                 NoFragmentFunction,
-                (HasDepth, HasStencil),
+                (Depth, Stencil),
             > = RenderPipeline::new(
                 "Test",
                 &device,
@@ -943,8 +976,8 @@ mod test {
                 Vertex2NoFunctionConstants,
                 NoFragmentFunction,
                 (
-                    HasDepth(MTLPixelFormat::Depth16Unorm),
-                    HasStencil(MTLPixelFormat::Stencil8),
+                    Depth(MTLPixelFormat::Depth16Unorm),
+                    Stencil(MTLPixelFormat::Stencil8),
                 ),
             );
             let pass = p.new_pass(

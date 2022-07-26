@@ -33,11 +33,11 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
     depth_texture: DepthTexture,
     device: Device,
     library: Library,
-    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (HasDepth, NoStencil)>,
+    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (Depth, NoStencil)>,
     light_position: float4,
     light: Camera,
     matrix_model_to_world: f32x4x4,
-    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (HasDepth, NoStencil)>,
+    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
     model_space: ModelSpace,
     model: Model<Geometry, HasMaterial<Material>>,
     needs_render: bool,
@@ -48,7 +48,7 @@ fn create_model_pipeline(
     device: &Device,
     library: &Library,
     mode: ShadingModeSelector,
-) -> RenderPipeline<1, main_vertex, main_fragment, (HasDepth, NoStencil)> {
+) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)> {
     RenderPipeline::new(
         "Model",
         &device,
@@ -61,7 +61,7 @@ fn create_model_pipeline(
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        (HasDepth(DEPTH_TEXTURE_FORMAT), NoStencil),
+        (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
     )
 }
 
@@ -163,7 +163,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
                 light_vertex,
                 light_fragment,
-                (HasDepth(DEPTH_TEXTURE_FORMAT), NoStencil),
+                (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
             ),
             matrix_model_to_world,
             model,
@@ -190,7 +190,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let pass = self.model_pipeline.new_pass(
+        let mut p = self.model_pipeline.new_pass(
             "Render Encoder",
             command_buffer,
             [(
@@ -221,10 +221,9 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 MTLRenderStages::Vertex | MTLRenderStages::Fragment,
             )],
         );
-        let encoder = pass.encoder;
         // Render Model
         {
-            encoder.push_debug_group("Model");
+            p.push_debug_group("Model");
             for DrawItem {
                 name,
                 vertex_count,
@@ -232,8 +231,8 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 material,
             } in self.model.draws()
             {
-                encoder.push_debug_group(name);
-                pass.bind(
+                p.push_debug_group(name);
+                p.bind(
                     main_vertex_binds {
                         geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(geometry)),
                         model: Bind::Skip,
@@ -246,30 +245,27 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                         light_pos: Bind::Skip,
                     },
                 );
-                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, vertex_count as _);
-                encoder.pop_debug_group();
+                p.draw_primitives(MTLPrimitiveType::Triangle, 0, vertex_count as _);
+                p.pop_debug_group();
             }
-            encoder.pop_debug_group();
+            p.pop_debug_group();
         }
         // Render Light
         if RENDER_LIGHT {
-            encoder.push_debug_group("Light");
-            let encoder = self
-                .light_pipeline
-                .new_subpass(
-                    pass,
-                    None,
-                    light_vertex_binds {
-                        camera: Bind::Value(&self.camera_space),
-                        light_pos: Bind::Value(&self.light_position),
-                    },
-                    NoBinds,
-                )
-                .encoder;
-            encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
-            encoder.pop_debug_group();
+            p.push_debug_group("Light");
+            p = p.into_subpass(
+                &self.light_pipeline,
+                None,
+                light_vertex_binds {
+                    camera: Bind::Value(&self.camera_space),
+                    light_pos: Bind::Value(&self.light_position),
+                },
+                NoBinds,
+            );
+            p.draw_primitives(MTLPrimitiveType::Point, 0, 1);
+            p.pop_debug_group();
         }
-        encoder.end_encoding();
+        p.end_encoding();
         command_buffer
     }
 
