@@ -33,11 +33,11 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
     depth_texture: DepthTexture,
     device: Device,
     library: Library,
-    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, HasDepth, NoStencil>,
+    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (HasDepth, NoStencil)>,
     light_position: float4,
     light: Camera,
     matrix_model_to_world: f32x4x4,
-    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil>,
+    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (HasDepth, NoStencil)>,
     model_space: ModelSpace,
     model: Model<Geometry, HasMaterial<Material>>,
     needs_render: bool,
@@ -48,7 +48,7 @@ fn create_model_pipeline(
     device: &Device,
     library: &Library,
     mode: ShadingModeSelector,
-) -> RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil> {
+) -> RenderPipeline<1, main_vertex, main_fragment, (HasDepth, NoStencil)> {
     RenderPipeline::new(
         "Model",
         &device,
@@ -61,8 +61,7 @@ fn create_model_pipeline(
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        HasDepth(DEPTH_TEXTURE_FORMAT),
-        NoStencil,
+        (HasDepth(DEPTH_TEXTURE_FORMAT), NoStencil),
     )
 }
 
@@ -164,8 +163,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
                 light_vertex,
                 light_fragment,
-                HasDepth(DEPTH_TEXTURE_FORMAT),
-                NoStencil,
+                (HasDepth(DEPTH_TEXTURE_FORMAT), NoStencil),
             ),
             matrix_model_to_world,
             model,
@@ -208,26 +206,25 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 MTLStoreAction::DontCare,
             ),
             NoStencil,
+            &self.depth_state,
+            main_vertex_binds {
+                geometry: Bind::Skip,
+                model: Bind::Value(&self.model_space),
+            },
+            main_fragment_binds {
+                material: Bind::Skip,
+                camera: Bind::Value(&self.camera_space),
+                light_pos: Bind::Value(&self.light_position),
+            },
+            &[&HeapUsage(
+                &self.model.heap,
+                MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+            )],
         );
         let encoder = pass.encoder;
-        self.model.encode_use_resources(&encoder);
-        encoder.set_depth_stencil_state(&self.depth_state);
         // Render Model
         {
             encoder.push_debug_group("Model");
-            encoder.push_debug_group("Common Binds");
-            pass.bind(
-                main_vertex_binds {
-                    geometry: Bind::Skip,
-                    model: Bind::Value(&self.model_space),
-                },
-                main_fragment_binds {
-                    material: Bind::Skip,
-                    camera: Bind::Value(&self.camera_space),
-                    light_pos: Bind::Value(&self.light_position),
-                },
-            );
-            encoder.pop_debug_group();
             for DrawItem {
                 name,
                 vertex_count,
@@ -256,15 +253,19 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         }
         // Render Light
         if RENDER_LIGHT {
-            let pass = self.light_pipeline.new_subpass(pass);
             encoder.push_debug_group("Light");
-            pass.bind(
-                light_vertex_binds {
-                    camera: Bind::Value(&self.camera_space),
-                    light_pos: Bind::Value(&self.light_position),
-                },
-                NoBinds,
-            );
+            let encoder = self
+                .light_pipeline
+                .new_subpass(
+                    pass,
+                    None,
+                    light_vertex_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        light_pos: Bind::Value(&self.light_position),
+                    },
+                    NoBinds,
+                )
+                .encoder;
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
             encoder.pop_debug_group();
         }

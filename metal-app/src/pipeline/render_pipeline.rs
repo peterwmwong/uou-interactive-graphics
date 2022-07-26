@@ -98,11 +98,6 @@ pub trait StencilAttachmentKind {
 }
 pub struct HasStencil(pub MTLPixelFormat);
 impl StencilAttachmentKind for HasStencil {
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // 1. This should include DepthState
-    // 2. This trait should include a setup_render_pass/setup_render_encoder
     type RenderPassDesc<'a> = (&'a TextureRef, u32, MTLLoadAction, MTLStoreAction);
 
     #[inline(always)]
@@ -136,6 +131,113 @@ impl StencilAttachmentKind for NoStencil {
         _desc: Self::RenderPassDesc<'a>,
         _pass: &RenderPassDescriptorRef,
     ) {
+    }
+}
+
+pub trait DepthState {
+    fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef);
+}
+
+impl DepthState for &DepthStencilStateRef {
+    #[inline(always)]
+    fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef) {
+        encoder.set_depth_stencil_state(self)
+    }
+}
+
+pub struct NoDepthState;
+impl DepthState for NoDepthState {
+    #[inline(always)]
+    fn setup_render_pass<'a>(&self, _: &'a RenderCommandEncoderRef) {}
+}
+
+pub trait DepthStencilKind {
+    type DepthKind: DepthAttachmentKind;
+    type StencilKind: StencilAttachmentKind;
+    type DepthState<'a>: DepthState;
+
+    #[inline(always)]
+    fn setup_pipeline_attachment(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
+        self.depth_kind()
+            .setup_pipeline_attachment(pipeline_descriptor);
+        self.stencil_kind()
+            .setup_pipeline_attachment(pipeline_descriptor);
+    }
+    #[inline(always)]
+    fn setup_render_pass_attachment<'a>(
+        depth_desc: <Self::DepthKind as DepthAttachmentKind>::RenderPassDesc<'a>,
+        stencil_desc: <Self::StencilKind as StencilAttachmentKind>::RenderPassDesc<'a>,
+        pass: &'a RenderPassDescriptorRef,
+    ) {
+        Self::DepthKind::setup_render_pass_attachment(depth_desc, pass);
+        Self::StencilKind::setup_render_pass_attachment(stencil_desc, pass);
+    }
+
+    fn depth_kind(&self) -> &Self::DepthKind;
+    fn stencil_kind(&self) -> &Self::StencilKind;
+}
+
+impl DepthStencilKind for (HasDepth, HasStencil) {
+    type DepthKind = HasDepth;
+    type StencilKind = HasStencil;
+    type DepthState<'a> = &'a DepthStencilStateRef;
+
+    #[inline(always)]
+    fn depth_kind(&self) -> &Self::DepthKind {
+        &self.0
+    }
+
+    #[inline(always)]
+    fn stencil_kind(&self) -> &Self::StencilKind {
+        &self.1
+    }
+}
+
+impl DepthStencilKind for (HasDepth, NoStencil) {
+    type DepthKind = HasDepth;
+    type StencilKind = NoStencil;
+    type DepthState<'a> = &'a DepthStencilStateRef;
+
+    #[inline(always)]
+    fn depth_kind(&self) -> &Self::DepthKind {
+        &self.0
+    }
+
+    #[inline(always)]
+    fn stencil_kind(&self) -> &Self::StencilKind {
+        &NoStencil
+    }
+}
+
+impl DepthStencilKind for (NoDepth, HasStencil) {
+    type DepthKind = NoDepth;
+    type StencilKind = HasStencil;
+    type DepthState<'a> = &'a DepthStencilStateRef;
+
+    #[inline(always)]
+    fn depth_kind(&self) -> &Self::DepthKind {
+        &NoDepth
+    }
+
+    #[inline(always)]
+    fn stencil_kind(&self) -> &Self::StencilKind {
+        &self.1
+    }
+}
+
+impl DepthStencilKind for (NoDepth, NoStencil) {
+    type DepthKind = NoDepth;
+    type StencilKind = NoStencil;
+    type DepthState<'a> = NoDepthState;
+
+    #[inline(always)]
+    fn depth_kind(&self) -> &Self::DepthKind {
+        &NoDepth
+    }
+
+    #[inline(always)]
+    fn stencil_kind(&self) -> &Self::StencilKind {
+        &NoStencil
     }
 }
 
@@ -298,14 +400,12 @@ pub struct RenderPass<
     const NUM_COLOR_ATTACHMENTS: usize,
     V: PipelineFunction<VertexFunctionType>,
     F: PipelineFunction<FragmentFunctionType>,
-    D: DepthAttachmentKind,
-    S: StencilAttachmentKind,
+    DS: DepthStencilKind,
 > {
     pub encoder: &'a RenderCommandEncoderRef,
     _vertex: PhantomData<V>,
     _fragment: PhantomData<F>,
-    _depth: PhantomData<D>,
-    _stencil: PhantomData<S>,
+    _depth_stencil: PhantomData<DS>,
 }
 
 impl<
@@ -313,9 +413,8 @@ impl<
         const NUM_COLOR_ATTACHMENTS: usize,
         V: PipelineFunction<VertexFunctionType>,
         F: PipelineFunction<FragmentFunctionType>,
-        D: DepthAttachmentKind,
-        S: StencilAttachmentKind,
-    > RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, D, S>
+        DS: DepthStencilKind,
+    > RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS>
 {
     #[inline(always)]
     pub fn bind<'b>(&'a self, vertex_binds: V::Binds<'b>, fragment_binds: F::Binds<'b>) {
@@ -324,27 +423,60 @@ impl<
     }
 }
 
+pub trait ResourceUsage {
+    fn use_resource<'b>(&self, encoder: &'b RenderCommandEncoderRef);
+}
+
+pub struct BufferUsage<'a, T: Sized + Copy + Clone>(
+    pub &'a TypedBuffer<T>,
+    pub MTLResourceUsage,
+    pub MTLRenderStages,
+);
+impl<T: Sized + Copy + Clone> ResourceUsage for BufferUsage<'_, T> {
+    #[inline(always)]
+    fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
+        encoder.use_resource_at(&self.0.buffer, self.1, self.2)
+    }
+}
+
+pub struct HeapUsage<'a>(pub &'a HeapRef, pub MTLRenderStages);
+impl ResourceUsage for HeapUsage<'_> {
+    #[inline(always)]
+    fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
+        encoder.use_heap_at(self.0, self.1)
+    }
+}
+
+pub struct TextureUsage<'a>(
+    pub &'a TextureRef,
+    pub MTLResourceUsage,
+    pub MTLRenderStages,
+);
+impl ResourceUsage for TextureUsage<'_> {
+    #[inline(always)]
+    fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
+        encoder.use_resource_at(&self.0, self.1, self.2)
+    }
+}
+
 pub struct RenderPipeline<
     const NUM_COLOR_ATTACHMENTS: usize,
     V: PipelineFunction<VertexFunctionType>,
     F: PipelineFunction<FragmentFunctionType>,
-    D: DepthAttachmentKind,
-    S: StencilAttachmentKind,
+    DS: DepthStencilKind,
 > {
     pub pipeline: RenderPipelineState,
     _vertex_function: PhantomData<V>,
     _fragment_function: PhantomData<F>,
-    _depth_kind: PhantomData<D>,
-    _stencil_kind: PhantomData<S>,
+    _depth_stencil_kind: PhantomData<DS>,
 }
 
 impl<
         const NUM_COLOR_ATTACHMENTS: usize,
         V: PipelineFunction<VertexFunctionType>,
         F: PipelineFunction<FragmentFunctionType>,
-        D: DepthAttachmentKind,
-        S: StencilAttachmentKind,
-    > RenderPipeline<NUM_COLOR_ATTACHMENTS, V, F, D, S>
+        DS: DepthStencilKind,
+    > RenderPipeline<NUM_COLOR_ATTACHMENTS, V, F, DS>
 {
     pub fn new(
         label: &str,
@@ -353,8 +485,7 @@ impl<
         colors: [ColorAttachementPipelineDesc; NUM_COLOR_ATTACHMENTS],
         vertex_function: V,
         fragment_function: F,
-        depth_kind: D,
-        stencil_kind: S,
+        depth_stencil_kind: DS,
     ) -> Self {
         debug_time("RenderPipeline", || {
             let pipeline_desc = RenderPipelineDescriptor::new();
@@ -367,8 +498,7 @@ impl<
                     .expect("Failed to access color attachment on pipeline descriptor");
                 ColorAttachement::setup_pipeline_attachment(colors[i], &desc);
             }
-            depth_kind.setup_pipeline_attachment(&pipeline_desc);
-            stencil_kind.setup_pipeline_attachment(&pipeline_desc);
+            depth_stencil_kind.setup_pipeline_attachment(&pipeline_desc);
             vertex_function.setup_pipeline(library, &pipeline_desc);
             fragment_function.setup_pipeline(library, &pipeline_desc);
             let pipeline = device
@@ -378,28 +508,24 @@ impl<
                 pipeline,
                 _vertex_function: PhantomData,
                 _fragment_function: PhantomData,
-                _depth_kind: PhantomData,
-                _stencil_kind: PhantomData,
+                _depth_stencil_kind: PhantomData,
             }
         })
     }
 
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // This should include:
-    // 1. vertex/fragment binds
-    // 2. #[inline(always)] to make sure binds have perfect/near-perfect codegen
-    // 3. A slice/array of Resource's (new trait) to power use_resource/use_heap_at/etc.
     #[inline(always)]
-    pub fn new_pass<'a, 'b, 'c>(
-        &self,
+    pub fn new_pass<'a, 'b>(
+        &'a self,
         label: &'static str,
         command_buffer: &'a CommandBufferRef,
         color_attachments: [ColorAttachementRenderPassDesc; NUM_COLOR_ATTACHMENTS],
-        depth_attachment: D::RenderPassDesc<'b>,
-        stencil_attachment: S::RenderPassDesc<'c>,
-    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, D, S> {
+        depth_attachment: <DS::DepthKind as DepthAttachmentKind>::RenderPassDesc<'b>,
+        stencil_attachment: <DS::StencilKind as StencilAttachmentKind>::RenderPassDesc<'b>,
+        depth_state: DS::DepthState<'b>,
+        vertex_binds: V::Binds<'b>,
+        fragment_binds: F::Binds<'b>,
+        resources: &[&dyn ResourceUsage],
+    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS> {
         let desc = RenderPassDescriptor::new();
         for i in 0..NUM_COLOR_ATTACHMENTS {
             let c = color_attachments[i];
@@ -409,36 +535,48 @@ impl<
                 .expect("Failed to access color attachment on render pass descriptor");
             ColorAttachement::setup_render_pass_attachment(c, a);
         }
-        D::setup_render_pass_attachment(depth_attachment, desc);
-        S::setup_render_pass_attachment(stencil_attachment, desc);
+        DS::setup_render_pass_attachment(depth_attachment, stencil_attachment, desc);
         let encoder = command_buffer.new_render_command_encoder(desc);
         encoder.set_label(label);
         encoder.set_render_pipeline_state(&self.pipeline);
+        depth_state.setup_render_pass(encoder);
+        V::bind(encoder, vertex_binds);
+        F::bind(encoder, fragment_binds);
+        for r in resources {
+            r.use_resource(encoder)
+        }
         RenderPass {
             encoder,
             _vertex: PhantomData,
             _fragment: PhantomData,
-            _depth: PhantomData,
-            _stencil: PhantomData,
+            _depth_stencil: PhantomData,
         }
     }
     #[inline(always)]
     pub fn new_subpass<
         'a,
+        'b,
         VPrev: PipelineFunction<VertexFunctionType>,
         FPrev: PipelineFunction<FragmentFunctionType>,
     >(
         &'a self,
-        prev: RenderPass<'a, NUM_COLOR_ATTACHMENTS, VPrev, FPrev, D, S>,
-    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, D, S> {
+        prev: RenderPass<'a, NUM_COLOR_ATTACHMENTS, VPrev, FPrev, DS>,
+        new_depth_state: Option<DS::DepthState<'b>>,
+        vertex_binds: V::Binds<'b>,
+        fragment_binds: F::Binds<'b>,
+    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS> {
         let encoder = prev.encoder;
         encoder.set_render_pipeline_state(&self.pipeline);
+        if let Some(depth_state) = new_depth_state {
+            depth_state.setup_render_pass(encoder)
+        }
+        V::bind(encoder, vertex_binds);
+        F::bind(encoder, fragment_binds);
         RenderPass {
             encoder,
             _vertex: PhantomData,
             _fragment: PhantomData,
-            _depth: PhantomData,
-            _stencil: PhantomData,
+            _depth_stencil: PhantomData,
         }
     }
 }
@@ -599,21 +737,23 @@ mod test {
             MTLResourceOptions::StorageModeManaged,
         );
 
+        let depth_state = device.new_depth_stencil_state(&DepthStencilDescriptor::new());
+
         {
-            let p: RenderPipeline<1, Vertex1, Fragment1, NoDepth, NoStencil> = RenderPipeline::new(
-                "Test",
-                &device,
-                &lib,
-                [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
-                Vertex1 {
-                    function_constant_1: true,
-                },
-                Fragment1 {
-                    function_constant_2: true,
-                },
-                NoDepth,
-                NoStencil,
-            );
+            let p: RenderPipeline<1, Vertex1, Fragment1, (NoDepth, NoStencil)> =
+                RenderPipeline::new(
+                    "Test",
+                    &device,
+                    &lib,
+                    [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                    Vertex1 {
+                        function_constant_1: true,
+                    },
+                    Fragment1 {
+                        function_constant_2: true,
+                    },
+                    (NoDepth, NoStencil),
+                );
             let pass = p.new_pass(
                 "test label",
                 command_buffer,
@@ -625,8 +765,7 @@ mod test {
                 )],
                 NoDepth,
                 NoStencil,
-            );
-            pass.bind(
+                NoDepthState,
                 Vertex1Binds {
                     v_bind1: BindMany::Values(&[0_f32]),
                 },
@@ -634,6 +773,7 @@ mod test {
                     f_bind1: Bind::Value(&f32x4::splat(0.).into()),
                     f_tex2: BindTexture(&texture),
                 },
+                &[],
             );
             pass.bind(
                 Vertex1Binds {
@@ -646,23 +786,23 @@ mod test {
             );
         }
         {
-            let p: RenderPipeline<2, Vertex1, Fragment1, NoDepth, NoStencil> = RenderPipeline::new(
-                "Test",
-                &device,
-                &lib,
-                [
-                    (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
-                    (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
-                ],
-                Vertex1 {
-                    function_constant_1: true,
-                },
-                Fragment1 {
-                    function_constant_2: true,
-                },
-                NoDepth,
-                NoStencil,
-            );
+            let p: RenderPipeline<2, Vertex1, Fragment1, (NoDepth, NoStencil)> =
+                RenderPipeline::new(
+                    "Test",
+                    &device,
+                    &lib,
+                    [
+                        (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
+                        (MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend),
+                    ],
+                    Vertex1 {
+                        function_constant_1: true,
+                    },
+                    Fragment1 {
+                        function_constant_2: true,
+                    },
+                    (NoDepth, NoStencil),
+                );
             let pass = p.new_pass(
                 "test label",
                 command_buffer,
@@ -682,8 +822,89 @@ mod test {
                 ],
                 NoDepth,
                 NoStencil,
+                NoDepthState,
+                Vertex1Binds {
+                    v_bind1: BindMany::Values(&[0.]),
+                },
+                Frag1Binds {
+                    f_bind1: Bind::Value(&f32x4::splat(1.).into()),
+                    f_tex2: BindTexture(&texture),
+                },
+                &[],
             );
-            pass.bind(
+        }
+        {
+            let p1: RenderPipeline<1, Vertex1, Fragment1, (NoDepth, NoStencil)> =
+                RenderPipeline::new(
+                    "Test",
+                    &device,
+                    &lib,
+                    [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                    Vertex1 {
+                        function_constant_1: true,
+                    },
+                    Fragment1 {
+                        function_constant_2: true,
+                    },
+                    (NoDepth, NoStencil),
+                );
+            let p2: RenderPipeline<1, Vertex1, Fragment1, (NoDepth, NoStencil)> =
+                RenderPipeline::new(
+                    "Test",
+                    &device,
+                    &lib,
+                    [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                    Vertex1 {
+                        function_constant_1: true,
+                    },
+                    Fragment1 {
+                        function_constant_2: true,
+                    },
+                    (NoDepth, NoStencil),
+                );
+
+            let p3_incompatible_has_depth: RenderPipeline<
+                1,
+                Vertex1,
+                Fragment1,
+                (HasDepth, NoStencil),
+            > = RenderPipeline::new(
+                "Test",
+                &device,
+                &lib,
+                [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
+                Vertex1 {
+                    function_constant_1: true,
+                },
+                Fragment1 {
+                    function_constant_2: true,
+                },
+                (HasDepth(MTLPixelFormat::Depth16Unorm), NoStencil),
+            );
+            let pass = p1.new_pass(
+                "test label",
+                command_buffer,
+                [(
+                    color1,
+                    (0., 0., 0., 0.),
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                )],
+                NoDepth,
+                NoStencil,
+                NoDepthState,
+                Vertex1Binds {
+                    v_bind1: BindMany::Values(&[0.]),
+                },
+                Frag1Binds {
+                    f_bind1: Bind::Value(&f32x4::splat(1.).into()),
+                    f_tex2: BindTexture(&texture),
+                },
+                &[],
+            );
+            let pass2 = p2.new_subpass(
+                pass,
+                None,
                 Vertex1Binds {
                     v_bind1: BindMany::Values(&[0.]),
                 },
@@ -692,14 +913,28 @@ mod test {
                     f_tex2: BindTexture(&texture),
                 },
             );
+
+            // IMPORTANT: Should fail because `pass` has already been spent (moved)
+            // let pass3 = p2.new_subpass(pass);
+
+            // IMPORTANT: Should fail because `pass2` is incompatible with the pass (has depth, but pass/pass2 do not)
+            // let pass3 = p3_incompatible_has_depth.new_subpass(
+            //     pass2,
+            //     Vertex1Binds {
+            //         v_bind1: BindMany::Values(&[0.]),
+            //     },
+            //     Frag1Binds {
+            //         f_bind1: Bind::Value(&f32x4::splat(1.).into()),
+            //         f_tex2: BindTexture(&texture),
+            //     },
+            // );
         }
         {
             let p: RenderPipeline<
                 1,
                 Vertex2NoFunctionConstants,
                 NoFragmentFunction,
-                HasDepth,
-                HasStencil,
+                (HasDepth, HasStencil),
             > = RenderPipeline::new(
                 "Test",
                 &device,
@@ -707,8 +942,10 @@ mod test {
                 [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
                 Vertex2NoFunctionConstants,
                 NoFragmentFunction,
-                HasDepth(MTLPixelFormat::Depth16Unorm),
-                HasStencil(MTLPixelFormat::Stencil8),
+                (
+                    HasDepth(MTLPixelFormat::Depth16Unorm),
+                    HasStencil(MTLPixelFormat::Stencil8),
+                ),
             );
             let pass = p.new_pass(
                 "test label",
@@ -721,12 +958,12 @@ mod test {
                 )],
                 (depth, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
                 (stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
-            );
-            pass.bind(
+                &depth_state,
                 Vertex1Binds {
                     v_bind1: BindMany::Values(&[0.]),
                 },
                 NoBinds,
+                &[],
             );
         }
     }

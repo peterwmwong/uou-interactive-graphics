@@ -10,8 +10,7 @@ members = [
     "proj-1-*/",
     "proj-2-*/",
     "proj-3-*/",
-    "proj-4-*/",
-    "yolo"
+    "proj-4-*/"
 ]
 
 [profile.dev.package."*"]

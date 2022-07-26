@@ -153,7 +153,7 @@ impl MaterialKind for NoMaterial {
 }
 
 pub struct Model<G: Sized + Copy + Clone, MK: MaterialKind> {
-    heap: Heap,
+    pub heap: Heap,
     draws: Vec<MK::Draw>,
     pub geometry_max_bounds: MaxBounds,
     geometry_buffers: GeometryBuffers<G>,
@@ -212,14 +212,6 @@ impl<G: Sized + Copy + Clone, MK: MaterialKind> Model<G, MK> {
                 materials,
             }
         })
-    }
-
-    #[inline]
-    pub fn encode_use_resources(&self, encoder: &RenderCommandEncoderRef) {
-        encoder.use_heap_at(
-            &self.heap,
-            MTLRenderStages::Vertex | MTLRenderStages::Fragment,
-        )
     }
 
     #[inline]

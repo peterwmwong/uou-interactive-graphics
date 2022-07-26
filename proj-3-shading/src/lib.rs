@@ -33,11 +33,11 @@ struct Delegate {
     device: Device,
     library: Library,
     light: Camera,
-    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, HasDepth, NoStencil>,
+    light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (HasDepth, NoStencil)>,
     light_world_position: float4,
     matrix_model_to_world: f32x4x4,
     model: Model<Geometry, NoMaterial>,
-    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil>,
+    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (HasDepth, NoStencil)>,
     model_space: ModelSpace,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
@@ -47,7 +47,7 @@ fn create_model_pipeline(
     device: &Device,
     library: &Library,
     shading_mode: ShadingModeSelector,
-) -> RenderPipeline<1, main_vertex, main_fragment, HasDepth, NoStencil> {
+) -> RenderPipeline<1, main_vertex, main_fragment, (HasDepth, NoStencil)> {
     RenderPipeline::new(
         "Render Teapot Pipeline",
         device,
@@ -60,8 +60,7 @@ fn create_model_pipeline(
             OnlyNormals: shading_mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: shading_mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        HasDepth(DEPTH_TEXTURE_FORMAT),
-        NoStencil,
+        (HasDepth(DEPTH_TEXTURE_FORMAT), NoStencil),
     )
 }
 
@@ -139,8 +138,7 @@ impl RendererDelgate for Delegate {
                 [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
                 light_vertex,
                 light_fragment,
-                HasDepth(DEPTH_TEXTURE_FORMAT),
-                NoStencil,
+                (HasDepth(DEPTH_TEXTURE_FORMAT), NoStencil),
             ),
             light_world_position: f32x4::default().into(),
             matrix_model_to_world,
@@ -181,24 +179,25 @@ impl RendererDelgate for Delegate {
                 MTLStoreAction::DontCare,
             ),
             NoStencil,
+            &self.depth_state,
+            main_vertex_binds {
+                geometry: Bind::Skip,
+                model: Bind::Value(&self.model_space),
+            },
+            main_fragment_binds {
+                camera: Bind::Value(&self.camera_space),
+                light_pos: Bind::Value(&self.light_world_position),
+            },
+            &[&HeapUsage(
+                &self.model.heap,
+                MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+            )],
         );
         let encoder = pass.encoder;
-        self.model.encode_use_resources(encoder);
-        encoder.set_depth_stencil_state(&self.depth_state);
 
         // Render Teapot
         {
             encoder.push_debug_group("Model");
-            pass.bind(
-                main_vertex_binds {
-                    geometry: Bind::Skip,
-                    model: Bind::Value(&self.model_space),
-                },
-                main_fragment_binds {
-                    camera: Bind::Value(&self.camera_space),
-                    light_pos: Bind::Value(&self.light_world_position),
-                },
-            );
             for DrawItemNoMaterial {
                 vertex_count,
                 geometry,
@@ -220,16 +219,20 @@ impl RendererDelgate for Delegate {
             encoder.pop_debug_group();
         }
         // Render Light
-        let pass = self.light_pipeline.new_subpass(pass);
         {
             encoder.push_debug_group("Light");
-            pass.bind(
-                light_vertex_binds {
-                    camera: Bind::Value(&self.camera_space),
-                    light_pos: Bind::Value(&self.light_world_position),
-                },
-                NoBinds,
-            );
+            let encoder = self
+                .light_pipeline
+                .new_subpass(
+                    pass,
+                    None,
+                    light_vertex_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        light_pos: Bind::Value(&self.light_world_position),
+                    },
+                    NoBinds,
+                )
+                .encoder;
             encoder.draw_primitives(MTLPrimitiveType::Point, 0, 1);
             encoder.pop_debug_group();
         }

@@ -22,7 +22,7 @@ struct Delegate {
     device: Device,
     model: Model<Geometry, NoMaterial>,
     needs_render: bool,
-    render_pipeline: RenderPipeline<1, main_vertex, main_fragment, NoDepth, NoStencil>,
+    render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (NoDepth, NoStencil)>,
     vertex_input: VertexInput,
 }
 
@@ -66,8 +66,7 @@ impl RendererDelgate for Delegate {
                     [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
                     main_vertex,
                     main_fragment,
-                    NoDepth,
-                    NoStencil,
+                    (NoDepth, NoStencil),
                 )
             },
             vertex_input: VertexInput {
@@ -100,15 +99,15 @@ impl RendererDelgate for Delegate {
             )],
             NoDepth,
             NoStencil,
-        );
-        let encoder = pass.encoder;
-        pass.bind(
+            NoDepthState,
             main_vertex_binds {
                 r#in: Bind::Value(&self.vertex_input),
                 geometry: Bind::Skip,
             },
             NoBinds,
+            &[],
         );
+        let encoder = pass.encoder;
         for DrawItemNoMaterial {
             vertex_count,
             geometry,
