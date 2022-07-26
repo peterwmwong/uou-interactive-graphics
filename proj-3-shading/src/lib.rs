@@ -3,12 +3,7 @@
 mod shader_bindings;
 
 use metal_app::components::{Camera, DepthTexture, ShadingModeSelector};
-use metal_app::{
-    metal::*,
-    metal_types::*,
-    pipeline::{bind::*, render_pipeline::*},
-    *,
-};
+use metal_app::{metal::*, metal_types::*, pipeline::*, *};
 use shader_bindings::*;
 use std::ops::Neg;
 use std::{

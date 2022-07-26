@@ -1,10 +1,14 @@
+#![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::{components::Camera, metal::*, metal_types::*, *};
+use metal_app::{components::Camera, metal::*, metal_types::*, pipeline::*, *};
 use proj_4_textures::Delegate as Proj4Delegate;
 use shader_bindings::*;
-use std::{f32::consts::PI, simd::f32x2};
+use std::{
+    f32::consts::PI,
+    simd::{f32x2, SimdFloat},
+};
 
 const INITIAL_PLANE_TEXTURE_FILTER_MODE: TextureFilterMode = TextureFilterMode::Anistropic;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
@@ -14,7 +18,8 @@ struct CheckerboardDelegate {
     command_queue: CommandQueue,
     pub device: Device,
     needs_render: bool,
-    render_pipeline: RenderPipelineState,
+    render_pipeline:
+        RenderPipeline<1, checkerboard_vertex, checkerboard_fragment, (NoDepth, NoStencil)>,
 }
 
 impl RendererDelgate for CheckerboardDelegate {
@@ -22,21 +27,17 @@ impl RendererDelgate for CheckerboardDelegate {
         Self {
             command_queue: device.new_command_queue(),
             needs_render: true,
-            render_pipeline: create_render_pipeline(
+            render_pipeline: RenderPipeline::new(
+                "Checkerboard",
                 &device,
-                &new_render_pipeline_descriptor(
-                    "Checkerboard",
-                    &device
-                        .new_library_with_data(LIBRARY_BYTES)
-                        .expect("Failed to import shader metal lib."),
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    None,
-                    None,
-                    Some((&"checkerboard_vertex", 0)),
-                    Some((&"checkerboard_fragment", 0)),
-                ),
-            )
-            .pipeline_state,
+                &device
+                    .new_library_with_data(LIBRARY_BYTES)
+                    .expect("Failed to import shader metal lib."),
+                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                checkerboard_vertex,
+                checkerboard_fragment,
+                (NoDepth, NoStencil),
+            ),
             device,
         }
     }
@@ -47,24 +48,21 @@ impl RendererDelgate for CheckerboardDelegate {
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
-        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-            Some((
+        self.render_pipeline.new_pass(
+            "Checkboard",
+            command_buffer,
+            [(
                 render_target,
                 (0., 0., 0., 0.),
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
-            )),
-            None,
-            None,
-        ));
-        // Render Plane
-        {
-            encoder.push_debug_group("Checkerboard");
-            encoder.set_render_pipeline_state(&self.render_pipeline);
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
-            encoder.pop_debug_group();
-        }
-        encoder.end_encoding();
+            )],
+            NoDepth,
+            NoStencil,
+            NoDepthState,
+            &[],
+            |p| p.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4),
+        );
         command_buffer
     }
 
@@ -88,7 +86,7 @@ struct Delegate<R: RendererDelgate> {
     command_queue: CommandQueue,
     matrix_model_to_world: f32x4x4,
     matrix_model_to_projection: f32x4x4,
-    render_pipeline_state: RenderPipelineState,
+    render_pipeline_state: RenderPipeline<1, main_vertex, main_fragment, (NoDepth, NoStencil)>,
     plane_renderer: R,
     plane_texture: Option<Texture>,
     plane_texture_filter_mode: TextureFilterMode,
@@ -97,36 +95,6 @@ struct Delegate<R: RendererDelgate> {
 
 impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
     fn new(device: Device) -> Self {
-        let library = device
-            .new_library_with_data(LIBRARY_BYTES)
-            .expect("Failed to import shader metal lib.");
-        let render_pipeline_state = {
-            let p = create_render_pipeline(
-                &device,
-                &new_render_pipeline_descriptor(
-                    "Plane",
-                    &library,
-                    Some((DEFAULT_PIXEL_FORMAT, false)),
-                    None,
-                    None,
-                    Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                    Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-                ),
-            );
-            use debug_assert_pipeline_function_arguments::*;
-            debug_assert_render_pipeline_function_arguments(
-                &p,
-                &[value_arg::<float4x4>(
-                    VertexBufferIndex::MatrixModelToProjection as _,
-                )],
-                None,
-            );
-            p.pipeline_state
-        };
-        let matrix_model_to_world =
-            f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.) * f32x4x4::scale(0.5, 0.5, 0.5, 1.);
-        let command_queue = device.new_command_queue();
-
         Self {
             camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
@@ -134,14 +102,26 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                 false,
                 0.,
             ),
-            command_queue,
+            command_queue: device.new_command_queue(),
             matrix_model_to_projection: f32x4x4::identity(),
-            matrix_model_to_world,
+            matrix_model_to_world: f32x4x4::y_rotate(PI)
+                * f32x4x4::x_rotate(PI / 2.)
+                * f32x4x4::scale(0.5, 0.5, 0.5, 1.),
             needs_render: false,
-            plane_renderer: R::new(device),
             plane_texture_filter_mode: INITIAL_PLANE_TEXTURE_FILTER_MODE,
             plane_texture: None,
-            render_pipeline_state,
+            render_pipeline_state: RenderPipeline::new(
+                "Plane",
+                &device,
+                &device
+                    .new_library_with_data(LIBRARY_BYTES)
+                    .expect("Failed to import shader metal lib."),
+                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                main_vertex,
+                main_fragment,
+                (NoDepth, NoStencil),
+            ),
+            plane_renderer: R::new(device),
         }
     }
 
@@ -170,35 +150,34 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                 .new_command_buffer_with_unretained_references()
         };
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-            Some((
+        self.render_pipeline_state.new_pass(
+            "Plane",
+            command_buffer,
+            [(
                 render_target,
                 (0., 0., 0., 0.),
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
-            )),
-            None,
-            None,
-        ));
-        // Render Plane
-        {
-            encoder.push_debug_group("Plane");
-            encoder.set_render_pipeline_state(&self.render_pipeline_state);
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::MatrixModelToProjection as _,
-                &self.matrix_model_to_projection,
-            );
-            encoder.set_fragment_texture(FragBufferIndex::Texture as _, Some(plane_texture));
-            encode_fragment_bytes(
-                encoder,
-                FragBufferIndex::TextureFilterMode as _,
-                &self.plane_texture_filter_mode,
-            );
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4);
-            encoder.pop_debug_group();
-        }
-        encoder.end_encoding();
+            )],
+            NoDepth,
+            NoStencil,
+            NoDepthState,
+            &[],
+            |p| {
+                p.draw_primitives_with_bind(
+                    main_vertex_binds {
+                        matrix_model_to_projection: Bind::Value(&self.matrix_model_to_projection),
+                    },
+                    main_fragment_binds {
+                        texture: BindTexture(plane_texture),
+                        mode: Bind::Value(&self.plane_texture_filter_mode),
+                    },
+                    MTLPrimitiveType::TriangleStrip,
+                    0,
+                    4,
+                )
+            },
+        );
         command_buffer
     }
 

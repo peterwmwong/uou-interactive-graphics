@@ -6,7 +6,7 @@ use metal_app::{
     components::{Camera, CameraUpdate, DepthTexture, ShadingModeSelector},
     metal::*,
     metal_types::*,
-    pipeline::{bind::*, render_pipeline::*},
+    pipeline::*,
     *,
 };
 use shader_bindings::*;

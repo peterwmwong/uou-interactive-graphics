@@ -37,7 +37,7 @@ struct VertexOut
 
 [[vertex]]
 VertexOut main_vertex(         uint       vertex_id                  [[vertex_id]],
-                      constant float4x4 & matrix_model_to_projection [[buffer(VertexBufferIndex::MatrixModelToProjection)]])
+                      constant float4x4 & matrix_model_to_projection [[buffer(0)]])
 {
     constexpr const float2 plane_triange_strip_vertices[4] = {
         {-1.h, -1.h}, // Bottom Left
@@ -56,8 +56,8 @@ VertexOut main_vertex(         uint       vertex_id                  [[vertex_id
 
 [[fragment]]
 half4 main_fragment(         VertexOut           in      [[stage_in]],
-                             texture2d<half>     texture [[texture(FragBufferIndex::Texture)]],
-                    constant TextureFilterMode & mode    [[buffer(FragBufferIndex::TextureFilterMode)]])
+                             texture2d<half>     texture [[texture(0)]],
+                    constant TextureFilterMode & mode    [[buffer(0)]])
 {
     const sampler tx_sampler =
           mode == TextureFilterMode::Nearest    ? sampler(address::clamp_to_edge, mag_filter::nearest, min_filter::nearest, mip_filter::nearest)

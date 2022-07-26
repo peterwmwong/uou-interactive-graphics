@@ -11,16 +11,3 @@ enum struct TextureFilterMode: unsigned char
     Mipmap,
     Anistropic
 };
-
-enum struct VertexBufferIndex: unsigned char
-{
-    MatrixModelToProjection = 0,
-    LENGTH
-};
-
-enum struct FragBufferIndex: unsigned char
-{
-    Texture = 0,
-    TextureFilterMode,
-    LENGTH
-};

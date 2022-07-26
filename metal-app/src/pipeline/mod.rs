@@ -1,5 +1,10 @@
-pub mod bind;
-pub mod compute_pipeline;
+mod bind;
+mod compute_pipeline;
 pub mod function;
-pub mod pipeline_function;
-pub mod render_pipeline;
+mod pipeline_function;
+mod render_pipeline;
+
+pub use bind::*;
+pub use compute_pipeline::*;
+pub use pipeline_function::*;
+pub use render_pipeline::*;

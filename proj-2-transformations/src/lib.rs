@@ -1,12 +1,7 @@
 #![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
-use metal_app::{
-    components::Camera,
-    metal::*,
-    pipeline::{bind::*, render_pipeline::*},
-    *,
-};
+use metal_app::{components::Camera, metal::*, pipeline::*, *};
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
