@@ -169,7 +169,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                         matrix_model_to_projection: Bind::Value(&self.matrix_model_to_projection),
                     },
                     main_fragment_binds {
-                        texture: BindTexture(plane_texture),
+                        texture: BindTexture::Texture(plane_texture),
                         mode: Bind::Value(&self.plane_texture_filter_mode),
                     },
                     MTLPrimitiveType::TriangleStrip,

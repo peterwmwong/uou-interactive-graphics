@@ -15,7 +15,14 @@ fn create_cubemap_asset() {
     let cube_source_textures_dir = assets_dir.join("cubemap");
     build_hash::build_hash(
         &assets_dir.join("cubemap_asset_hash"),
-        &CUBE_TEXTURE_FILENAMES.map(|a| cube_source_textures_dir.join(a)),
+        &[
+            &cube_source_textures_dir.join("cubemap_posx.png").as_path(),
+            &cube_source_textures_dir.join("cubemap_negx.png").as_path(),
+            &cube_source_textures_dir.join("cubemap_posy.png").as_path(),
+            &cube_source_textures_dir.join("cubemap_negy.png").as_path(),
+            &cube_source_textures_dir.join("cubemap_posz.png").as_path(),
+            &cube_source_textures_dir.join("cubemap_negz.png").as_path(),
+        ],
         || {
             let cubemap_asset_dir = assets_dir.join("cubemap.asset");
             if std::fs::try_exists(&cubemap_asset_dir)

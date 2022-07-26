@@ -673,6 +673,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "proj-6-environment-mapping"
+version = "0.1.0"
+dependencies = [
+ "asset-compiler",
+ "build-hash",
+ "metal-app",
+ "metal-build",
+ "png",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

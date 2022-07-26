@@ -131,6 +131,14 @@ impl DepthState for &DepthStencilStateRef {
     }
 }
 
+impl DepthState for (&'_ DepthStencilStateRef, u32, u32) {
+    #[inline]
+    fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef) {
+        encoder.set_depth_stencil_state(self.0);
+        encoder.set_stencil_front_back_reference_value(self.1 as _, self.2 as _);
+    }
+}
+
 pub struct NoDepthState;
 impl DepthState for NoDepthState {
     #[inline]
@@ -164,7 +172,7 @@ pub trait DepthStencilKind {
 impl DepthStencilKind for (Depth, Stencil) {
     type DepthKind = Depth;
     type StencilKind = Stencil;
-    type DepthState<'a> = &'a DepthStencilStateRef;
+    type DepthState<'a> = (&'a DepthStencilStateRef, u32, u32);
 
     #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
@@ -196,7 +204,7 @@ impl DepthStencilKind for (Depth, NoStencil) {
 impl DepthStencilKind for (NoDepth, Stencil) {
     type DepthKind = NoDepth;
     type StencilKind = Stencil;
-    type DepthState<'a> = &'a DepthStencilStateRef;
+    type DepthState<'a> = (&'a DepthStencilStateRef, u32, u32);
 
     #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
@@ -465,6 +473,11 @@ impl<
                 _depth_stencil: PhantomData,
             });
         });
+    }
+
+    #[inline]
+    pub fn set_depth_stencil_state(&self, ds: DS::DepthState<'_>) {
+        ds.setup_render_pass(&self.encoder)
     }
 }
 
@@ -792,7 +805,7 @@ mod test {
                         },
                         Frag1Binds {
                             f_bind1: Bind::Value(&f32x4::splat(0.).into()),
-                            f_tex2: BindTexture(&texture),
+                            f_tex2: BindTexture::Texture(&texture),
                         },
                     );
                     pass.bind(
@@ -801,7 +814,7 @@ mod test {
                         },
                         Frag1Binds {
                             f_bind1: Bind::Buffer(BindBuffer::WithOffset(&float4_buffer, 0)),
-                            f_tex2: BindTexture(&texture),
+                            f_tex2: BindTexture::Texture(&texture),
                         },
                     );
                 },
@@ -853,7 +866,7 @@ mod test {
                         },
                         Frag1Binds {
                             f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-                            f_tex2: BindTexture(&texture),
+                            f_tex2: BindTexture::Texture(&texture),
                         },
                         MTLPrimitiveType::Triangle,
                         0,
@@ -911,7 +924,7 @@ mod test {
                         },
                         Frag1Binds {
                             f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-                            f_tex2: BindTexture(&texture),
+                            f_tex2: BindTexture::Texture(&texture),
                         },
                         MTLPrimitiveType::Triangle,
                         0,
@@ -924,7 +937,7 @@ mod test {
                             },
                             Frag1Binds {
                                 f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-                                f_tex2: BindTexture(&texture),
+                                f_tex2: BindTexture::Texture(&texture),
                             },
                             MTLPrimitiveType::Triangle,
                             0,
@@ -963,7 +976,7 @@ mod test {
                 )],
                 (depth, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
                 (stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
-                &depth_state,
+                (&depth_state, 0, 0),
                 &[],
                 |pass| {
                     pass.draw_primitives_with_bind(

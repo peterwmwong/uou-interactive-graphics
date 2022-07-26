@@ -234,15 +234,11 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                         p.debug_group(name, || {
                             p.draw_primitives_with_bind(
                                 main_vertex_binds {
-                                    geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(
-                                        geometry,
-                                    )),
+                                    geometry: Bind::buffer_with_rolling_offset(geometry),
                                     model: Bind::Skip,
                                 },
                                 main_fragment_binds {
-                                    material: Bind::Buffer(BindBuffer::iterating_buffer_offset(
-                                        geometry.1, material,
-                                    )),
+                                    material: Bind::iterating_buffer_offset(geometry.1, material),
                                     camera: Bind::Skip,
                                     light_pos: Bind::Skip,
                                 },

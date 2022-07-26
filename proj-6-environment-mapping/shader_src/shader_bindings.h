@@ -9,25 +9,3 @@
 #include "../../metal-shaders/shader_src/bindings/model-space.h"
 #include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
-
-enum struct VertexBufferIndex: unsigned int
-{
-    Geometry = 0,
-    Camera,
-    Model,
-    LENGTH
-};
-
-enum struct FragBufferIndex: unsigned int
-{
-    Camera = 0,
-    LightPosition,
-    MatrixEnvironment,
-    Darken,
-    LENGTH
-};
-
-enum struct FragTextureIndex: unsigned int
-{
-    EnvTexture = 0
-};

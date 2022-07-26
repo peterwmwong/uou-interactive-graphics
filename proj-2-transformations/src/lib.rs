@@ -113,9 +113,7 @@ impl RendererDelgate for Delegate {
                     p.draw_primitives_with_bind(
                         main_vertex_binds {
                             r#in: Bind::Skip,
-                            geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(
-                                geometry,
-                            )),
+                            geometry: Bind::buffer_with_rolling_offset(geometry),
                         },
                         NoBinds,
                         MTLPrimitiveType::Point,

@@ -1,10 +1,13 @@
+#![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
+mod shader_bindings_skips;
 
 use metal_app::{
-    components::{Camera, ShadingModeSelector},
+    components::{Camera, DepthTexture, ShadingModeSelector},
     metal::*,
     metal_types::*,
+    pipeline::*,
     *,
 };
 use shader_bindings::*;
@@ -12,7 +15,7 @@ use std::{
     f32::consts::PI,
     ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4},
+    simd::{f32x2, f32x4, SimdFloat},
 };
 
 const BG_STENCIL_REF_VALUE: u32 = 0;
@@ -27,71 +30,47 @@ const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 
 struct Delegate {
     bg_depth_state: DepthStencilState,
-    bg_render_pipeline: RenderPipelineState,
+    bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, Stencil)>,
     camera: Camera,
     camera_space: ProjectedSpace,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
-    depth_texture: Option<Texture>,
+    depth_texture: DepthTexture,
     device: Device,
     library: Library,
-    main_render_pipeline: RenderPipelineState,
+    main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)>,
     matrix_model_to_world: f32x4x4,
     matrix_mirror_plane_model_to_world: f32x4x4,
     matrix_world_to_mirror_world: f32x4x4,
     mirrored_model_depth_state: DepthStencilState,
     mirror_plane_depth_state: DepthStencilState,
-    mirror_plane_model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
+    mirror_plane_model: Model<Geometry, NoMaterial>,
     model_depth_state: DepthStencilState,
-    model: Model<{ VertexBufferIndex::Geometry as _ }, { NO_MATERIALS_ID }>,
+    model: Model<Geometry, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
-    stencil_texture: Option<Texture>,
+    stencil_texture: DepthTexture,
 }
 
 fn create_main_render_pipeline(
     device: &Device,
     library: &Library,
     mode: ShadingModeSelector,
-) -> RenderPipelineState {
-    let function_constants = mode.encode(
-        FunctionConstantValues::new(),
-        ShadingMode::HasAmbient as _,
-        ShadingMode::HasDiffuse as _,
-        ShadingMode::HasSpecular as _,
-        ShadingMode::OnlyNormals as _,
-    );
-    // Model Pipeline
-    let p = create_render_pipeline(
-        &device,
-        &new_render_pipeline_descriptor_with_stencil(
-            "Model",
-            &library,
-            Some((DEFAULT_PIXEL_FORMAT, false)),
-            Some(DEPTH_TEXTURE_FORMAT),
-            Some(STENCIL_TEXTURE_FORMAT),
-            Some(&function_constants),
-            Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-        ),
-    );
-    use debug_assert_pipeline_function_arguments::*;
-    debug_assert_render_pipeline_function_arguments(
-        &p,
-        &[
-            value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
-            value_arg::<ProjectedSpace>(VertexBufferIndex::Camera as _),
-            value_arg::<ModelSpace>(VertexBufferIndex::Model as _),
-        ],
-        Some(&[
-            value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
-            value_arg::<float4>(FragBufferIndex::LightPosition as _),
-            value_arg::<float3x3>(FragBufferIndex::MatrixEnvironment as _),
-            value_arg::<f32>(FragBufferIndex::Darken as _),
-            texture_arg(FragTextureIndex::EnvTexture as _, MTLTextureType::Cube),
-        ]),
-    );
-    p.pipeline_state
+) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)> {
+    RenderPipeline::new(
+        "Model",
+        device,
+        library,
+        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        main_vertex,
+        main_fragment {
+            HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
+            HasDiffuse: mode.contains(ShadingModeSelector::HAS_DIFFUSE),
+            OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
+            HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
+        },
+        (Depth(DEPTH_TEXTURE_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
+    )
 }
 
 impl RendererDelgate for Delegate {
@@ -118,7 +97,7 @@ impl RendererDelgate for Delegate {
             PathBuf::from(model_file_path),
             &device,
             encode_geometry_arg,
-            NO_MATERIALS_ENCODER,
+            NoMaterial,
         );
         let mirror_plane_model = Model::from_file(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -128,7 +107,7 @@ impl RendererDelgate for Delegate {
                 .join("plane.obj"),
             &device,
             encode_geometry_arg,
-            NO_MATERIALS_ENCODER,
+            NoMaterial,
         );
         let &MaxBounds { center, size } = &model.geometry_max_bounds;
         let &[cx, cy, cz, _] = center.neg().as_array();
@@ -183,31 +162,15 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
-            bg_render_pipeline: {
-                let p = create_render_pipeline(
-                    &device,
-                    &new_render_pipeline_descriptor_with_stencil(
-                        "BG",
-                        &library,
-                        Some((DEFAULT_PIXEL_FORMAT, false)),
-                        Some(DEPTH_TEXTURE_FORMAT),
-                        Some(STENCIL_TEXTURE_FORMAT),
-                        Some(&FunctionConstantValues::new()),
-                        Some((&"bg_vertex", 0)),
-                        Some((&"bg_fragment", FragBufferIndex::LENGTH as _)),
-                    ),
-                );
-                use debug_assert_pipeline_function_arguments::*;
-                debug_assert_render_pipeline_function_arguments(
-                    &p,
-                    &[],
-                    Some(&[
-                        value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _),
-                        texture_arg(FragTextureIndex::EnvTexture as _, MTLTextureType::Cube),
-                    ]),
-                );
-                p.pipeline_state
-            },
+            bg_render_pipeline: RenderPipeline::new(
+                "BG",
+                &device,
+                &library,
+                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                bg_vertex,
+                bg_fragment,
+                (Depth(DEPTH_TEXTURE_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
+            ),
             camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
@@ -228,7 +191,7 @@ impl RendererDelgate for Delegate {
                         .join("cubemap.asset"),
                 )
             }),
-            depth_texture: None,
+            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
             main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
             matrix_model_to_world,
             matrix_world_to_mirror_world,
@@ -276,7 +239,7 @@ impl RendererDelgate for Delegate {
             model,
             needs_render: false,
             shading_mode,
-            stencil_texture: None,
+            stencil_texture: DepthTexture::new("Stencil", STENCIL_TEXTURE_FORMAT),
             device,
             library,
         }
@@ -284,139 +247,186 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        let draw_model = |p: &RenderPass<1, main_vertex, main_fragment, (Depth, Stencil)>,
+                          model: &Model<Geometry, NoMaterial>| {
+            for DrawItemNoMaterial {
+                name,
+                vertex_count,
+                geometry,
+            } in model.draws()
+            {
+                p.debug_group(name, || {
+                    p.draw_primitives_with_bind(
+                        main_vertex_binds {
+                            geometry: Bind::buffer_with_rolling_offset(geometry),
+                            ..main_vertex_binds::skip()
+                        },
+                        main_fragment_binds::skip(),
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        vertex_count,
+                    )
+                })
+            }
+        };
         self.needs_render = false;
 
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-            Some((
+        self.main_render_pipeline.new_pass(
+            "Model",
+            command_buffer,
+            [(
                 render_target,
                 (0., 0., 0., 0.),
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
-            )),
-            self.depth_texture
-                .as_ref()
-                .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
-            self.stencil_texture
-                .as_ref()
-                .map(|d| (d, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare)),
-        ));
-        self.model.encode_use_resources(encoder);
-        self.mirror_plane_model.encode_use_resources(encoder);
-        {
-            encoder.push_debug_group("Model");
-            encoder.set_render_pipeline_state(&self.main_render_pipeline);
-            encoder.set_depth_stencil_state(&self.model_depth_state);
-            encoder.set_stencil_reference_value(MODEL_STENCIL_REF_VALUE);
-            encode_vertex_bytes(encoder, VertexBufferIndex::Camera as _, &self.camera_space);
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::Model as _,
-                &ModelSpace {
-                    matrix_model_to_projection: self.camera_space.matrix_world_to_projection
-                        * self.matrix_model_to_world,
-                    matrix_normal_to_world: self.matrix_model_to_world.into(),
-                },
-            );
-            encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
-            encode_fragment_bytes(
-                encoder,
-                FragBufferIndex::LightPosition as _,
-                &LIGHT_POSITION,
-            );
-            encode_fragment_bytes(
-                encoder,
-                FragBufferIndex::MatrixEnvironment as _,
-                &Into::<float3x3>::into(f32x4x4::identity()),
-            );
-            encode_fragment_bytes(encoder, FragBufferIndex::Darken as _, &0_f32);
-            encoder.set_fragment_texture(
-                FragTextureIndex::EnvTexture as _,
-                Some(&self.cubemap_texture),
-            );
-            self.model.encode_draws(encoder);
-            encoder.pop_debug_group();
-        }
-        {
-            encoder.push_debug_group("Plane");
-            encoder.set_depth_stencil_state(&self.mirror_plane_depth_state);
-            encoder.set_stencil_reference_value(MIRROR_PLANE_STENCIL_REF_VALUE);
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::Model as _,
-                &ModelSpace {
-                    matrix_model_to_projection: self.camera_space.matrix_world_to_projection
-                        * self.matrix_mirror_plane_model_to_world,
-                    matrix_normal_to_world: self.matrix_mirror_plane_model_to_world.into(),
-                },
-            );
-            self.mirror_plane_model.encode_draws(encoder);
-            encoder.pop_debug_group();
-        }
-        {
-            let mirror_camera_space = ProjectedSpace {
-                matrix_world_to_projection: self.camera_space.matrix_world_to_projection
-                    * self.matrix_world_to_mirror_world,
-                // TODO: I'm not sure this is right, shouldn't it be matrix_mirror_world_to_world, not matrix_world_to_mirror_world
-                //                                                          aaaaaaaaaaaa    bbbbb             bbbbb    aaaaaaaaaaaa
-                // - I think this only works because matrix_world_to_mirror_world is involution (inverse is the same).
-                // - `matrix_world_to_projection` (Metal than transforms to screen)
-                //      world -> mirror world -> projection -> screen
-                // - Also, does the Fragment Shader need a mirror world or world coordinate?
-                //      - `matrix_screen_to_world`
-                //          screen -> projection -> world -> mirror world (current)
-                //          VS.
-                //          screen -> projection -> mirror world -> world
-                matrix_screen_to_world: self.matrix_world_to_mirror_world
-                    * self.camera_space.matrix_screen_to_world,
-                position_world: self.camera_space.position_world,
-            };
-            encoder.push_debug_group("Model (mirrored)");
-            encoder.set_depth_stencil_state(&self.mirrored_model_depth_state);
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::Camera as _,
-                &mirror_camera_space,
-            );
-            encode_vertex_bytes(
-                encoder,
-                VertexBufferIndex::Model as _,
-                &ModelSpace {
-                    matrix_model_to_projection: mirror_camera_space.matrix_world_to_projection
-                        * self.matrix_model_to_world,
-                    matrix_normal_to_world: (self.matrix_world_to_mirror_world
-                        * self.matrix_model_to_world)
-                        .into(),
-                },
-            );
-            encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &mirror_camera_space);
-            encode_fragment_bytes(encoder, FragBufferIndex::Darken as _, &0.5_f32);
-            encode_fragment_bytes(
-                encoder,
-                FragBufferIndex::LightPosition as _,
-                &(self.matrix_world_to_mirror_world * LIGHT_POSITION),
-            );
-            encode_fragment_bytes(
-                encoder,
-                FragBufferIndex::MatrixEnvironment as _,
-                &Into::<float3x3>::into(self.matrix_world_to_mirror_world),
-            );
-            self.model.encode_draws(encoder);
-            encoder.pop_debug_group();
-        }
-        {
-            encoder.push_debug_group("BG");
-            encoder.set_render_pipeline_state(&self.bg_render_pipeline);
-            encoder.set_depth_stencil_state(&self.bg_depth_state);
-            encoder.set_stencil_reference_value(BG_STENCIL_REF_VALUE);
-            encode_fragment_bytes(encoder, FragBufferIndex::Camera as _, &self.camera_space);
-            encoder.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 3);
-            encoder.pop_debug_group();
-        }
-        encoder.end_encoding();
+            )],
+            (
+                self.depth_texture.texture(),
+                1.,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
+            (
+                self.stencil_texture.texture(),
+                0,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
+            (
+                &self.model_depth_state,
+                MODEL_STENCIL_REF_VALUE,
+                MODEL_STENCIL_REF_VALUE,
+            ),
+            &[
+                &HeapUsage(
+                    &self.model.heap,
+                    MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+                ),
+                &HeapUsage(
+                    &self.mirror_plane_model.heap,
+                    MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+                ),
+            ],
+            |p| {
+                p.bind(
+                    main_vertex_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        model: Bind::Value(&ModelSpace {
+                            matrix_model_to_projection: self
+                                .camera_space
+                                .matrix_world_to_projection
+                                * self.matrix_model_to_world,
+                            matrix_normal_to_world: self.matrix_model_to_world.into(),
+                        }),
+                        ..main_vertex_binds::skip()
+                    },
+                    main_fragment_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        light_pos: Bind::Value(&LIGHT_POSITION.into()),
+                        matrix_env: Bind::Value(&f32x4x4::identity().into()),
+                        darken: Bind::Value(&0_f32),
+                        env_texture: BindTexture::Texture(&self.cubemap_texture),
+                    },
+                );
+                draw_model(&p, &self.model);
+                p.debug_group("Plane", || {
+                    p.set_depth_stencil_state((
+                        &self.mirror_plane_depth_state,
+                        MIRROR_PLANE_STENCIL_REF_VALUE,
+                        MIRROR_PLANE_STENCIL_REF_VALUE,
+                    ));
+                    p.bind(
+                        main_vertex_binds {
+                            model: Bind::Value(&ModelSpace {
+                                matrix_model_to_projection: self
+                                    .camera_space
+                                    .matrix_world_to_projection
+                                    * self.matrix_mirror_plane_model_to_world,
+                                matrix_normal_to_world: self
+                                    .matrix_mirror_plane_model_to_world
+                                    .into(),
+                            }),
+                            ..main_vertex_binds::skip()
+                        },
+                        main_fragment_binds::skip(),
+                    );
+                    draw_model(&p, &&self.mirror_plane_model);
+                });
+                p.debug_group("Model (mirrored)", || {
+                    let mirror_camera_space = ProjectedSpace {
+                        matrix_world_to_projection: self.camera_space.matrix_world_to_projection
+                            * self.matrix_world_to_mirror_world,
+                        // TODO: I'm not sure this is right, shouldn't it be matrix_mirror_world_to_world, not matrix_world_to_mirror_world
+                        //                                                          aaaaaaaaaaaa    bbbbb             bbbbb    aaaaaaaaaaaa
+                        // - I think this only works because matrix_world_to_mirror_world is involution (inverse is the same).
+                        // - `matrix_world_to_projection` (Metal than transforms to screen)
+                        //      world -> mirror world -> projection -> screen
+                        // - Also, does the Fragment Shader need a mirror world or world coordinate?
+                        //      - `matrix_screen_to_world`
+                        //          screen -> projection -> world -> mirror world (current)
+                        //          VS.
+                        //          screen -> projection -> mirror world -> world
+                        matrix_screen_to_world: self.matrix_world_to_mirror_world
+                            * self.camera_space.matrix_screen_to_world,
+                        position_world: self.camera_space.position_world,
+                    };
+                    p.set_depth_stencil_state((
+                        &self.mirrored_model_depth_state,
+                        MIRROR_PLANE_STENCIL_REF_VALUE,
+                        MIRROR_PLANE_STENCIL_REF_VALUE,
+                    ));
+                    p.bind(
+                        main_vertex_binds {
+                            camera: Bind::Value(&mirror_camera_space),
+                            model: Bind::Value(&ModelSpace {
+                                matrix_model_to_projection: mirror_camera_space
+                                    .matrix_world_to_projection
+                                    * self.matrix_model_to_world,
+                                matrix_normal_to_world: (self.matrix_world_to_mirror_world
+                                    * self.matrix_model_to_world)
+                                    .into(),
+                            }),
+                            ..main_vertex_binds::skip()
+                        },
+                        main_fragment_binds {
+                            camera: Bind::Value(&mirror_camera_space),
+                            darken: Bind::Value(&0.5),
+                            light_pos: Bind::Value(
+                                &(self.matrix_world_to_mirror_world * LIGHT_POSITION).into(),
+                            ),
+                            matrix_env: Bind::Value(&self.matrix_world_to_mirror_world.into()),
+                            ..main_fragment_binds::skip()
+                        },
+                    );
+                    draw_model(&p, &self.model);
+                });
+                p.into_subpass(
+                    "BG",
+                    &self.bg_render_pipeline,
+                    Some((
+                        &self.bg_depth_state,
+                        BG_STENCIL_REF_VALUE,
+                        BG_STENCIL_REF_VALUE,
+                    )),
+                    |p| {
+                        p.draw_primitives_with_bind(
+                            NoBinds,
+                            bg_fragment_binds {
+                                camera: Bind::Value(&self.camera_space),
+                                ..bg_fragment_binds::skip()
+                            },
+                            MTLPrimitiveType::Triangle,
+                            0,
+                            3,
+                        )
+                    },
+                );
+            },
+        );
         command_buffer
     }
 
@@ -429,17 +439,14 @@ impl RendererDelgate for Delegate {
 
             self.needs_render = true;
         }
-
         if self.shading_mode.on_event(event) {
             self.update_mode();
         }
-
-        match event {
-            UserEvent::WindowFocusedOrResized { size } => {
-                self.update_textures_size(size);
-                self.needs_render = true;
-            }
-            _ => {}
+        if self.depth_texture.on_event(event, &self.device) {
+            self.needs_render = true;
+        }
+        if self.stencil_texture.on_event(event, &self.device) {
+            self.needs_render = true;
         }
     }
 
@@ -454,30 +461,6 @@ impl RendererDelgate for Delegate {
 }
 
 impl Delegate {
-    #[inline]
-    fn update_textures_size(&mut self, size: f32x2) {
-        let desc = TextureDescriptor::new();
-        let &[x, y] = size.as_array();
-        desc.set_width(x as _);
-        desc.set_height(y as _);
-        desc.set_storage_mode(MTLStorageMode::Memoryless);
-        desc.set_usage(MTLTextureUsage::RenderTarget);
-
-        self.depth_texture = Some({
-            desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
-            let texture = self.device.new_texture(&desc);
-            texture.set_label("Depth");
-            texture
-        });
-
-        self.stencil_texture = Some({
-            desc.set_pixel_format(STENCIL_TEXTURE_FORMAT);
-            let texture = self.device.new_texture(&desc);
-            texture.set_label("Stencil");
-            texture
-        });
-    }
-
     #[inline]
     fn update_mode(&mut self) {
         self.main_render_pipeline =

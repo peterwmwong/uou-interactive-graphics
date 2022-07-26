@@ -12,9 +12,9 @@ struct VertexOut
 
 vertex VertexOut
 main_vertex(         uint             vertex_id             [[vertex_id]],
-            constant Geometry       & geometry              [[buffer(VertexBufferIndex::Geometry)]],
-            constant ProjectedSpace & camera                [[buffer(VertexBufferIndex::Camera)]],
-            constant ModelSpace     & model                 [[buffer(VertexBufferIndex::Model)]])
+            constant Geometry       & geometry              [[buffer(0)]],
+            constant ProjectedSpace & camera                [[buffer(1)]],
+            constant ModelSpace     & model                 [[buffer(2)]])
 {
     const uint idx      = geometry.indices[vertex_id];
     const float4 pos    = model.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
@@ -24,16 +24,16 @@ main_vertex(         uint             vertex_id             [[vertex_id]],
 
 fragment half4
 main_fragment(         VertexOut           in          [[stage_in]],
-              constant ProjectedSpace    & camera      [[buffer(FragBufferIndex::Camera)]],
-              constant float4            & light_pos   [[buffer(FragBufferIndex::LightPosition)]],
+              constant ProjectedSpace    & camera      [[buffer(0)]],
+              constant float4            & light_pos   [[buffer(1)]],
               // The goal is to transform the environment. When rendering the mirrored
               // world, we need to transformed all the objects of the world, including
               // the environment (flip the environment texture). Instead of creating a
               // separate "mirrored" environment texture, we change the sampling
               // direction achieving the same result.
-              constant float3x3          & matrix_env  [[buffer(FragBufferIndex::MatrixEnvironment)]],
-              constant float             & darken      [[buffer(FragBufferIndex::Darken)]],
-                       texturecube<half>   env_texture [[texture(FragTextureIndex::EnvTexture)]])
+              constant float3x3          & matrix_env  [[buffer(2)]],
+              constant float             & darken      [[buffer(3)]],
+                       texturecube<half>   env_texture [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
@@ -84,8 +84,8 @@ bg_vertex(uint vertex_id [[vertex_id]])
 
 fragment half4
 bg_fragment(         BGVertexOut         in          [[stage_in]],
-            constant ProjectedSpace    & camera      [[buffer(FragBufferIndex::Camera)]],
-                     texturecube<half>   env_texture [[texture(FragTextureIndex::EnvTexture)]])
+            constant ProjectedSpace    & camera      [[buffer(0)]],
+                     texturecube<half>   env_texture [[texture(0)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
     const float4 pos   = camera.matrix_screen_to_world * float4(in.position.xy, 1, 1);
