@@ -41,30 +41,6 @@ impl<'a, T: Sized + Copy + Clone> AnyBind<T> for Bind<'a, T> {
         }
     }
 }
-impl<'a, T: Sized + Copy + Clone> Bind<'a, T> {
-    #[inline]
-    pub fn buffer_with_rolling_offset(
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if element_offset == 0 {
-            Self::Buffer(BindBuffer::WithOffset(buffer, 0))
-        } else {
-            Self::Buffer(BindBuffer::Offset(element_offset))
-        }
-    }
-
-    #[inline]
-    pub fn iterating_buffer_offset(
-        iteration: usize,
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if iteration == 0 {
-            Self::Buffer(BindBuffer::WithOffset(buffer, element_offset))
-        } else {
-            Self::Buffer(BindBuffer::Offset(element_offset))
-        }
-    }
-}
 
 pub enum BindMany<'a, T: Sized + Copy + Clone> {
     Values(&'a [T]),
@@ -81,30 +57,37 @@ impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindMany<'a, T> {
         }
     }
 }
-impl<'a, T: Sized + Copy + Clone> BindMany<'a, T> {
-    #[inline]
-    pub fn buffer_with_rolling_offset(
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if element_offset == 0 {
-            Self::Buffer(BindBuffer::WithOffset(buffer, 0))
-        } else {
-            Self::Buffer(BindBuffer::Offset(element_offset))
-        }
-    }
 
-    #[inline]
-    pub fn iterating_buffer_offset(
-        iteration: usize,
-        (buffer, element_offset): (&'a TypedBuffer<T>, usize),
-    ) -> Self {
-        if iteration == 0 {
-            Self::Buffer(BindBuffer::WithOffset(buffer, element_offset))
-        } else {
-            Self::Buffer(BindBuffer::Offset(element_offset))
+macro_rules! impl_bind_buffer_helpers {
+    ($bind_ident:ident) => {
+        impl<'a, T: Sized + Copy + Clone> $bind_ident<'a, T> {
+            #[inline]
+            pub fn buffer_with_rolling_offset(
+                (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+            ) -> Self {
+                if element_offset == 0 {
+                    Self::Buffer(BindBuffer::WithOffset(buffer, 0))
+                } else {
+                    Self::Buffer(BindBuffer::Offset(element_offset))
+                }
+            }
+
+            #[inline]
+            pub fn iterating_buffer_offset(
+                iteration: usize,
+                (buffer, element_offset): (&'a TypedBuffer<T>, usize),
+            ) -> Self {
+                if iteration == 0 {
+                    Self::Buffer(BindBuffer::WithOffset(buffer, element_offset))
+                } else {
+                    Self::Buffer(BindBuffer::Offset(element_offset))
+                }
+            }
         }
-    }
+    };
 }
+impl_bind_buffer_helpers!(Bind);
+impl_bind_buffer_helpers!(BindMany);
 
 pub enum BindTexture<'a> {
     Texture(&'a TextureRef),
