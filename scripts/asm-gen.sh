@@ -27,23 +27,29 @@ i=0
 while IFS= read -r line; do
     func=$(echo "$line" | cut -d\| -f1)
     size=$(echo "$line" | cut -d\| -f2)
+    funcs[${i}]="$func"
+    sizes[${i}]="$size"
     echo "/* $size */ \"$func\":\`" > "$TMP_OUTPUT_PATH$i"
     cargo $DEFAULT_CARGO_ASM_ARGS "$func" |
         tail -n +2 |                                               # Remove first line (function name, already printed above).
-        egrep -v "^L(tmp|loh|BB)\d+" |                             # Remove lines that labels (diff noise reduction)
-        sed 's/LBB\([0-9]\)*_\([0-9]\)*/LBB###/g' |                # Normalize all Branch Labels (diff noise reduction), ex. LBB123_1 -> LBB###
-        sed 's/Lloh\([0-9]\)*/Lloh###/g' >> "$TMP_OUTPUT_PATH$i" & # Normalize all Lloh Addresses (diff noise reduction), ex. Lloh123 -> Lloh123
+        egrep -v "^L(tmp|loh)\d+" |                                # Remove lines with inconsequential labels (diff noise reduction)
+        #
+        # NOT RECOMMENDED: If you really don't care about *any* labels or branches...
+        # egrep -v "^L(tmp|loh|BB)\d+" |                           # Remove lines with labels
+        # sed 's/LBB\([0-9]\)*_\([0-9]\)*/LBB###/g' |              # Normalize all Branch Labels, ex. LBB123_1 -> LBB###
+        #
+        sed 's/Lloh\([0-9]\)*/Lloh###/g' >> "$TMP_OUTPUT_PATH$i" & # Normalize all Lloh Addresses (diff noise reduction), ex. Lloh123 -> Lloh###
     pids[${i}]=$!
     i=$((i+1))
 done <<< "$FUNCTION_LIST"
 
 echo "/*" > "$TMP_OUTPUT_PATH"
 padding=$(printf '%0.1s' " "{1..9})
-while IFS= read -r line; do
-    func=$(echo "$line" | cut -d\| -f1)
-    size=$(echo "$line" | cut -d\| -f2)
+for i in ${!funcs[@]}; do
+    func="${funcs[$i]}"
+    size="${sizes[$i]}"
     printf "%s%s %s\n" "${padding:${#size}}" "$size" "$func" >> "$TMP_OUTPUT_PATH"
-done <<< "$FUNCTION_LIST"
+done
 echo "*/" >> "$TMP_OUTPUT_PATH"
 
 echo "export default {" >> "$TMP_OUTPUT_PATH"
