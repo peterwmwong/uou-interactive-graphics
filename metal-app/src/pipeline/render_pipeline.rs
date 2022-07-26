@@ -14,21 +14,18 @@ pub enum BlendMode {
     Blend, // TODO: Add all the ways to color blend (source/destination alpha/rgb, blend factor, operation, etc.)
 }
 
-type ColorAttachementPipelineDesc = (MTLPixelFormat, BlendMode);
-type ColorAttachementRenderPassDesc<'a> = (
+type ColorPipelineDesc = (MTLPixelFormat, BlendMode);
+type ColorRenderPassDesc<'a> = (
     &'a TextureRef,
     (f32, f32, f32, f32),
     MTLLoadAction,
     MTLStoreAction,
 );
 
-pub struct ColorAttachement;
-impl ColorAttachement {
+pub struct Color;
+impl Color {
     #[inline]
-    fn setup_pipeline(
-        desc: ColorAttachementPipelineDesc,
-        pass: &RenderPipelineColorAttachmentDescriptorRef,
-    ) {
+    fn setup_pipeline(desc: ColorPipelineDesc, pass: &RenderPipelineColorAttachmentDescriptorRef) {
         let (pixel_format, blend_mode) = desc;
         pass.set_pixel_format(pixel_format);
         pass.set_blending_enabled(matches!(blend_mode, BlendMode::Blend));
@@ -36,7 +33,7 @@ impl ColorAttachement {
 
     #[inline]
     fn setup_render_pass<'a>(
-        desc: ColorAttachementRenderPassDesc<'a>,
+        desc: ColorRenderPassDesc<'a>,
         a: &RenderPassColorAttachmentDescriptorRef,
     ) {
         let (render_target, (r, g, b, alpha), load_action, store_action) = desc;
@@ -331,7 +328,7 @@ impl PipelineFunctionType for FragmentFunctionType {
 pub struct NoBinds;
 pub struct NoFragmentFunction;
 impl function::Function for NoFragmentFunction {
-    const FUNCTION_NAME: &'static str = "<NoFragmentShader>";
+    const FUNCTION_NAME: &'static str = "<NoFragmentFunction>";
     type Binds<'a> = NoBinds;
 }
 impl PipelineFunction<FragmentFunctionType> for NoFragmentFunction {}
@@ -381,13 +378,6 @@ into_mtl_data_type!(metal_types::short, MTLDataType::Short);
 //       - ex. FS has `[[color(2)]]`, but NUM_COLOR_ATTACHMENTS is 1
 // 1. Sketch out what this would look like
 // 2. Does it actually worth the code generation complexity?
-
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Try alternatives for push/pop debug group and end_encoding
-// 1. closure
-// 2. Drop
 pub struct RenderPass<
     'a,
     const NUM_COLOR_ATTACHMENTS: usize,
@@ -409,50 +399,25 @@ impl<
         DS: DepthStencilKind,
     > RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS>
 {
-    #[inline]
+    // IMPORTANT: As of writing (7/25/2022), `inline(always)` is very crucial for generating decent
+    // code. With only `inline`, the compiler misjudges, doesn't inline and generates a bunch of
+    // branches associated with the `match` Bind/BindMany enum variant in `V::bind()`/`F::Bind()`.
+    #[inline(always)]
     pub fn bind<'b>(&'a self, vertex_binds: V::Binds<'b>, fragment_binds: F::Binds<'b>) {
         V::bind(self.encoder, vertex_binds);
         F::bind(self.encoder, fragment_binds);
     }
 
     #[inline]
-    pub fn into_subpass<
-        'b,
-        VNew: PipelineFunction<VertexFunctionType>,
-        FNew: PipelineFunction<FragmentFunctionType>,
-    >(
-        self,
-        subpass_pipeline: &'b RenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
-        new_depth_state: Option<DS::DepthState<'b>>,
-        vertex_binds: VNew::Binds<'b>,
-        fragment_binds: FNew::Binds<'b>,
-    ) -> RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS> {
-        let encoder = self.encoder;
-        encoder.set_render_pipeline_state(&subpass_pipeline.pipeline);
-        if let Some(depth_state) = new_depth_state {
-            depth_state.setup_render_pass(encoder)
-        }
-        VNew::bind(encoder, vertex_binds);
-        FNew::bind(encoder, fragment_binds);
-        // std::mem::forget(self);
-        RenderPass {
-            encoder,
-            _vertex: PhantomData,
-            _fragment: PhantomData,
-            _depth_stencil: PhantomData,
-        }
-    }
-    #[inline]
-    pub fn push_debug_group(&self, label: &str) {
+    pub fn debug_group(&self, label: &str, fun: impl FnOnce()) {
         self.encoder.push_debug_group(label);
-    }
-    #[inline]
-    pub fn pop_debug_group(&self) {
+        fun();
         self.encoder.pop_debug_group();
     }
+
     #[inline]
-    pub fn draw_primitives(
-        &self,
+    pub fn draw_primitives<'b>(
+        &'a self,
         primitive_type: MTLPrimitiveType,
         vertex_start: usize,
         vertex_count: usize,
@@ -460,25 +425,48 @@ impl<
         self.encoder
             .draw_primitives(primitive_type, vertex_start as _, vertex_count as _);
     }
+
     #[inline]
-    pub fn end_encoding(self) {
-        self.encoder.end_encoding();
+    pub fn draw_primitives_with_bind<'b>(
+        &'a self,
+        vertex_binds: V::Binds<'b>,
+        fragment_binds: F::Binds<'b>,
+        primitive_type: MTLPrimitiveType,
+        vertex_start: usize,
+        vertex_count: usize,
+    ) {
+        self.bind(vertex_binds, fragment_binds);
+        self.draw_primitives(primitive_type, vertex_start, vertex_count);
+    }
+
+    #[inline]
+    pub fn into_subpass<
+        'b,
+        VNew: PipelineFunction<VertexFunctionType>,
+        FNew: PipelineFunction<FragmentFunctionType>,
+        PF: FnOnce(RenderPass<'a, NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>),
+    >(
+        self,
+        debug_group: &str,
+        subpass_pipeline: &'b RenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
+        new_depth_state: Option<DS::DepthState<'b>>,
+        fun: PF,
+    ) {
+        let encoder = self.encoder;
+        self.debug_group(debug_group, || {
+            encoder.set_render_pipeline_state(&subpass_pipeline.pipeline);
+            if let Some(depth_state) = new_depth_state {
+                depth_state.setup_render_pass(encoder)
+            }
+            fun(RenderPass {
+                encoder,
+                _vertex: PhantomData,
+                _fragment: PhantomData,
+                _depth_stencil: PhantomData,
+            });
+        });
     }
 }
-
-// impl<
-//         'a,
-//         const NUM_COLOR_ATTACHMENTS: usize,
-//         V: PipelineFunction<VertexFunctionType>,
-//         F: PipelineFunction<FragmentFunctionType>,
-//         DS: DepthStencilKind,
-//     > Drop for RenderPass<'a, NUM_COLOR_ATTACHMENTS, V, F, DS>
-// {
-//     #[inline(always)]
-//     fn drop(&mut self) {
-//         self.encoder.end_encoding();
-//     }
-// }
 
 pub trait ResourceUsage {
     fn use_resource<'b>(&self, encoder: &'b RenderCommandEncoderRef);
@@ -539,7 +527,7 @@ impl<
         label: &str,
         device: &DeviceRef,
         library: &LibraryRef,
-        colors: [ColorAttachementPipelineDesc; NUM_COLOR_ATTACHMENTS],
+        colors: [ColorPipelineDesc; NUM_COLOR_ATTACHMENTS],
         vertex_function: V,
         fragment_function: F,
         depth_stencil_kind: DS,
@@ -553,7 +541,7 @@ impl<
                     .color_attachments()
                     .object_at(i as u64)
                     .expect("Failed to access color attachment on pipeline descriptor");
-                ColorAttachement::setup_pipeline(colors[i], &desc);
+                Color::setup_pipeline(colors[i], &desc);
             }
             depth_stencil_kind.setup_pipeline(&pipeline_desc);
             vertex_function.setup_pipeline(library, &pipeline_desc);
@@ -571,19 +559,17 @@ impl<
     }
 
     #[inline]
-    pub fn new_pass<'a, 'b, 'c>(
+    pub fn new_pass<'a, 'b, 'c, PF: FnOnce(RenderPass<'c, NUM_COLOR_ATTACHMENTS, V, F, DS>)>(
         &'a self,
         label: &'static str,
         command_buffer: &'a CommandBufferRef,
-        color_attachments: [ColorAttachementRenderPassDesc; NUM_COLOR_ATTACHMENTS],
+        color_attachments: [ColorRenderPassDesc; NUM_COLOR_ATTACHMENTS],
         depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
         stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
         depth_state: DS::DepthState<'b>,
-        vertex_binds: V::Binds<'b>,
-        fragment_binds: F::Binds<'b>,
         resources: &[&dyn ResourceUsage],
-    ) -> RenderPass<'c, NUM_COLOR_ATTACHMENTS, V, F, DS>
-    where
+        fun: PF,
+    ) where
         'a: 'c,
     {
         let desc = RenderPassDescriptor::new();
@@ -593,7 +579,7 @@ impl<
                 .color_attachments()
                 .object_at(i as _)
                 .expect("Failed to access color attachment on render pass descriptor");
-            ColorAttachement::setup_render_pass(c, a);
+            Color::setup_render_pass(c, a);
         }
         DS::setup_render_pass(depth_attachment, stencil_attachment, desc);
         let encoder = command_buffer.new_render_command_encoder(desc);
@@ -603,14 +589,13 @@ impl<
         }
         encoder.set_render_pipeline_state(&self.pipeline);
         depth_state.setup_render_pass(encoder);
-        V::bind(encoder, vertex_binds);
-        F::bind(encoder, fragment_binds);
-        RenderPass {
+        fun(RenderPass {
             encoder,
             _vertex: PhantomData,
             _fragment: PhantomData,
             _depth_stencil: PhantomData,
-        }
+        });
+        encoder.end_encoding();
     }
 }
 
@@ -787,7 +772,7 @@ mod test {
                     },
                     (NoDepth, NoStencil),
                 );
-            let pass = p.new_pass(
+            p.new_pass(
                 "test label",
                 command_buffer,
                 [(
@@ -799,22 +784,26 @@ mod test {
                 NoDepth,
                 NoStencil,
                 NoDepthState,
-                Vertex1Binds {
-                    v_bind1: BindMany::Values(&[0_f32]),
-                },
-                Frag1Binds {
-                    f_bind1: Bind::Value(&f32x4::splat(0.).into()),
-                    f_tex2: BindTexture(&texture),
-                },
                 &[],
-            );
-            pass.bind(
-                Vertex1Binds {
-                    v_bind1: BindMany::Buffer(BindBuffer::WithOffset(&f32_buffer, 0)),
-                },
-                Frag1Binds {
-                    f_bind1: Bind::Buffer(BindBuffer::WithOffset(&float4_buffer, 0)),
-                    f_tex2: BindTexture(&texture),
+                |pass| {
+                    pass.bind(
+                        Vertex1Binds {
+                            v_bind1: BindMany::Values(&[0_f32]),
+                        },
+                        Frag1Binds {
+                            f_bind1: Bind::Value(&f32x4::splat(0.).into()),
+                            f_tex2: BindTexture(&texture),
+                        },
+                    );
+                    pass.bind(
+                        Vertex1Binds {
+                            v_bind1: BindMany::Buffer(BindBuffer::WithOffset(&f32_buffer, 0)),
+                        },
+                        Frag1Binds {
+                            f_bind1: Bind::Buffer(BindBuffer::WithOffset(&float4_buffer, 0)),
+                            f_tex2: BindTexture(&texture),
+                        },
+                    );
                 },
             );
         }
@@ -836,7 +825,7 @@ mod test {
                     },
                     (NoDepth, NoStencil),
                 );
-            let pass = p.new_pass(
+            p.new_pass(
                 "test label",
                 command_buffer,
                 [
@@ -856,14 +845,21 @@ mod test {
                 NoDepth,
                 NoStencil,
                 NoDepthState,
-                Vertex1Binds {
-                    v_bind1: BindMany::Values(&[0.]),
-                },
-                Frag1Binds {
-                    f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-                    f_tex2: BindTexture(&texture),
-                },
                 &[],
+                |pass| {
+                    pass.draw_primitives_with_bind(
+                        Vertex1Binds {
+                            v_bind1: BindMany::Values(&[0.]),
+                        },
+                        Frag1Binds {
+                            f_bind1: Bind::Value(&f32x4::splat(1.).into()),
+                            f_tex2: BindTexture(&texture),
+                        },
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        3,
+                    )
+                },
             );
         }
         {
@@ -895,26 +891,7 @@ mod test {
                     },
                     (NoDepth, NoStencil),
                 );
-
-            let p3_incompatible_has_depth: RenderPipeline<
-                1,
-                Vertex1,
-                Fragment1,
-                (Depth, NoStencil),
-            > = RenderPipeline::new(
-                "Test",
-                &device,
-                &lib,
-                [(MTLPixelFormat::BGRA8Unorm, BlendMode::NoBlend)],
-                Vertex1 {
-                    function_constant_1: true,
-                },
-                Fragment1 {
-                    function_constant_2: true,
-                },
-                (Depth(MTLPixelFormat::Depth16Unorm), NoStencil),
-            );
-            let pass = p1.new_pass(
+            p1.new_pass(
                 "test label",
                 command_buffer,
                 [(
@@ -926,41 +903,36 @@ mod test {
                 NoDepth,
                 NoStencil,
                 NoDepthState,
-                Vertex1Binds {
-                    v_bind1: BindMany::Values(&[0.]),
-                },
-                Frag1Binds {
-                    f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-                    f_tex2: BindTexture(&texture),
-                },
                 &[],
-            );
-            let pass2 = pass.into_subpass(
-                &p2,
-                None,
-                Vertex1Binds {
-                    v_bind1: BindMany::Values(&[0.]),
+                |pass| {
+                    pass.draw_primitives_with_bind(
+                        Vertex1Binds {
+                            v_bind1: BindMany::Values(&[0.]),
+                        },
+                        Frag1Binds {
+                            f_bind1: Bind::Value(&f32x4::splat(1.).into()),
+                            f_tex2: BindTexture(&texture),
+                        },
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        3,
+                    );
+                    pass.into_subpass("Subpass 1", &p2, None, |pass| {
+                        pass.draw_primitives_with_bind(
+                            Vertex1Binds {
+                                v_bind1: BindMany::Values(&[0.]),
+                            },
+                            Frag1Binds {
+                                f_bind1: Bind::Value(&f32x4::splat(1.).into()),
+                                f_tex2: BindTexture(&texture),
+                            },
+                            MTLPrimitiveType::Triangle,
+                            0,
+                            3,
+                        )
+                    });
                 },
-                Frag1Binds {
-                    f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-                    f_tex2: BindTexture(&texture),
-                },
             );
-
-            // IMPORTANT: Should fail because `pass` has already been spent (moved)
-            // let pass3 = p2.new_subpass(pass);
-
-            // IMPORTANT: Should fail because `pass2` is incompatible with the pass (has depth, but pass/pass2 do not)
-            // let pass3 = p3_incompatible_has_depth.new_subpass(
-            //     pass2,
-            //     Vertex1Binds {
-            //         v_bind1: BindMany::Values(&[0.]),
-            //     },
-            //     Frag1Binds {
-            //         f_bind1: Bind::Value(&f32x4::splat(1.).into()),
-            //         f_tex2: BindTexture(&texture),
-            //     },
-            // );
         }
         {
             let p: RenderPipeline<
@@ -980,7 +952,7 @@ mod test {
                     Stencil(MTLPixelFormat::Stencil8),
                 ),
             );
-            let pass = p.new_pass(
+            p.new_pass(
                 "test label",
                 command_buffer,
                 [(
@@ -992,11 +964,18 @@ mod test {
                 (depth, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
                 (stencil, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
                 &depth_state,
-                Vertex1Binds {
-                    v_bind1: BindMany::Values(&[0.]),
-                },
-                NoBinds,
                 &[],
+                |pass| {
+                    pass.draw_primitives_with_bind(
+                        Vertex1Binds {
+                            v_bind1: BindMany::Values(&[0.]),
+                        },
+                        NoBinds,
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        3,
+                    )
+                },
             );
         }
     }

@@ -88,7 +88,7 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let p = self.render_pipeline.new_pass(
+        self.render_pipeline.new_pass(
             "Render Teapot",
             command_buffer,
             [(
@@ -100,29 +100,36 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
             NoDepthState,
-            main_vertex_binds {
-                r#in: Bind::Value(&self.vertex_input),
-                geometry: Bind::Skip,
-            },
-            NoBinds,
             &[],
+            |p| {
+                p.bind(
+                    main_vertex_binds {
+                        r#in: Bind::Value(&self.vertex_input),
+                        geometry: Bind::Skip,
+                    },
+                    NoBinds,
+                );
+                for DrawItemNoMaterial {
+                    vertex_count,
+                    geometry,
+                    ..
+                } in self.model.draws()
+                {
+                    p.draw_primitives_with_bind(
+                        main_vertex_binds {
+                            r#in: Bind::Skip,
+                            geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(
+                                geometry,
+                            )),
+                        },
+                        NoBinds,
+                        MTLPrimitiveType::Point,
+                        0,
+                        vertex_count as _,
+                    );
+                }
+            },
         );
-        for DrawItemNoMaterial {
-            vertex_count,
-            geometry,
-            ..
-        } in self.model.draws()
-        {
-            p.bind(
-                main_vertex_binds {
-                    r#in: Bind::Skip,
-                    geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(geometry)),
-                },
-                NoBinds,
-            );
-            p.draw_primitives(MTLPrimitiveType::Point, 0, vertex_count as _);
-        }
-        p.end_encoding();
         command_buffer
     }
 

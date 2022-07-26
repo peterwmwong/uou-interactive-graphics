@@ -163,8 +163,8 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let mut p = self.model_pipeline.new_pass(
-            "Model and Light",
+        self.model_pipeline.new_pass(
+            "Render",
             command_buffer,
             [(
                 render_target,
@@ -180,58 +180,59 @@ impl RendererDelgate for Delegate {
             ),
             NoStencil,
             &self.depth_state,
-            main_vertex_binds {
-                geometry: Bind::Skip,
-                model: Bind::Value(&self.model_space),
-            },
-            main_fragment_binds {
-                camera: Bind::Value(&self.camera_space),
-                light_pos: Bind::Value(&self.light_world_position),
-            },
             &[&HeapUsage(
                 &self.model.heap,
                 MTLRenderStages::Vertex | MTLRenderStages::Fragment,
             )],
+            |p| {
+                p.debug_group("Model", || {
+                    p.bind(
+                        main_vertex_binds {
+                            geometry: Bind::Skip,
+                            model: Bind::Value(&self.model_space),
+                        },
+                        main_fragment_binds {
+                            camera: Bind::Value(&self.camera_space),
+                            light_pos: Bind::Value(&self.light_world_position),
+                        },
+                    );
+                    for DrawItemNoMaterial {
+                        vertex_count,
+                        geometry,
+                        ..
+                    } in self.model.draws()
+                    {
+                        p.draw_primitives_with_bind(
+                            main_vertex_binds {
+                                geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(
+                                    geometry,
+                                )),
+                                model: Bind::Skip,
+                            },
+                            main_fragment_binds {
+                                camera: Bind::Skip,
+                                light_pos: Bind::Skip,
+                            },
+                            MTLPrimitiveType::Triangle,
+                            0,
+                            vertex_count as _,
+                        );
+                    }
+                });
+                p.into_subpass("Light", &self.light_pipeline, None, |p| {
+                    p.draw_primitives_with_bind(
+                        light_vertex_binds {
+                            camera: Bind::Value(&self.camera_space),
+                            light_pos: Bind::Value(&self.light_world_position),
+                        },
+                        NoBinds,
+                        MTLPrimitiveType::Point,
+                        0,
+                        1,
+                    )
+                });
+            },
         );
-        // Render Teapot
-        {
-            p.push_debug_group("Model");
-            for DrawItemNoMaterial {
-                vertex_count,
-                geometry,
-                ..
-            } in self.model.draws()
-            {
-                p.bind(
-                    main_vertex_binds {
-                        geometry: Bind::Buffer(BindBuffer::buffer_with_rolling_offset(geometry)),
-                        model: Bind::Skip,
-                    },
-                    main_fragment_binds {
-                        camera: Bind::Skip,
-                        light_pos: Bind::Skip,
-                    },
-                );
-                p.draw_primitives(MTLPrimitiveType::Triangle, 0, vertex_count as _);
-            }
-            p.pop_debug_group();
-        }
-        // Render Light
-        {
-            p.push_debug_group("Light");
-            p = p.into_subpass(
-                &self.light_pipeline,
-                None,
-                light_vertex_binds {
-                    camera: Bind::Value(&self.camera_space),
-                    light_pos: Bind::Value(&self.light_world_position),
-                },
-                NoBinds,
-            );
-            p.draw_primitives(MTLPrimitiveType::Point, 0, 1);
-            p.pop_debug_group();
-        }
-        p.end_encoding();
         command_buffer
     }
 
