@@ -97,6 +97,7 @@ struct Delegate {
     model_plane: ModelInstance,
     model: ModelInstance,
     needs_render: bool,
+    needs_render_shadow_map: bool,
     shading_mode: ShadingModeSelector,
     shadow_map_pipeline: RenderPipeline<0, main_vertex, NoFragmentFunction, (Depth, NoStencil)>,
     shadow_map_texture: Option<Texture>,
@@ -230,6 +231,7 @@ impl RendererDelgate for Delegate {
             shading_mode,
             shadow_map_texture: None,
             needs_render: false,
+            needs_render_shadow_map: true,
             library,
             device,
         }
@@ -237,6 +239,7 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
+        let needs_render_shadow_map = std::mem::replace(&mut self.needs_render_shadow_map, false);
         self.needs_render = false;
 
         let command_buffer = self
@@ -245,49 +248,50 @@ impl RendererDelgate for Delegate {
         command_buffer.set_label("Renderer Command Buffer");
 
         // Render Shadow Map
-        self.shadow_map_pipeline.new_pass(
-            "Shadow Map",
-            command_buffer,
-            [],
-            (
-                self.shadow_map_texture.as_deref().unwrap(),
-                1.,
-                MTLLoadAction::Clear,
-                MTLStoreAction::Store,
-            ),
-            NoStencil,
-            &self.depth_state,
-            &[&HeapUsage(
-                &self.model.model.heap,
-                MTLRenderStages::Vertex | MTLRenderStages::Fragment,
-            )],
-            |p| {
-                p.bind(
-                    main_vertex_binds {
-                        model: Bind::Value(&ModelSpace {
-                            matrix_model_to_projection: (self.light_matrix_world_to_projection
-                                * self.model.matrix_model_to_world),
-                            matrix_normal_to_world: self.model.matrix_model_to_world.into(),
-                        }),
-                        geometry: Bind::Skip,
-                    },
-                    NoBinds,
-                );
-                for draw in self.model.model.draws() {
-                    p.draw_primitives_with_bind(
+        if needs_render_shadow_map {
+            self.shadow_map_pipeline.new_pass(
+                "Shadow Map",
+                command_buffer,
+                [],
+                (
+                    self.shadow_map_texture.as_deref().unwrap(),
+                    1.,
+                    MTLLoadAction::Clear,
+                    MTLStoreAction::Store,
+                ),
+                NoStencil,
+                &self.depth_state,
+                &[&HeapUsage(
+                    &self.model.model.heap,
+                    MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+                )],
+                |p| {
+                    p.bind(
                         main_vertex_binds {
-                            model: Bind::Skip,
-                            geometry: Bind::buffer_with_rolling_offset(draw.geometry),
+                            model: Bind::Value(&ModelSpace {
+                                matrix_model_to_projection: (self.light_matrix_world_to_projection
+                                    * self.model.matrix_model_to_world),
+                                matrix_normal_to_world: self.model.matrix_model_to_world.into(),
+                            }),
+                            geometry: Bind::Skip,
                         },
                         NoBinds,
-                        MTLPrimitiveType::Triangle,
-                        0,
-                        draw.vertex_count,
-                    )
-                }
-            },
-        );
-
+                    );
+                    for draw in self.model.model.draws() {
+                        p.draw_primitives_with_bind(
+                            main_vertex_binds {
+                                model: Bind::Skip,
+                                geometry: Bind::buffer_with_rolling_offset(draw.geometry),
+                            },
+                            NoBinds,
+                            MTLPrimitiveType::Triangle,
+                            0,
+                            draw.vertex_count,
+                        )
+                    }
+                },
+            );
+        }
         // Render Models
         self.model_pipeline.new_pass(
             "Render Models",
@@ -312,6 +316,19 @@ impl RendererDelgate for Delegate {
                 &HeapUsage(&self.model_light.model.heap, USAGE_RENDER_STAGES),
             ],
             |p| {
+                p.bind(
+                    main_vertex_binds::SKIP,
+                    main_fragment_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        light: Bind::Value(&self.light_space),
+                        shadow_tx: BindTexture::Texture(
+                            self.shadow_map_texture
+                                .as_deref()
+                                .expect("Failed to access Shadow Map texture"),
+                        ),
+                        ..Binds::SKIP
+                    },
+                );
                 for m in [&self.model_light, &self.model, &self.model_plane] {
                     p.debug_group(m.name, || {
                         p.bind(
@@ -319,16 +336,7 @@ impl RendererDelgate for Delegate {
                                 model: Bind::Value(&m.model_space),
                                 ..Binds::SKIP
                             },
-                            main_fragment_binds {
-                                camera: Bind::Value(&self.camera_space),
-                                light: Bind::Value(&self.light_space),
-                                shadow_tx: BindTexture::Texture(
-                                    self.shadow_map_texture
-                                        .as_deref()
-                                        .expect("Failed to access Shadow Map texture"),
-                                ),
-                                ..Binds::SKIP
-                            },
+                            Binds::SKIP,
                         );
                         for DrawItem {
                             vertex_count,
@@ -431,6 +439,7 @@ impl RendererDelgate for Delegate {
                 position_world: update.position_world.into(),
             };
             self.needs_render = true;
+            self.needs_render_shadow_map = true;
         }
         if self.shading_mode.on_event(event) {
             self.model_pipeline = create_pipeline(&self.device, &self.library, self.shading_mode);
