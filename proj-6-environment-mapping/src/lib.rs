@@ -1,7 +1,6 @@
 #![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
-mod shader_bindings_skips;
 
 use metal_app::{
     components::{Camera, DepthTexture, ShadingModeSelector},
@@ -80,6 +79,12 @@ fn create_main_render_pipeline(
 
 impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
+        let cubemap_texture = debug_time("proj6 - Load Environment Cube Texture", || {
+            asset_compiler::cube_texture::load_cube_texture_asset_dir(
+                &device,
+                &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/cubemap.asset"),
+            )
+        });
         let executable_name = std::env::args()
             .nth(0)
             .expect("Failed to access command line executable name");
@@ -105,11 +110,7 @@ impl RendererDelgate for Delegate {
             NoMaterial,
         );
         let mirror_plane_model = Model::from_file(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("common-assets")
-                .join("plane")
-                .join("plane.obj"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../common-assets/plane/plane.obj"),
             &device,
             encode_geometry_arg,
             NoMaterial,
@@ -148,18 +149,19 @@ impl RendererDelgate for Delegate {
         // TODO: How does this work? Does this hold up when we rotate the mirror plane?
         // let matrix_mirror_world_to_world = matrix_world_to_mirror_world.inverse();
         // assert_eq!(matrix_world_to_mirror_world, matrix_mirror_world_to_world);
+        let mirror_light_position = matrix_world_to_mirror_world * LIGHT_POSITION;
 
+        let shading_mode = ShadingModeSelector::DEFAULT;
+        let ds = DepthStencilDescriptor::new();
+        let s = StencilDescriptor::new();
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
-        let shading_mode = ShadingModeSelector::DEFAULT;
         Self {
             bg_depth_state: {
-                let ds = DepthStencilDescriptor::new();
                 ds.set_depth_write_enabled(false);
                 ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 {
-                    let s = StencilDescriptor::new();
                     s.set_stencil_compare_function(MTLCompareFunction::Equal);
                     s.set_depth_stencil_pass_operation(MTLStencilOperation::Keep);
                     ds.set_front_face_stencil(Some(&s));
@@ -167,6 +169,40 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
+            mirror_model_depth_state: {
+                ds.set_depth_write_enabled(true);
+                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                {
+                    s.set_stencil_compare_function(MTLCompareFunction::Equal);
+                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Keep);
+                    ds.set_front_face_stencil(Some(&s));
+                    ds.set_back_face_stencil(Some(&s));
+                }
+                device.new_depth_stencil_state(&ds)
+            },
+            mirror_plane_depth_state: {
+                ds.set_depth_write_enabled(false);
+                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                {
+                    s.set_stencil_compare_function(MTLCompareFunction::Always);
+                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Replace);
+                    ds.set_front_face_stencil(Some(&s));
+                    ds.set_back_face_stencil(Some(&s));
+                }
+                device.new_depth_stencil_state(&ds)
+            },
+            model_depth_state: {
+                ds.set_depth_write_enabled(true);
+                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                {
+                    s.set_stencil_compare_function(MTLCompareFunction::Always);
+                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Replace);
+                    ds.set_front_face_stencil(Some(&s));
+                    ds.set_back_face_stencil(Some(&s));
+                }
+                device.new_depth_stencil_state(&ds)
+            },
+            cubemap_texture,
             bg_render_pipeline: RenderPipeline::new(
                 "BG",
                 &device,
@@ -176,80 +212,29 @@ impl RendererDelgate for Delegate {
                 bg_fragment,
                 (Depth(DEPTH_TEXTURE_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
             ),
+            main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
+            matrix_mirror_plane_model_to_world,
+            matrix_model_to_world,
+            matrix_world_to_mirror_world,
+            mirror_light_position,
+            command_queue: device.new_command_queue(),
             camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
                 ModifierKeys::empty(),
                 false,
                 0.,
             ),
-            camera_space: ProjectedSpace {
-                matrix_world_to_projection: f32x4x4::identity(),
-                matrix_screen_to_world: f32x4x4::identity(),
-                position_world: f32x4::default().into(),
-            },
-            command_queue: device.new_command_queue(),
-            cubemap_texture: debug_time("proj6 - Load Environment Cube Texture", || {
-                asset_compiler::cube_texture::load_cube_texture_asset_dir(
-                    &device,
-                    &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("assets")
-                        .join("cubemap.asset"),
-                )
-            }),
             depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
-            main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
-            matrix_mirror_plane_model_to_world,
-            matrix_model_to_world,
-            matrix_world_to_mirror_world,
+            camera_space: ProjectedSpace::default(),
             mirror_camera_space: ProjectedSpace::default(),
-            mirror_light_position: matrix_world_to_mirror_world * LIGHT_POSITION,
             mirror_model_space: ModelSpace::default(),
-            mirror_model_depth_state: {
-                let ds = DepthStencilDescriptor::new();
-                ds.set_depth_write_enabled(true);
-                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                {
-                    let s = StencilDescriptor::new();
-                    s.set_stencil_compare_function(MTLCompareFunction::Equal);
-                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Keep);
-                    ds.set_front_face_stencil(Some(&s));
-                    ds.set_back_face_stencil(Some(&s));
-                }
-                device.new_depth_stencil_state(&ds)
-            },
-            mirror_plane_depth_state: {
-                let ds = DepthStencilDescriptor::new();
-                ds.set_depth_write_enabled(false);
-                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                {
-                    let s = StencilDescriptor::new();
-                    s.set_stencil_compare_function(MTLCompareFunction::Always);
-                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Replace);
-                    ds.set_front_face_stencil(Some(&s));
-                    ds.set_back_face_stencil(Some(&s));
-                }
-                device.new_depth_stencil_state(&ds)
-            },
             mirror_plane_model_space: ModelSpace::default(),
-            mirror_plane_model,
-            model_depth_state: {
-                let ds = DepthStencilDescriptor::new();
-                ds.set_depth_write_enabled(true);
-                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                {
-                    let s = StencilDescriptor::new();
-                    s.set_stencil_compare_function(MTLCompareFunction::Always);
-                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Replace);
-                    ds.set_front_face_stencil(Some(&s));
-                    ds.set_back_face_stencil(Some(&s));
-                }
-                device.new_depth_stencil_state(&ds)
-            },
             model_space: ModelSpace::default(),
-            model,
             needs_render: false,
             shading_mode,
             stencil_texture: DepthTexture::new("Stencil", STENCIL_TEXTURE_FORMAT),
+            mirror_plane_model,
+            model,
             device,
             library,
         }
@@ -269,9 +254,9 @@ impl RendererDelgate for Delegate {
                     p.draw_primitives_with_bind(
                         main_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(geometry),
-                            ..main_vertex_binds::skip()
+                            ..main_vertex_binds::SKIP
                         },
-                        main_fragment_binds::skip(),
+                        main_fragment_binds::SKIP,
                         MTLPrimitiveType::Triangle,
                         0,
                         vertex_count,
@@ -326,7 +311,7 @@ impl RendererDelgate for Delegate {
                     main_vertex_binds {
                         camera: Bind::Value(&self.camera_space),
                         model: Bind::Value(&self.model_space),
-                        ..main_vertex_binds::skip()
+                        ..main_vertex_binds::SKIP
                     },
                     main_fragment_binds {
                         camera: Bind::Value(&self.camera_space),
@@ -346,9 +331,9 @@ impl RendererDelgate for Delegate {
                     p.bind(
                         main_vertex_binds {
                             model: Bind::Value(&self.mirror_plane_model_space),
-                            ..main_vertex_binds::skip()
+                            ..main_vertex_binds::SKIP
                         },
-                        main_fragment_binds::skip(),
+                        main_fragment_binds::SKIP,
                     );
                     draw_model(&p, &&self.mirror_plane_model);
                 });
@@ -362,14 +347,14 @@ impl RendererDelgate for Delegate {
                         main_vertex_binds {
                             camera: Bind::Value(&self.mirror_camera_space),
                             model: Bind::Value(&self.mirror_model_space),
-                            ..main_vertex_binds::skip()
+                            ..main_vertex_binds::SKIP
                         },
                         main_fragment_binds {
                             camera: Bind::Value(&self.mirror_camera_space),
                             darken: Bind::Value(&0.5),
                             light_pos: Bind::Value(&self.mirror_light_position.into()),
                             matrix_env: Bind::Value(&self.matrix_world_to_mirror_world.into()),
-                            ..main_fragment_binds::skip()
+                            ..main_fragment_binds::SKIP
                         },
                     );
                     draw_model(&p, &self.model);
@@ -387,7 +372,7 @@ impl RendererDelgate for Delegate {
                             NoBinds,
                             bg_fragment_binds {
                                 camera: Bind::Value(&self.camera_space),
-                                ..bg_fragment_binds::skip()
+                                ..bg_fragment_binds::SKIP
                             },
                             MTLPrimitiveType::Triangle,
                             0,
@@ -461,6 +446,7 @@ impl RendererDelgate for Delegate {
         self.needs_render
     }
 
+    #[inline(always)]
     fn device(&self) -> &Device {
         &self.device
     }
