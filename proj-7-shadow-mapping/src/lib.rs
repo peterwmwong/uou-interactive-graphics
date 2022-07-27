@@ -317,17 +317,17 @@ impl RendererDelgate for Delegate {
                         p.bind(
                             main_vertex_binds {
                                 model: Bind::Value(&m.model_space),
-                                geometry: Bind::Skip,
+                                ..Binds::SKIP
                             },
                             main_fragment_binds {
                                 camera: Bind::Value(&self.camera_space),
                                 light: Bind::Value(&self.light_space),
-                                material: Bind::Skip,
                                 shadow_tx: BindTexture::Texture(
                                     self.shadow_map_texture
                                         .as_deref()
                                         .expect("Failed to access Shadow Map texture"),
                                 ),
+                                ..Binds::SKIP
                             },
                         );
                         for DrawItem {
@@ -339,14 +339,12 @@ impl RendererDelgate for Delegate {
                         {
                             p.draw_primitives_with_bind(
                                 main_vertex_binds {
-                                    model: Bind::Skip,
                                     geometry: Bind::buffer_with_rolling_offset(geometry),
+                                    ..Binds::SKIP
                                 },
                                 main_fragment_binds {
-                                    camera: Bind::Skip,
-                                    light: Bind::Skip,
                                     material: Bind::iterating_buffer_offset(geometry.1, material),
-                                    shadow_tx: BindTexture::Skip,
+                                    ..Binds::SKIP
                                 },
                                 MTLPrimitiveType::Triangle,
                                 0,

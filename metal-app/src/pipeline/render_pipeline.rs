@@ -357,6 +357,8 @@ impl PipelineFunction<FragmentFunctionType> for NoFragmentFunction {
 }
 
 impl Binds for NoBinds {
+    const SKIP: Self = Self;
+
     #[inline]
     fn bind<F: PipelineFunctionType>(self, _: &F::CommandEncoder) {}
 }
@@ -642,6 +644,10 @@ mod test {
         v_bind1: BindMany<'a, f32>,
     }
     impl<'a> Binds for Vertex1Binds<'a> {
+        const SKIP: Self = Self {
+            v_bind1: BindMany::Skip,
+        };
+
         fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
             self.v_bind1.bind::<F>(encoder, 0);
         }
@@ -688,6 +694,15 @@ mod test {
         pub buf4: BindMany<'a, TestStruct>,
     }
     impl<'a> Binds for test_vertex_binds<'a> {
+        const SKIP: Self = Self {
+            buf0: BindMany::Skip,
+            buf1: Bind::Skip,
+            buf2: BindMany::Skip,
+            buf3: Bind::Skip,
+            tex1: BindTexture::Skip,
+            buf5: Bind::Skip,
+            buf4: BindMany::Skip,
+        };
         fn bind<F: PipelineFunctionType>(self, e: &F::CommandEncoder) {
             self.buf0.bind::<F>(e, 0);
             self.buf1.bind::<F>(e, 1);
@@ -709,6 +724,11 @@ mod test {
     }
     struct Fragment1Binder<'a, F: PipelineFunctionType>(&'a F::CommandEncoder);
     impl<'a> Binds for Frag1Binds<'a> {
+        const SKIP: Self = Self {
+            f_bind1: Bind::Skip,
+            f_tex2: BindTexture::Skip,
+        };
+
         fn bind<F: PipelineFunctionType>(self, e: &F::CommandEncoder) {
             self.f_bind1.bind::<F>(e, 0);
         }

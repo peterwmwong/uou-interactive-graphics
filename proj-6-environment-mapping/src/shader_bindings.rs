@@ -255,6 +255,12 @@ pub struct main_vertex_binds<'c> {
     pub model: Bind<'c, ModelSpace>,
 }
 impl Binds for main_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        geometry: Bind::Skip,
+        camera: Bind::Skip,
+        model: Bind::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.geometry.bind::<F>(encoder, 0);
@@ -280,6 +286,14 @@ pub struct main_fragment_binds<'c> {
     pub env_texture: BindTexture<'c>,
 }
 impl Binds for main_fragment_binds<'_> {
+    const SKIP: Self = Self {
+        camera: Bind::Skip,
+        light_pos: Bind::Skip,
+        matrix_env: Bind::Skip,
+        darken: Bind::Skip,
+        env_texture: BindTexture::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.camera.bind::<F>(encoder, 0);
@@ -326,6 +340,11 @@ pub struct bg_fragment_binds<'c> {
     pub env_texture: BindTexture<'c>,
 }
 impl Binds for bg_fragment_binds<'_> {
+    const SKIP: Self = Self {
+        camera: Bind::Skip,
+        env_texture: BindTexture::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.camera.bind::<F>(encoder, 0);

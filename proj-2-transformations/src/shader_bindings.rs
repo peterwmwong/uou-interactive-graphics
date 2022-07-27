@@ -210,6 +210,11 @@ pub struct main_vertex_binds<'c> {
     pub geometry: Bind<'c, Geometry>,
 }
 impl Binds for main_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        r#in: Bind::Skip,
+        geometry: Bind::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.r#in.bind::<F>(encoder, 0);

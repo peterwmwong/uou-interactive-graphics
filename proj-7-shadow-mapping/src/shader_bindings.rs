@@ -361,6 +361,11 @@ pub struct main_vertex_binds<'c> {
     pub geometry: Bind<'c, Geometry>,
 }
 impl Binds for main_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        model: Bind::Skip,
+        geometry: Bind::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.model.bind::<F>(encoder, 0);
@@ -384,6 +389,13 @@ pub struct main_fragment_binds<'c> {
     pub shadow_tx: BindTexture<'c>,
 }
 impl Binds for main_fragment_binds<'_> {
+    const SKIP: Self = Self {
+        camera: Bind::Skip,
+        light: Bind::Skip,
+        material: Bind::Skip,
+        shadow_tx: BindTexture::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.camera.bind::<F>(encoder, 0);

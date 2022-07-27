@@ -90,9 +90,33 @@ pub struct {fn_name}_binds<'c> {{"#
                 r#"
 }}
 impl Binds for {fn_name}_binds<'_> {{
-    #[inline(always)]
-    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {{"#
+    const SKIP: Self = Self {{"#
             ));
+            for bind in &binds {
+                match bind {
+                    Buffer {
+                        name, bind_type, ..
+                    } => {
+                        let rust_shader_bind_name = escape_name(name);
+                        w(&format!(
+                            r#"
+        {rust_shader_bind_name}: {bind_type}::Skip,"#
+                        ));
+                    }
+                    Texture { name, .. } => {
+                        let rust_shader_bind_name = escape_name(name);
+                        w(&format!(
+                            r#"
+        {rust_shader_bind_name}: BindTexture::Skip,"#
+                        ));
+                    }
+                }
+            }
+            w(r#"
+    };
+
+    #[inline(always)]
+    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {"#);
             for bind in &binds {
                 match bind {
                     Buffer { name, index, .. } | Texture { name, index, .. } => {
@@ -193,6 +217,16 @@ pub struct test_vertex_binds<'c> {
     pub buf4: BindMany<'c, TestStruct>,
 }
 impl Binds for test_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        buf0: BindMany::Skip,
+        buf1: Bind::Skip,
+        buf2: BindMany::Skip,
+        buf3: Bind::Skip,
+        tex1: BindTexture::Skip,
+        buf5: Bind::Skip,
+        buf4: BindMany::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.buf0.bind::<F>(encoder, 0);
@@ -232,6 +266,16 @@ pub struct test_fragment_binds<'c> {
     pub buf4: BindMany<'c, TestStruct>,
 }
 impl Binds for test_fragment_binds<'_> {
+    const SKIP: Self = Self {
+        buf0: BindMany::Skip,
+        buf1: Bind::Skip,
+        buf2: BindMany::Skip,
+        buf3: Bind::Skip,
+        tex1: BindTexture::Skip,
+        buf5: Bind::Skip,
+        buf4: BindMany::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.buf0.bind::<F>(encoder, 0);
@@ -428,6 +472,10 @@ pub struct {fn_name}_binds<'c> {{
     pub {rust_shader_bind_name}: {bind_type}<'c, {data_type}>,
 }}
 impl Binds for {fn_name}_binds<'_> {{
+    const SKIP: Self = Self {{
+        {rust_shader_bind_name}: {bind_type}::Skip,
+    }};
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {{
         self.{rust_shader_bind_name}.bind::<F>(encoder, {bind_index});
@@ -481,6 +529,10 @@ pub struct {fn_name}_binds<'c> {{
     pub {bind_name}: BindTexture<'c>,
 }}
 impl Binds for {fn_name}_binds<'_> {{
+    const SKIP: Self = Self {{
+        {bind_name}: BindTexture::Skip,
+    }};
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {{
         self.{bind_name}.bind::<F>(encoder, {bind_index});

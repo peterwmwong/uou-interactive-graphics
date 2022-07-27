@@ -183,8 +183,8 @@ impl RendererDelgate for Delegate {
                 p.debug_group("Model", || {
                     p.bind(
                         main_vertex_binds {
-                            geometry: Bind::Skip,
                             model: Bind::Value(&self.model_space),
+                            ..Binds::SKIP
                         },
                         main_fragment_binds {
                             camera: Bind::Value(&self.camera_space),
@@ -200,12 +200,9 @@ impl RendererDelgate for Delegate {
                         p.draw_primitives_with_bind(
                             main_vertex_binds {
                                 geometry: Bind::buffer_with_rolling_offset(geometry),
-                                model: Bind::Skip,
+                                ..Binds::SKIP
                             },
-                            main_fragment_binds {
-                                camera: Bind::Skip,
-                                light_pos: Bind::Skip,
-                            },
+                            main_fragment_binds::SKIP,
                             MTLPrimitiveType::Triangle,
                             0,
                             vertex_count as _,

@@ -3,6 +3,7 @@ use crate::typed_buffer::TypedBuffer;
 use metal::TextureRef;
 
 pub trait Binds {
+    const SKIP: Self;
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder);
 }
 

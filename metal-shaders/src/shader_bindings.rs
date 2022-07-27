@@ -382,6 +382,10 @@ pub struct test_shade_phong_blinn_with_textured_material_binds<'c> {
     pub material: Bind<'c, Material>,
 }
 impl Binds for test_shade_phong_blinn_with_textured_material_binds<'_> {
+    const SKIP: Self = Self {
+        material: Bind::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.material.bind::<F>(encoder, 0);

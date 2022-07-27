@@ -100,7 +100,7 @@ impl RendererDelgate for Delegate {
                 p.bind(
                     main_vertex_binds {
                         r#in: Bind::Value(&self.vertex_input),
-                        geometry: Bind::Skip,
+                        ..Binds::SKIP
                     },
                     NoBinds,
                 );
@@ -112,8 +112,8 @@ impl RendererDelgate for Delegate {
                 {
                     p.draw_primitives_with_bind(
                         main_vertex_binds {
-                            r#in: Bind::Skip,
                             geometry: Bind::buffer_with_rolling_offset(geometry),
+                            ..Binds::SKIP
                         },
                         NoBinds,
                         MTLPrimitiveType::Point,

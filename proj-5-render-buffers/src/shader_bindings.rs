@@ -44,6 +44,10 @@ pub struct main_vertex_binds<'c> {
     pub matrix_model_to_projection: Bind<'c, float4x4>,
 }
 impl Binds for main_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        matrix_model_to_projection: Bind::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.matrix_model_to_projection.bind::<F>(encoder, 0);
@@ -64,6 +68,11 @@ pub struct main_fragment_binds<'c> {
     pub mode: Bind<'c, TextureFilterMode>,
 }
 impl Binds for main_fragment_binds<'_> {
+    const SKIP: Self = Self {
+        texture: BindTexture::Skip,
+        mode: Bind::Skip,
+    };
+
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.texture.bind::<F>(encoder, 0);

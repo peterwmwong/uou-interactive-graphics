@@ -239,8 +239,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                                 },
                                 main_fragment_binds {
                                     material: Bind::iterating_buffer_offset(geometry.1, material),
-                                    camera: Bind::Skip,
-                                    light_pos: Bind::Skip,
+                                    ..main_fragment_binds::SKIP
                                 },
                                 MTLPrimitiveType::Triangle,
                                 0,
