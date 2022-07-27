@@ -1,11 +1,13 @@
+#![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
 
 use metal_app::{
-    components::{Camera, ShadingModeSelector},
+    components::{Camera, DepthTexture, ShadingModeSelector},
     math_helpers::round_up_pow_of_2,
     metal::*,
     metal_types::*,
+    pipeline::*,
     *,
 };
 use shader_bindings::*;
@@ -13,32 +15,37 @@ use std::{
     f32::consts::PI,
     ops::Neg,
     path::{Path, PathBuf},
-    simd::{f32x2, u32x2},
+    simd::{f32x2, u32x2, SimdFloat},
 };
 
-const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;
+const DEFAULT_AMBIENT_AMOUNT: u32 = 15;
 const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
-const MAX_TEXTURE_SIZE: u16 = 16384;
 const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
-const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
+const MAX_TEXTURE_SIZE: u16 = 16384;
+const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
+const USAGE_RENDER_STAGES: MTLRenderStages = unsafe {
+    MTLRenderStages::from_bits_unchecked(
+        MTLRenderStages::Vertex.bits() | MTLRenderStages::Fragment.bits(),
+    )
+};
 
-struct RenderableModelObject {
-    name: &'static str,
-    model: Model<{ VertexBufferIndex::Geometry as _ }, { FragBufferIndex::Material as _ }>,
+struct ModelInstance {
     matrix_model_to_world: f32x4x4,
+    model: Model<Geometry, HasMaterial<Material>>,
+    model_space: ModelSpace,
+    name: &'static str,
 }
 
-impl RenderableModelObject {
+impl ModelInstance {
     #[inline]
-    fn new<T: AsRef<Path>>(
+    fn new<const AMBIENT_AMOUNT: u32, T: AsRef<Path>>(
         name: &'static str,
         device: &Device,
         model_file: T,
         init_matrix_model_to_world: impl FnOnce(&MaxBounds) -> f32x4x4,
-        ambient_amount: f32,
     ) -> Self {
         let model = Model::from_file(
             model_file,
@@ -49,55 +56,28 @@ impl RenderableModelObject {
                 arg.normals = geo.normals_buffer;
                 arg.tx_coords = geo.tx_coords_buffer;
             },
-            |arg: &mut Material, mat| {
+            HasMaterial(|arg: &mut Material, mat: MaterialToEncode| {
                 arg.ambient_texture = mat.ambient_texture;
                 arg.diffuse_texture = mat.diffuse_texture;
                 arg.specular_texture = mat.specular_texture;
                 arg.specular_shineness = mat.specular_shineness;
-                arg.ambient_amount = ambient_amount;
-            },
+                arg.ambient_amount = (AMBIENT_AMOUNT as f32) / 100.;
+            }),
         );
         Self {
             matrix_model_to_world: init_matrix_model_to_world(&model.geometry_max_bounds),
             model,
+            model_space: ModelSpace::default(),
             name,
         }
     }
 
-    #[inline]
-    fn encode_use_resources(&self, encoder: &RenderCommandEncoderRef) {
-        self.model.encode_use_resources(encoder);
-    }
-
-    #[inline]
-    fn encode_render(
-        &mut self,
-        encoder: &RenderCommandEncoderRef,
-        matrix_world_to_projection: f32x4x4,
-    ) {
-        encoder.push_debug_group(self.name);
-        encode_vertex_bytes(
-            encoder,
-            VertexBufferIndex::ModelSpace as _,
-            &ModelSpace {
-                matrix_model_to_projection: (matrix_world_to_projection
-                    * self.matrix_model_to_world),
-                matrix_normal_to_world: self.matrix_model_to_world.into(),
-            },
-        );
-        self.model.encode_draws(encoder);
-        encoder.pop_debug_group();
-    }
-}
-
-impl Default for ProjectedSpace {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            matrix_world_to_projection: f32x4x4::identity(),
-            matrix_screen_to_world: f32x4x4::identity(),
-            position_world: float4 { xyzw: [0.; 4] },
-        }
+    fn on_camera_update(&mut self, camera_matrix_world_to_projection: f32x4x4) {
+        self.model_space = ModelSpace {
+            matrix_model_to_projection: (camera_matrix_world_to_projection
+                * self.matrix_model_to_world),
+            matrix_normal_to_world: self.matrix_model_to_world.into(),
+        };
     }
 }
 
@@ -106,19 +86,19 @@ struct Delegate {
     camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
-    depth_texture: Option<Texture>,
+    depth_texture: DepthTexture,
     device: Device,
     library: Library,
     light_matrix_world_to_projection: f32x4x4,
     light_space: ProjectedSpace,
     light: Camera,
-    model_light: RenderableModelObject,
-    model_pipeline: RenderPipelineState,
-    model_plane: RenderableModelObject,
-    model: RenderableModelObject,
+    model_light: ModelInstance,
+    model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
+    model_plane: ModelInstance,
+    model: ModelInstance,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
-    shadow_map_pipeline: RenderPipelineState,
+    shadow_map_pipeline: RenderPipeline<0, main_vertex, NoFragmentFunction, (Depth, NoStencil)>,
     shadow_map_texture: Option<Texture>,
 }
 
@@ -126,40 +106,21 @@ fn create_pipeline(
     device: &Device,
     library: &Library,
     mode: ShadingModeSelector,
-) -> RenderPipelineState {
-    let p = create_render_pipeline(
-        &device,
-        &new_render_pipeline_descriptor(
-            "Model",
-            &library,
-            Some((DEFAULT_PIXEL_FORMAT, false)),
-            Some(DEPTH_TEXTURE_FORMAT),
-            Some(&mode.encode(
-                FunctionConstantValues::new(),
-                ShadingMode::HasAmbient as _,
-                ShadingMode::HasDiffuse as _,
-                ShadingMode::HasSpecular as _,
-                ShadingMode::OnlyNormals as _,
-            )),
-            Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-            Some((&"main_fragment", FragBufferIndex::LENGTH as _)),
-        ),
-    );
-    use debug_assert_pipeline_function_arguments::*;
-    debug_assert_render_pipeline_function_arguments(
-        &p,
-        &[
-            value_arg::<ModelSpace>(VertexBufferIndex::ModelSpace as _),
-            value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
-        ],
-        Some(&[
-            value_arg::<ProjectedSpace>(FragBufferIndex::CameraSpace as _),
-            value_arg::<ProjectedSpace>(FragBufferIndex::LightSpace as _),
-            value_arg::<Material>(FragBufferIndex::Material as _),
-            texture_arg(FragTextureIndex::ShadowMap as _, MTLTextureType::D2),
-        ]),
-    );
-    p.pipeline_state
+) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)> {
+    RenderPipeline::new(
+        "Model",
+        device,
+        library,
+        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        main_vertex,
+        main_fragment {
+            HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
+            HasDiffuse: mode.contains(ShadingModeSelector::HAS_DIFFUSE),
+            OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
+            HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
+        },
+        (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+    )
 }
 
 impl RendererDelgate for Delegate {
@@ -188,7 +149,7 @@ impl RendererDelgate for Delegate {
             ),
             camera_space: Default::default(),
             command_queue: device.new_command_queue(),
-            depth_texture: None,
+            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -203,7 +164,7 @@ impl RendererDelgate for Delegate {
             ),
             light_matrix_world_to_projection: f32x4x4::identity(),
             light_space: Default::default(),
-            model: RenderableModelObject::new(
+            model: ModelInstance::new::<DEFAULT_AMBIENT_AMOUNT, _>(
                 "Model",
                 &device,
                 model_file_path,
@@ -228,21 +189,18 @@ impl RendererDelgate for Delegate {
                         * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.)))
                         * f32x4x4::translate(cx, cy, cz)
                 },
-                DEFAULT_AMBIENT_AMOUNT,
             ),
-            model_light: RenderableModelObject::new(
+            model_light: ModelInstance::new::<80, _>(
                 "Light",
                 &device,
                 assets_dir.join("light").join("light.obj"),
                 |_| f32x4x4::translate(0., 0., 0.),
-                0.8,
             ),
-            model_plane: RenderableModelObject::new(
+            model_plane: ModelInstance::new::<DEFAULT_AMBIENT_AMOUNT, _>(
                 "Plane",
                 &device,
                 assets_dir.join("plane").join("plane.obj"),
                 |_| f32x4x4::translate(0., -plane_y, 0.),
-                DEFAULT_AMBIENT_AMOUNT,
             ),
             // TODO: Change create_pipline to take a Function objects and create helper for getting many
             // function in one shot.
@@ -260,30 +218,15 @@ impl RendererDelgate for Delegate {
             // - Pipeline Creation
             // - Depth State Creation
             // - Camera and Light Space Creation
-            shadow_map_pipeline: {
-                let p = create_render_pipeline(
-                    &device,
-                    &new_render_pipeline_descriptor(
-                        "Shadow Map",
-                        &library,
-                        None,
-                        Some(DEPTH_TEXTURE_FORMAT),
-                        None,
-                        Some((&"main_vertex", VertexBufferIndex::LENGTH as _)),
-                        None,
-                    ),
-                );
-                use debug_assert_pipeline_function_arguments::*;
-                debug_assert_render_pipeline_function_arguments(
-                    &p,
-                    &[
-                        value_arg::<ModelSpace>(VertexBufferIndex::ModelSpace as _),
-                        value_arg::<Geometry>(VertexBufferIndex::Geometry as _),
-                    ],
-                    None,
-                );
-                p.pipeline_state
-            },
+            shadow_map_pipeline: RenderPipeline::new(
+                "Shadow Map",
+                &device,
+                &library,
+                [],
+                main_vertex,
+                NoFragmentFunction,
+                (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+            ),
             shading_mode,
             shadow_map_texture: None,
             needs_render: false,
@@ -302,73 +245,118 @@ impl RendererDelgate for Delegate {
         command_buffer.set_label("Renderer Command Buffer");
 
         // Render Shadow Map
-        {
-            let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-                None,
-                self.shadow_map_texture
-                    .as_ref()
-                    .map(|s| (s, 1., MTLLoadAction::Clear, MTLStoreAction::Store)),
-                None,
-            ));
-            encoder.set_label("Render Shadow Map");
-            encoder.push_debug_group("Shadow Map (Light 1)");
-            self.model.encode_use_resources(encoder);
-            encoder.set_render_pipeline_state(&self.shadow_map_pipeline);
-            encoder.set_depth_stencil_state(&self.depth_state);
-            self.model
-                .encode_render(encoder, self.light_matrix_world_to_projection);
-            encoder.pop_debug_group();
-            encoder.end_encoding();
-        }
+        self.shadow_map_pipeline.new_pass(
+            "Shadow Map",
+            command_buffer,
+            [],
+            (
+                self.shadow_map_texture.as_deref().unwrap(),
+                1.,
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            ),
+            NoStencil,
+            &self.depth_state,
+            &[&HeapUsage(
+                &self.model.model.heap,
+                MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+            )],
+            |p| {
+                p.bind(
+                    main_vertex_binds {
+                        model: Bind::Value(&ModelSpace {
+                            matrix_model_to_projection: (self.light_matrix_world_to_projection
+                                * self.model.matrix_model_to_world),
+                            matrix_normal_to_world: self.model.matrix_model_to_world.into(),
+                        }),
+                        geometry: Bind::Skip,
+                    },
+                    NoBinds,
+                );
+                for draw in self.model.model.draws() {
+                    p.draw_primitives_with_bind(
+                        main_vertex_binds {
+                            model: Bind::Skip,
+                            geometry: Bind::buffer_with_rolling_offset(draw.geometry),
+                        },
+                        NoBinds,
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        draw.vertex_count,
+                    )
+                }
+            },
+        );
 
         // Render Models
-        {
-            let encoder = command_buffer.new_render_command_encoder(new_render_pass_descriptor(
-                Some((
-                    render_target,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Clear,
-                    MTLStoreAction::Store,
-                )),
-                self.depth_texture
-                    .as_ref()
-                    .map(|d| (d, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare)),
-                None,
-            ));
-            encoder.set_label("Render Models");
-            self.model_light.encode_use_resources(encoder);
-            self.model.encode_use_resources(encoder);
-            self.model_plane.encode_use_resources(encoder);
-            encoder.set_render_pipeline_state(&self.model_pipeline);
-            encoder.set_depth_stencil_state(&self.depth_state);
-            encode_fragment_bytes::<ProjectedSpace>(
-                encoder,
-                FragBufferIndex::CameraSpace as _,
-                &self.camera_space,
-            );
-            encode_fragment_bytes::<ProjectedSpace>(
-                encoder,
-                FragBufferIndex::LightSpace as _,
-                &self.light_space,
-            );
-
-            // Purposely omit binding the shadow map texture when rendering light, so it not in
-            // shadow.
-            encoder.set_fragment_texture(FragTextureIndex::ShadowMap as _, None);
-            let matrix_world_to_projection = self.camera_space.matrix_world_to_projection;
-            self.model_light
-                .encode_render(encoder, matrix_world_to_projection);
-
-            encoder.set_fragment_texture(
-                FragTextureIndex::ShadowMap as _,
-                self.shadow_map_texture.as_deref(),
-            );
-            self.model
-                .encode_render(encoder, matrix_world_to_projection);
-            self.model_plane
-                .encode_render(encoder, matrix_world_to_projection);
-            encoder.end_encoding();
-        }
+        self.model_pipeline.new_pass(
+            "Render Models",
+            command_buffer,
+            [(
+                render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Clear,
+                MTLStoreAction::Store,
+            )],
+            (
+                self.depth_texture.texture(),
+                1.,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
+            NoStencil,
+            &self.depth_state,
+            &[
+                &HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES),
+                &HeapUsage(&self.model_plane.model.heap, USAGE_RENDER_STAGES),
+                &HeapUsage(&self.model_light.model.heap, USAGE_RENDER_STAGES),
+            ],
+            |p| {
+                for m in [&self.model_light, &self.model, &self.model_plane] {
+                    p.debug_group(m.name, || {
+                        p.bind(
+                            main_vertex_binds {
+                                model: Bind::Value(&m.model_space),
+                                geometry: Bind::Skip,
+                            },
+                            main_fragment_binds {
+                                camera: Bind::Value(&self.camera_space),
+                                light: Bind::Value(&self.light_space),
+                                material: Bind::Skip,
+                                shadow_tx: BindTexture::Texture(
+                                    self.shadow_map_texture
+                                        .as_deref()
+                                        .expect("Failed to access Shadow Map texture"),
+                                ),
+                            },
+                        );
+                        for DrawItem {
+                            vertex_count,
+                            geometry,
+                            material,
+                            ..
+                        } in m.model.draws()
+                        {
+                            p.draw_primitives_with_bind(
+                                main_vertex_binds {
+                                    model: Bind::Skip,
+                                    geometry: Bind::buffer_with_rolling_offset(geometry),
+                                },
+                                main_fragment_binds {
+                                    camera: Bind::Skip,
+                                    light: Bind::Skip,
+                                    material: Bind::iterating_buffer_offset(geometry.1, material),
+                                    shadow_tx: BindTexture::Skip,
+                                },
+                                MTLPrimitiveType::Triangle,
+                                0,
+                                vertex_count,
+                            );
+                        }
+                    });
+                }
+            },
+        );
         command_buffer
     }
 
@@ -380,12 +368,21 @@ impl RendererDelgate for Delegate {
                 matrix_screen_to_world: update.matrix_screen_to_world,
                 position_world: update.position_world.into(),
             };
+            for m in [
+                &mut self.model,
+                &mut self.model_light,
+                &mut self.model_plane,
+            ] {
+                m.on_camera_update(update.matrix_world_to_projection);
+            }
             self.needs_render = true;
         }
         if let Some(update) = self.light.on_event(event) {
             self.model_light.matrix_model_to_world = update.matrix_camera_to_world
                 * f32x4x4::y_rotate(PI)
                 * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
+            self.model_light
+                .on_camera_update(self.camera_space.matrix_world_to_projection);
             self.light_matrix_world_to_projection = update.matrix_world_to_projection;
             self.light_space = ProjectedSpace {
                 //
@@ -441,12 +438,38 @@ impl RendererDelgate for Delegate {
             self.model_pipeline = create_pipeline(&self.device, &self.library, self.shading_mode);
             self.needs_render = true;
         }
-        match event {
-            UserEvent::WindowFocusedOrResized { size } => {
-                self.update_textures_size(size);
-                self.needs_render = true;
+        if self.depth_texture.on_event(event, &self.device) {
+            let t = self.depth_texture.texture();
+            // Make sure the shadow map texture is atleast 2x and no more than 4x, of the
+            // screen size. Round up to the nearest power of 2 of each dimension.
+            let xy = u32x2::from_array([t.width() as _, t.height() as _]);
+            if let Some(tx) = &self.shadow_map_texture {
+                #[inline(always)]
+                fn is_shadow_map_correctly_sized(cur: NSUInteger, target: u32) -> bool {
+                    ((target << 1)..=(target << 2)).contains(&(cur as _))
+                }
+                if is_shadow_map_correctly_sized(tx.width(), xy[0])
+                    && is_shadow_map_correctly_sized(tx.height(), xy[1])
+                {
+                    return;
+                }
             }
-            _ => {}
+            let new_xy =
+                round_up_pow_of_2(xy << u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _));
+
+            #[cfg(debug_assertions)]
+            println!("Allocating new Shadow Map {new_xy:?}");
+
+            let desc = TextureDescriptor::new();
+            desc.set_width(new_xy[0] as _);
+            desc.set_height(new_xy[1] as _);
+            desc.set_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
+            desc.set_storage_mode(MTLStorageMode::Private);
+            desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
+            let texture = self.device.new_texture(&desc);
+            texture.set_label("Shadow Map Depth");
+            self.shadow_map_texture = Some(texture);
+            self.needs_render;
         }
     }
 
@@ -455,53 +478,9 @@ impl RendererDelgate for Delegate {
         self.needs_render
     }
 
+    #[inline]
     fn device(&self) -> &Device {
         &self.device
-    }
-}
-
-impl Delegate {
-    #[inline]
-    fn update_textures_size(&mut self, size: f32x2) {
-        let desc = TextureDescriptor::new();
-        let &[x, y] = size.as_array();
-        desc.set_width(x as _);
-        desc.set_height(y as _);
-        desc.set_pixel_format(DEPTH_TEXTURE_FORMAT);
-        desc.set_storage_mode(MTLStorageMode::Memoryless);
-        desc.set_usage(MTLTextureUsage::RenderTarget);
-        let texture = self.device.new_texture(&desc);
-        texture.set_label("Depth");
-        self.depth_texture = Some(texture);
-
-        // Make sure the shadow map texture is atleast 2x and no more than 4x, of the
-        // screen size. Round up to the nearest power of 2 of each dimension.
-        let xy = u32x2::from_array([size[0] as u32, size[1] as u32]);
-        if let Some(tx) = &self.shadow_map_texture {
-            #[inline(always)]
-            fn is_shadow_map_correctly_sized(cur: NSUInteger, target: u32) -> bool {
-                ((target << 1)..=(target << 2)).contains(&(cur as _))
-            }
-            if is_shadow_map_correctly_sized(tx.width(), xy[0])
-                && is_shadow_map_correctly_sized(tx.height(), xy[1])
-            {
-                return;
-            }
-        }
-        let new_xy =
-            round_up_pow_of_2(xy << u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _));
-
-        #[cfg(debug_assertions)]
-        println!("Allocating new Shadow Map {new_xy:?}");
-
-        desc.set_width(new_xy[0] as _);
-        desc.set_height(new_xy[1] as _);
-        desc.set_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
-        desc.set_storage_mode(MTLStorageMode::Private);
-        desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-        let texture = self.device.new_texture(&desc);
-        texture.set_label("Shadow Map Depth");
-        self.shadow_map_texture = Some(texture);
     }
 }
 
