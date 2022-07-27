@@ -12,7 +12,7 @@ use metal_app::{metal::*, metal_types::*, pipeline::*};
 
 pub const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub struct Geometry {
     pub indices: ::std::os::raw::c_ulong,
     pub positions: ::std::os::raw::c_ulong,
@@ -189,6 +189,15 @@ fn bindgen_test_layout_VertexInput() {
         );
     }
     test_field_use_perspective();
+}
+impl Default for VertexInput {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 
 /****************

@@ -31,21 +31,26 @@ const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 struct Delegate {
     bg_depth_state: DepthStencilState,
     bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, Stencil)>,
-    camera: Camera,
     camera_space: ProjectedSpace,
+    camera: Camera,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
     depth_texture: DepthTexture,
     device: Device,
     library: Library,
     main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)>,
-    matrix_model_to_world: f32x4x4,
     matrix_mirror_plane_model_to_world: f32x4x4,
+    matrix_model_to_world: f32x4x4,
     matrix_world_to_mirror_world: f32x4x4,
-    mirrored_model_depth_state: DepthStencilState,
+    mirror_camera_space: ProjectedSpace,
+    mirror_light_position: f32x4,
+    mirror_model_depth_state: DepthStencilState,
+    mirror_model_space: ModelSpace,
     mirror_plane_depth_state: DepthStencilState,
+    mirror_plane_model_space: ModelSpace,
     mirror_plane_model: Model<Geometry, NoMaterial>,
     model_depth_state: DepthStencilState,
+    model_space: ModelSpace,
     model: Model<Geometry, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
@@ -193,10 +198,13 @@ impl RendererDelgate for Delegate {
             }),
             depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
             main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
+            matrix_mirror_plane_model_to_world,
             matrix_model_to_world,
             matrix_world_to_mirror_world,
-            matrix_mirror_plane_model_to_world,
-            mirrored_model_depth_state: {
+            mirror_camera_space: ProjectedSpace::default(),
+            mirror_light_position: matrix_world_to_mirror_world * LIGHT_POSITION,
+            mirror_model_space: ModelSpace::default(),
+            mirror_model_depth_state: {
                 let ds = DepthStencilDescriptor::new();
                 ds.set_depth_write_enabled(true);
                 ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -209,7 +217,6 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
-            mirror_plane_model,
             mirror_plane_depth_state: {
                 let ds = DepthStencilDescriptor::new();
                 ds.set_depth_write_enabled(false);
@@ -223,6 +230,8 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
+            mirror_plane_model_space: ModelSpace::default(),
+            mirror_plane_model,
             model_depth_state: {
                 let ds = DepthStencilDescriptor::new();
                 ds.set_depth_write_enabled(true);
@@ -236,6 +245,7 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
+            model_space: ModelSpace::default(),
             model,
             needs_render: false,
             shading_mode,
@@ -315,13 +325,7 @@ impl RendererDelgate for Delegate {
                 p.bind(
                     main_vertex_binds {
                         camera: Bind::Value(&self.camera_space),
-                        model: Bind::Value(&ModelSpace {
-                            matrix_model_to_projection: self
-                                .camera_space
-                                .matrix_world_to_projection
-                                * self.matrix_model_to_world,
-                            matrix_normal_to_world: self.matrix_model_to_world.into(),
-                        }),
+                        model: Bind::Value(&self.model_space),
                         ..main_vertex_binds::skip()
                     },
                     main_fragment_binds {
@@ -341,15 +345,7 @@ impl RendererDelgate for Delegate {
                     ));
                     p.bind(
                         main_vertex_binds {
-                            model: Bind::Value(&ModelSpace {
-                                matrix_model_to_projection: self
-                                    .camera_space
-                                    .matrix_world_to_projection
-                                    * self.matrix_mirror_plane_model_to_world,
-                                matrix_normal_to_world: self
-                                    .matrix_mirror_plane_model_to_world
-                                    .into(),
-                            }),
+                            model: Bind::Value(&self.mirror_plane_model_space),
                             ..main_vertex_binds::skip()
                         },
                         main_fragment_binds::skip(),
@@ -357,47 +353,21 @@ impl RendererDelgate for Delegate {
                     draw_model(&p, &&self.mirror_plane_model);
                 });
                 p.debug_group("Model (mirrored)", || {
-                    let mirror_camera_space = ProjectedSpace {
-                        matrix_world_to_projection: self.camera_space.matrix_world_to_projection
-                            * self.matrix_world_to_mirror_world,
-                        // TODO: I'm not sure this is right, shouldn't it be matrix_mirror_world_to_world, not matrix_world_to_mirror_world
-                        //                                                          aaaaaaaaaaaa    bbbbb             bbbbb    aaaaaaaaaaaa
-                        // - I think this only works because matrix_world_to_mirror_world is involution (inverse is the same).
-                        // - `matrix_world_to_projection` (Metal than transforms to screen)
-                        //      world -> mirror world -> projection -> screen
-                        // - Also, does the Fragment Shader need a mirror world or world coordinate?
-                        //      - `matrix_screen_to_world`
-                        //          screen -> projection -> world -> mirror world (current)
-                        //          VS.
-                        //          screen -> projection -> mirror world -> world
-                        matrix_screen_to_world: self.matrix_world_to_mirror_world
-                            * self.camera_space.matrix_screen_to_world,
-                        position_world: self.camera_space.position_world,
-                    };
                     p.set_depth_stencil_state((
-                        &self.mirrored_model_depth_state,
+                        &self.mirror_model_depth_state,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
                     ));
                     p.bind(
                         main_vertex_binds {
-                            camera: Bind::Value(&mirror_camera_space),
-                            model: Bind::Value(&ModelSpace {
-                                matrix_model_to_projection: mirror_camera_space
-                                    .matrix_world_to_projection
-                                    * self.matrix_model_to_world,
-                                matrix_normal_to_world: (self.matrix_world_to_mirror_world
-                                    * self.matrix_model_to_world)
-                                    .into(),
-                            }),
+                            camera: Bind::Value(&self.mirror_camera_space),
+                            model: Bind::Value(&self.mirror_model_space),
                             ..main_vertex_binds::skip()
                         },
                         main_fragment_binds {
-                            camera: Bind::Value(&mirror_camera_space),
+                            camera: Bind::Value(&self.mirror_camera_space),
                             darken: Bind::Value(&0.5),
-                            light_pos: Bind::Value(
-                                &(self.matrix_world_to_mirror_world * LIGHT_POSITION).into(),
-                            ),
+                            light_pos: Bind::Value(&self.mirror_light_position.into()),
                             matrix_env: Bind::Value(&self.matrix_world_to_mirror_world.into()),
                             ..main_fragment_binds::skip()
                         },
@@ -433,10 +403,46 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
         if let Some(update) = self.camera.on_event(event) {
-            self.camera_space.matrix_world_to_projection = update.matrix_world_to_projection;
-            self.camera_space.matrix_screen_to_world = update.matrix_screen_to_world;
-            self.camera_space.position_world = update.position_world.into();
+            self.camera_space = ProjectedSpace {
+                matrix_world_to_projection: update.matrix_world_to_projection,
+                matrix_screen_to_world: update.matrix_screen_to_world,
+                position_world: update.position_world.into(),
+            };
+            self.mirror_camera_space = ProjectedSpace {
+                matrix_world_to_projection: self.camera_space.matrix_world_to_projection
+                    * self.matrix_world_to_mirror_world,
+                // TODO: I'm not sure this is right, shouldn't it be matrix_mirror_world_to_world, not matrix_world_to_mirror_world
+                //                                                          aaaaaaaaaaaa    bbbbb             bbbbb    aaaaaaaaaaaa
+                // - I think this only works because matrix_world_to_mirror_world is involution (inverse is the same).
+                // - `matrix_world_to_projection` (Metal than transforms to screen)
+                //      world -> mirror world -> projection -> screen
+                // - Also, does the Fragment Shader need a mirror world or world coordinate?
+                //      - `matrix_screen_to_world`
+                //          screen -> projection -> world -> mirror world (current)
+                //          VS.
+                //          screen -> projection -> mirror world -> world
+                matrix_screen_to_world: self.matrix_world_to_mirror_world
+                    * self.camera_space.matrix_screen_to_world,
+                position_world: self.camera_space.position_world,
+            };
 
+            self.model_space = ModelSpace {
+                matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+                    * self.matrix_model_to_world,
+                matrix_normal_to_world: self.matrix_model_to_world.into(),
+            };
+            self.mirror_plane_model_space = ModelSpace {
+                matrix_model_to_projection: self.camera_space.matrix_world_to_projection
+                    * self.matrix_mirror_plane_model_to_world,
+                matrix_normal_to_world: self.matrix_mirror_plane_model_to_world.into(),
+            };
+            self.mirror_model_space = ModelSpace {
+                matrix_model_to_projection: self.mirror_camera_space.matrix_world_to_projection
+                    * self.matrix_model_to_world,
+                matrix_normal_to_world: (self.matrix_world_to_mirror_world
+                    * self.matrix_model_to_world)
+                    .into(),
+            };
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {

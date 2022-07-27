@@ -94,6 +94,7 @@ use metal_app::{metal::*, metal_types::*, pipeline::*};
                 .clang_arg("-std=c++17")
                 .derive_eq(true)
                 .derive_copy(true)
+                .derive_default(true)
                 .default_enum_style(bindgen::EnumVariation::Rust {
                     non_exhaustive: false,
                 })

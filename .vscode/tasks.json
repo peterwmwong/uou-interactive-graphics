@@ -14,7 +14,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures AFTER",
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-6-environment-mapping AFTER",
             "problemMatcher": []
         },
         {
@@ -28,7 +28,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-4-textures BEFORE",
+            "command": "${workspaceFolder}/scripts/asm-gen.sh proj-6-environment-mapping BEFORE",
             "problemMatcher": []
         },
         {
@@ -42,7 +42,7 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-4-textures BEFORE AFTER",
+            "command": "${workspaceFolder}/scripts/asm-open-diff.sh proj-6-environment-mapping BEFORE AFTER",
             "problemMatcher": []
         },
         {
