@@ -339,7 +339,22 @@ impl function::Function for NoFragmentFunction {
     const FUNCTION_NAME: &'static str = "<NoFragmentFunction>";
     type Binds<'a> = NoBinds;
 }
-impl PipelineFunction<FragmentFunctionType> for NoFragmentFunction {}
+impl PipelineFunction<FragmentFunctionType> for NoFragmentFunction {
+    #[inline]
+    fn setup_pipeline(
+        &self,
+        _library: &LibraryRef,
+        _pipeline_desc: &<FragmentFunctionType as PipelineFunctionType>::Descriptor,
+    ) {
+    }
+
+    #[inline]
+    fn bind<'a, 'b>(
+        _encoder: &'a <FragmentFunctionType as PipelineFunctionType>::CommandEncoder,
+        _binds: Self::Binds<'b>,
+    ) {
+    }
+}
 
 impl Binds for NoBinds {
     #[inline]
