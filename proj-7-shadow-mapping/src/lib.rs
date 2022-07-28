@@ -293,6 +293,10 @@ impl RendererDelgate for Delegate {
             );
         }
         // Render Models
+        let shadow_map_texture = self
+            .shadow_map_texture
+            .as_deref()
+            .expect("Failed to access Shadow Map texture");
         self.model_pipeline.new_pass(
             "Render Models",
             command_buffer,
@@ -314,6 +318,11 @@ impl RendererDelgate for Delegate {
                 &HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES),
                 &HeapUsage(&self.model_plane.model.heap, USAGE_RENDER_STAGES),
                 &HeapUsage(&self.model_light.model.heap, USAGE_RENDER_STAGES),
+                &TextureUsage(
+                    shadow_map_texture,
+                    MTLResourceUsage::Sample,
+                    MTLRenderStages::Fragment,
+                ),
             ],
             |p| {
                 p.bind(
@@ -321,11 +330,7 @@ impl RendererDelgate for Delegate {
                     main_fragment_binds {
                         camera: Bind::Value(&self.camera_space),
                         light: Bind::Value(&self.light_space),
-                        shadow_tx: BindTexture::Texture(
-                            self.shadow_map_texture
-                                .as_deref()
-                                .expect("Failed to access Shadow Map texture"),
-                        ),
+                        shadow_tx: BindTexture::Texture(shadow_map_texture),
                         ..Binds::SKIP
                     },
                 );
@@ -338,25 +343,22 @@ impl RendererDelgate for Delegate {
                             },
                             Binds::SKIP,
                         );
-                        for DrawItem {
-                            vertex_count,
-                            geometry,
-                            material,
-                            ..
-                        } in m.model.draws()
-                        {
+                        for draw in m.model.draws() {
                             p.draw_primitives_with_bind(
                                 main_vertex_binds {
-                                    geometry: Bind::buffer_with_rolling_offset(geometry),
+                                    geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                                     ..Binds::SKIP
                                 },
                                 main_fragment_binds {
-                                    material: Bind::iterating_buffer_offset(geometry.1, material),
+                                    material: Bind::iterating_buffer_offset(
+                                        draw.geometry.1,
+                                        draw.material,
+                                    ),
                                     ..Binds::SKIP
                                 },
                                 MTLPrimitiveType::Triangle,
                                 0,
-                                vertex_count,
+                                draw.vertex_count,
                             );
                         }
                     });

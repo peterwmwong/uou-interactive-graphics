@@ -2,6 +2,24 @@ use super::pipeline_function::PipelineFunctionType;
 use crate::typed_buffer::TypedBuffer;
 use metal::TextureRef;
 
+/*
+TODO: Consider optimizing Binding API for consistent Bind Variant usage
+
+Example:
+    main_vertex_binds {
+        camera: Bind::Value(&self.camera_space)
+        ...
+    }
+    ...
+    main_vertex_binds {
+        geometry: Bind::buffer_with_rolling_offset(geometry),
+        ..Binds::SKIP
+    }
+
+`camera` will always be Bind::Value or Skip, while `geometry` will always be Bind::Buffer or Skip.
+I can't think of a reason why you'd be switching between other variants (ex. Value, then Buffer?).
+*/
+
 pub trait Binds {
     const SKIP: Self;
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder);

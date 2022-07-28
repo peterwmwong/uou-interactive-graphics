@@ -4,22 +4,6 @@
 
 using namespace metal;
 
-typedef MTLQuadTessellationFactorsHalf QuadTessellFactors;
-
-[[kernel]] void
-tessell_compute(constant float              & factor  [[buffer(TesselComputeBufferIndex::TessellFactor)]],
-                device   QuadTessellFactors * out     [[buffer(TesselComputeBufferIndex::OutputTessellFactors)]],
-                         uint                 pid     [[thread_position_in_grid]])
-{
-    device QuadTessellFactors* o = &out[pid];
-    o->edgeTessellationFactor[0] = factor;
-    o->edgeTessellationFactor[1] = factor;
-    o->edgeTessellationFactor[2] = factor;
-    o->edgeTessellationFactor[3] = factor;
-    o->insideTessellationFactor[0] = factor;
-    o->insideTessellationFactor[1] = factor;
-}
-
 struct VertexOut
 {
     float4 position [[position]];
@@ -29,9 +13,9 @@ struct VertexOut
 [[patch(quad, 4)]]
 [[vertex]] VertexOut
 main_vertex(         float2     patch_coord                [[position_in_patch]],
-            constant float4x4 & matrix_world_to_projection [[buffer(VertexBufferIndex::MatrixWorldToProjection)]],
-            constant float    & displacement_scale         [[buffer(VertexBufferIndex::DisplacementScale)]],
-            texture2d<half>     disp_tx                    [[texture(VertexTextureIndex::Displacement)]])
+            constant float4x4 & matrix_world_to_projection [[buffer(0)]],
+            constant float    & displacement_scale         [[buffer(1)]],
+            texture2d<half>     disp_tx                    [[texture(0)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
     const float disp_amount = is_null_texture(disp_tx)
@@ -56,12 +40,12 @@ main_vertex(         float2     patch_coord                [[position_in_patch]]
 
 [[fragment]] half4
 main_fragment(         VertexOut        in        [[stage_in]],
-              constant ProjectedSpace & camera    [[buffer(FragBufferIndex::CameraSpace)]],
-              constant ProjectedSpace & light     [[buffer(FragBufferIndex::LightSpace)]],
-              constant bool           & shade_tri [[buffer(FragBufferIndex::ShadeTriangulation)]],
-              texture2d<half>           normal_tx [[texture(FragTextureIndex::Normal)]],
+              constant ProjectedSpace & camera    [[buffer(0)]],
+              constant ProjectedSpace & light     [[buffer(1)]],
+              constant bool           & shade_tri [[buffer(2)]],
+              texture2d<half>           normal_tx [[texture(0)]],
               depth2d<float,
-                      access::sample>   shadow_tx [[texture(FragTextureIndex::ShadowMap)]])
+                      access::sample>   shadow_tx [[texture(1)]])
 {
     if (shade_tri) return half4(1, 1, 0, 1);
 
@@ -105,8 +89,8 @@ struct LightVertexOut
 
 vertex LightVertexOut
 light_vertex(        uint       vertex_id                  [[vertex_id]],
-            constant float4x4 & matrix_model_to_projection [[buffer(LightVertexBufferIndex::MatrixModelToProjection)]],
-            constant Geometry & geometry                   [[buffer(LightVertexBufferIndex::Geometry)]])
+            constant float4x4 & matrix_model_to_projection [[buffer(0)]],
+            constant Geometry & geometry                   [[buffer(1)]])
 {
     const uint idx = geometry.indices[vertex_id];
     return {
@@ -117,7 +101,7 @@ light_vertex(        uint       vertex_id                  [[vertex_id]],
 
 fragment half4
 light_fragment(         LightVertexOut   in       [[stage_in]],
-               constant Material       & material [[buffer(LightFragBufferIndex::Material)]])
+               constant Material       & material [[buffer(1)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     return material.ambient_texture.sample(tx_sampler, in.tx_coord);

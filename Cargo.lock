@@ -245,6 +245,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "crunchy"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+
+[[package]]
 name = "ctor"
 version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -346,6 +352,15 @@ name = "glob"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
+
+[[package]]
+name = "half"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad6a9459c9c30b177b925162351f97e7d967c7ea8bab3b8352805327daf45554"
+dependencies = [
+ "crunchy",
+]
 
 [[package]]
 name = "hashbrown"
@@ -494,6 +509,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "build-hash",
+ "half",
 ]
 
 [[package]]
@@ -685,6 +701,22 @@ dependencies = [
 
 [[package]]
 name = "proj-7-shadow-mapping"
+version = "0.1.0"
+dependencies = [
+ "metal-app",
+ "metal-build",
+]
+
+[[package]]
+name = "proj-8-tesselation"
+version = "0.1.0"
+dependencies = [
+ "metal-app",
+ "metal-build",
+]
+
+[[package]]
+name = "proj-final"
 version = "0.1.0"
 dependencies = [
  "metal-app",

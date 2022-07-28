@@ -335,7 +335,7 @@ impl RendererDelgate for Delegate {
                         },
                         main_fragment_binds::SKIP,
                     );
-                    draw_model(&p, &&self.mirror_plane_model);
+                    draw_model(&p, &self.mirror_plane_model);
                 });
                 p.debug_group("Model (mirrored)", || {
                     p.set_depth_stencil_state((

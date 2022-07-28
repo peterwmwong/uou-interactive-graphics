@@ -1,6 +1,9 @@
-use super::{bind::Binds, function, pipeline_function::*};
-use crate::{debug_time, typed_buffer::TypedBuffer};
+use super::{
+    bind::Binds, function, pipeline_function::*, TesselationRenderPass, TesselationRenderPipeline,
+};
+use crate::{debug_time, set_tesselation_factor_buffer, typed_buffer::TypedBuffer};
 use metal::*;
+use metal_types::MTLQuadTessellationFactorsHalf;
 use std::marker::PhantomData;
 
 // TODO: START HERE 2
@@ -14,8 +17,8 @@ pub enum BlendMode {
     Blend, // TODO: Add all the ways to color blend (source/destination alpha/rgb, blend factor, operation, etc.)
 }
 
-type ColorPipelineDesc = (MTLPixelFormat, BlendMode);
-type ColorRenderPassDesc<'a> = (
+pub type ColorPipelineDesc = (MTLPixelFormat, BlendMode);
+pub type ColorRenderPassDesc<'a> = (
     &'a TextureRef,
     (f32, f32, f32, f32),
     MTLLoadAction,
@@ -25,14 +28,17 @@ type ColorRenderPassDesc<'a> = (
 pub struct Color;
 impl Color {
     #[inline]
-    fn setup_pipeline(desc: ColorPipelineDesc, pass: &RenderPipelineColorAttachmentDescriptorRef) {
+    pub(crate) fn setup_pipeline(
+        desc: ColorPipelineDesc,
+        pass: &RenderPipelineColorAttachmentDescriptorRef,
+    ) {
         let (pixel_format, blend_mode) = desc;
         pass.set_pixel_format(pixel_format);
         pass.set_blending_enabled(matches!(blend_mode, BlendMode::Blend));
     }
 
     #[inline]
-    fn setup_render_pass<'a>(
+    pub(crate) fn setup_render_pass<'a>(
         desc: ColorRenderPassDesc<'a>,
         a: &RenderPassColorAttachmentDescriptorRef,
     ) {
@@ -493,6 +499,38 @@ impl<
     }
 
     #[inline]
+    pub fn into_tesselation_subpass<
+        'b,
+        VNew: PipelineFunction<VertexFunctionType>,
+        FNew: PipelineFunction<FragmentFunctionType>,
+        PF: FnOnce(TesselationRenderPass<'a, NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>),
+    >(
+        self,
+        debug_group: &str,
+        subpass_pipeline: &'b TesselationRenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
+        new_depth_state: Option<DS::DepthState<'b>>,
+        new_tesselation_factors_buffer: Option<&'b TypedBuffer<MTLQuadTessellationFactorsHalf>>,
+        fun: PF,
+    ) {
+        let encoder = self.encoder;
+        self.debug_group(debug_group, || {
+            encoder.set_render_pipeline_state(&subpass_pipeline.pipeline);
+            if let Some(depth_state) = new_depth_state {
+                depth_state.setup_render_pass(encoder)
+            }
+            if let Some(buf) = new_tesselation_factors_buffer {
+                set_tesselation_factor_buffer(encoder, &buf.buffer);
+            }
+            fun(TesselationRenderPass {
+                encoder,
+                _vertex: PhantomData,
+                _fragment: PhantomData,
+                _depth_stencil: PhantomData,
+            });
+        });
+    }
+
+    #[inline]
     pub fn set_depth_stencil_state(&self, ds: DS::DepthState<'_>) {
         ds.setup_render_pass(&self.encoder)
     }
@@ -597,6 +635,12 @@ impl<
         depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
         stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
         depth_state: DS::DepthState<'b>,
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: This could be generated, like Bindings.
+        // - There should be a one-to-one relationship with bindings and resource usage
+        // - If Bind::Value is used, then resource usage can be "skipped" (similar concept/vernacular)
         resources: &[&dyn ResourceUsage],
         fun: PF,
     ) where

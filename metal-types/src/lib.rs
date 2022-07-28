@@ -11,6 +11,7 @@ pub use rust_bindgen_only_metal_types_list::*;
  See `metal-types/src/rust_bindgen_only_metal_types.rs`.
 ***************************************************************************************************/
 use std::{
+    ffi::c_ushort,
     fmt::Debug,
     ops::{Mul, Sub},
     simd::{f32x2, f32x4, u16x2, SimdFloat},
@@ -507,6 +508,24 @@ mod test {
                     ]
                 )
             );
+        }
+    }
+}
+
+#[repr(C)]
+#[allow(non_snake_case)]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
+pub struct MTLQuadTessellationFactorsHalf {
+    pub edgeTessellationFactor: [c_ushort; 4usize],
+    pub insideTessellationFactor: [c_ushort; 2usize],
+}
+
+impl MTLQuadTessellationFactorsHalf {
+    pub fn new(v: u16) -> Self {
+        let v = half::f16::from_f32(v as _).to_bits();
+        Self {
+            edgeTessellationFactor: [v; 4],
+            insideTessellationFactor: [v; 2],
         }
     }
 }
