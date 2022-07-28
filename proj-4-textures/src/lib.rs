@@ -224,26 +224,23 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                             light_pos: Bind::Value(&self.light_position),
                         },
                     );
-                    for DrawItem {
-                        name,
-                        vertex_count,
-                        geometry,
-                        material,
-                    } in self.model.draws()
-                    {
-                        p.debug_group(name, || {
+                    for draw in self.model.draws() {
+                        p.debug_group(draw.name, || {
                             p.draw_primitives_with_bind(
                                 main_vertex_binds {
-                                    geometry: Bind::buffer_with_rolling_offset(geometry),
+                                    geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                                     model: Bind::Skip,
                                 },
                                 main_fragment_binds {
-                                    material: Bind::iterating_buffer_offset(geometry.1, material),
+                                    material: Bind::iterating_buffer_offset(
+                                        draw.geometry.1,
+                                        draw.material,
+                                    ),
                                     ..main_fragment_binds::SKIP
                                 },
                                 MTLPrimitiveType::Triangle,
                                 0,
-                                vertex_count as _,
+                                draw.vertex_count,
                             );
                         });
                     }

@@ -104,21 +104,16 @@ impl RendererDelgate for Delegate {
                     },
                     NoBinds,
                 );
-                for DrawItemNoMaterial {
-                    vertex_count,
-                    geometry,
-                    ..
-                } in self.model.draws()
-                {
+                for draw in self.model.draws() {
                     p.draw_primitives_with_bind(
                         main_vertex_binds {
-                            geometry: Bind::buffer_with_rolling_offset(geometry),
+                            geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..Binds::SKIP
                         },
                         NoBinds,
                         MTLPrimitiveType::Point,
                         0,
-                        vertex_count as _,
+                        draw.vertex_count,
                     );
                 }
             },

@@ -244,22 +244,17 @@ impl RendererDelgate for Delegate {
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         let draw_model = |p: &RenderPass<1, main_vertex, main_fragment, (Depth, Stencil)>,
                           model: &Model<Geometry, NoMaterial>| {
-            for DrawItemNoMaterial {
-                name,
-                vertex_count,
-                geometry,
-            } in model.draws()
-            {
-                p.debug_group(name, || {
+            for draw in model.draws() {
+                p.debug_group(draw.name, || {
                     p.draw_primitives_with_bind(
                         main_vertex_binds {
-                            geometry: Bind::buffer_with_rolling_offset(geometry),
+                            geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..main_vertex_binds::SKIP
                         },
                         main_fragment_binds::SKIP,
                         MTLPrimitiveType::Triangle,
                         0,
-                        vertex_count,
+                        draw.vertex_count,
                     )
                 })
             }

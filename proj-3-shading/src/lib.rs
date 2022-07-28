@@ -191,21 +191,16 @@ impl RendererDelgate for Delegate {
                             light_pos: Bind::Value(&self.light_world_position),
                         },
                     );
-                    for DrawItemNoMaterial {
-                        vertex_count,
-                        geometry,
-                        ..
-                    } in self.model.draws()
-                    {
+                    for draw in self.model.draws() {
                         p.draw_primitives_with_bind(
                             main_vertex_binds {
-                                geometry: Bind::buffer_with_rolling_offset(geometry),
+                                geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                                 ..Binds::SKIP
                             },
                             main_fragment_binds::SKIP,
                             MTLPrimitiveType::Triangle,
                             0,
-                            vertex_count as _,
+                            draw.vertex_count,
                         );
                     }
                 });
