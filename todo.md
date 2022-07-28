@@ -10,6 +10,10 @@
 
 # metal-app
 
+- Delete everything RenderPipeline replaced :)
+- UIRay
+    - Orbiting drag doesn't quite feel right
+        - It doesn't seem to scale exactly to the amount dragged.
 - Move `shaders.metallib` generation and access into metal-app
     - Currently...
         1. `metal-build` generates the `metallib` into `OUT_DIR`
@@ -27,63 +31,6 @@
         - Remove release build checks `library.get_function()` result
         - If we wrap `metal::Library` with our own type, we could prevent shader functions from
           other libraries being mixed up.
-- Encapsulate Render Pipeline
-    - PSO's split setup and encoding... but they have to line-up exactly...
-        - Attachments: Color Pixel Format, Depth Pixel Format
-            - At setup time, creating pipeline
-            - At encode time, creating render pass
-        - Vertex/Fragment Function
-            - At setup time, we verify (non-release profile) Buffer Argument Index/Sizes (add Texture Index verification?)
-                - Although not a requirement, in practice, extremely helpful to catch buffer index/size early on.
-                    - Example: Buffer Index is wrong
-                    - Example: Argument Buffer has a different struct (different size)
-            - At encode time, we need to set the same Buffer Index/Size and Textures
-    - It's easy to fuck up...
-        - Example: Setup pipeline with Depth, create render pass without depth
-        - Example: Forget to encode a Buffer
-        - Example: Encode the wrong Argument Buffer (wrong struct, different size)
-    - Feels like an abstraction could tie setup/encode together, eliminate mistakes, and reduce duplication.
-        - Consider as input to this API, a combination `new_render_pipeline_descriptor` and `debug_assert_render_pipeline_function_arguments`
-        - Wouldn't be cool if it were something like...
-            ```rs
-            let pipeline = create_pipeline!(
-                DEFAULT_PIXEL_FORMAT,
-                Some(DEPTH_TEXTURE_FORMAT),
-                "vertex_fn", &[
-                    value_arg::<ProjectedSpace>(FragBufferIndex::Camera as _)
-                    value_arg::<ModelSpace>(FragBufferIndex::Model as _)
-                ],
-                "fragment_fn", &[
-                    value_arg::<Material>(FragBufferIndex::Material as _)
-                ]
-            );
-
-            // IMPORTANT: Removes getting the arguments to `new_render_pass_descriptor()` correctly.
-            let encoder = pipeline.new_render_command_encoder(&command_buffer);
-
-            // IMPORTANT: Compile time checked!
-            encoder.setup_binds(
-                // IMPORTANT: vvv Strongly typed vvv
-                // vertex_function_args: (Bind<ProjectedSpace>, Bind<ModelSpace>)
-                (
-                    Bind::Bytes(&self.camera_space),
-                    Bind::Bytes(&ModelSpace { ... }),
-                ),
-                // fragment_function_args: (Bind<Material>)
-                (Bind::Bytes(&self.model.materials[0]))
-            );
-            ```
-        - Open question: Can we somehow handle multiple pipelines?
-            - `proj-6` sets up a bunch of buffers/textures that **multiple** pipelines
-            - Maybe another/extended API like `create_pipelines!`
-                - This would have knowledge of **order of pipelines**, then the abstraction could enforce...
-                    - Shared binds line-up (ex. `proj-6`'s `FragBufferIndex::Camera` is used)
-                - Improve performance, by optimizing the minimal resources needed to be encoded.
-                    - Example: Pipeline 1 only uses Buffer A, Pipeline 2 uses Buffer A, Buffer B
-                        - Drawing w/Pipeline 1, **only** requires Buffer A
-                        - Drawing w/Pipeline 2, **only** requires Buffer B
-                            - Buffer A is optionally needed, it's encoded already, but allow it to
-                              be overwritten with a different value.
 - Encapsulate Shadow Mapping... somehow
     - Some overlap with Encapsulate Render Pipeline
     - Parts
@@ -102,16 +49,6 @@
             - Hand it back caller to do pre-draw and draw...
                 - Set Buffers, Textures, any other pre-draw commands
                 - Draw
-- Camera
-    - Implement Reverse-Z + Infinity Z for better depth precision (ex. fix Z-fighting)
-        - https://dev.theomader.com/depth-precision/
-        - https://developer.nvidia.com/content/depth-precision-visualized
-        - Currently, I think I'm seeing Z-fighting on the Yoda model, zooming out slightly, and noting the flicker in Yoda's eye
-        - Setup a z-fighting example rendering to verify the benefit
-            - Ex. https://austin-eng.com/webgpu-samples/samples/reversedZ
-- UIRay
-    - Orbiting drag doesn't quite feel right
-        - It doesn't seem to scale exactly to the amount dragged.
 - Implement Triple Buffering
     - Currently we're committing a Metal command buffer and **waiting** for completion.
     - This preventing the main thread from doing other work or queueing another frame to render
@@ -195,8 +132,12 @@
 
 # Projects
 
-- Move common assets to a root directory
-    - Too many Teapots and Yodas
+- Implement Reverse-Z + Infinity Z for better depth precision (ex. fix Z-fighting)
+    - https://dev.theomader.com/depth-precision/
+    - https://developer.nvidia.com/content/depth-precision-visualized
+    - Currently, I think I'm seeing Z-fighting on the Yoda model, zooming out slightly, and noting the flicker in Yoda's eye
+    - Setup a z-fighting example rendering to verify the benefit
+        - Ex. https://austin-eng.com/webgpu-samples/samples/reversedZ
 
 ## proj-3
 
@@ -204,12 +145,6 @@
 
 ## proj-6
 
-- Optimize
-    - Reduce environment cube texture loading the Metal 3 MTLIO
-    - Reduce render passes
-        - Can everything be done in a single render pass?
-            - Raster Order Groups
-            - Amplification / Viewports
 - Allow Camera to freely move and rotate
     - I suspect many calculations were simplified knowing the camera is *ALWAYS* looking the world coordinate origin
         - Ex. mirror transformation: calculating the vector to reflect

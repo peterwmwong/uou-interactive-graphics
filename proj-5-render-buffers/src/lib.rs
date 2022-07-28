@@ -33,7 +33,7 @@ impl RendererDelgate for CheckerboardDelegate {
                 &device
                     .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib."),
-                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 checkerboard_vertex,
                 checkerboard_fragment,
                 (NoDepth, NoStencil),
@@ -116,7 +116,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
                 &device
                     .new_library_with_data(LIBRARY_BYTES)
                     .expect("Failed to import shader metal lib."),
-                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 main_vertex,
                 main_fragment,
                 (NoDepth, NoStencil),
@@ -248,7 +248,7 @@ impl<R: RendererDelgate> Delegate<R> {
         desc.set_height(plane_size[0] as _);
         // TODO: What is the optimal mip-map level count?
         desc.set_mipmap_level_count(6);
-        desc.set_pixel_format(DEFAULT_PIXEL_FORMAT);
+        desc.set_pixel_format(DEFAULT_COLOR_FORMAT);
         desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
         let plane_texture = self.device().new_texture(&desc);
         plane_texture.set_label("Plane Texture");

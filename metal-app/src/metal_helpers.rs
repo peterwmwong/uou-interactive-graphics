@@ -59,7 +59,8 @@ pub fn encode_fragment_bytes<T: Sized>(
     );
 }
 
-pub const DEFAULT_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
+pub const DEFAULT_COLOR_FORMAT: MTLPixelFormat = MTLPixelFormat::BGRA8Unorm;
+pub const DEFAULT_DEPTH_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 
 #[inline]
 pub fn new_render_pipeline_descriptor(

@@ -20,7 +20,6 @@ use std::{
 };
 
 const DEPTH_COMPARISON_BIAS: f32 = 4e-3;
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 16., 0.]);
 const INITIAL_DISPLACEMENT_SCALE: f32 = 0.1;
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 3.5, PI / 3.]);
@@ -78,7 +77,7 @@ fn create_pipeline(
         "Plane",
         &device,
         &library,
-        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
             HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
@@ -86,7 +85,7 @@ fn create_pipeline(
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     );
 }
 
@@ -135,7 +134,7 @@ impl RendererDelgate for Delegate {
                 desc.set_label("Depth State");
                 device.new_depth_stencil_state(&desc)
             },
-            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
+            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             displacement_scale: INITIAL_DISPLACEMENT_SCALE,
             displacement_texture: displacement_image_path
                 .map(|p| new_texture_from_png(p, &device, &mut image_buffer)),
@@ -166,10 +165,10 @@ impl RendererDelgate for Delegate {
                 "Light",
                 &device,
                 &library,
-                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 light_vertex,
                 light_fragment,
-                (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
             light_space: Default::default(),
             light: Camera::new(
@@ -191,7 +190,7 @@ impl RendererDelgate for Delegate {
                     [],
                     main_vertex,
                     NoFragmentFunction,
-                    (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+                    (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
                 )
             },
             shadow_map_texture: None,

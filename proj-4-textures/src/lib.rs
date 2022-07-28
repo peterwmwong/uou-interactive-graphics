@@ -18,7 +18,6 @@ use std::{
 };
 
 const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
 const INITIAL_MODE: ShadingModeSelector = ShadingModeSelector::DEFAULT;
@@ -53,7 +52,7 @@ fn create_model_pipeline(
         "Model",
         &device,
         &library,
-        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
             HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
@@ -61,7 +60,7 @@ fn create_model_pipeline(
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     )
 }
 
@@ -147,7 +146,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
+            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             light_position: f32x4::default().into(),
             light: Camera::new(
                 LIGHT_DISTANCE,
@@ -160,10 +159,10 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 "Light",
                 &device,
                 &library,
-                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 light_vertex,
                 light_fragment,
-                (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
             matrix_model_to_world,
             model,

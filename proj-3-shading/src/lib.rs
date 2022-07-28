@@ -12,7 +12,6 @@ use std::{
     simd::{f32x2, f32x4, SimdFloat},
 };
 
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
@@ -47,7 +46,7 @@ fn create_model_pipeline(
         "Render Teapot Pipeline",
         device,
         library,
-        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
             HasAmbient: shading_mode.contains(ShadingModeSelector::HAS_AMBIENT),
@@ -55,7 +54,7 @@ fn create_model_pipeline(
             OnlyNormals: shading_mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: shading_mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     )
 }
 
@@ -118,7 +117,7 @@ impl RendererDelgate for Delegate {
                 desc.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&desc)
             },
-            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
+            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             light: Camera::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
@@ -130,10 +129,10 @@ impl RendererDelgate for Delegate {
                 "Render Light Pipeline",
                 &device,
                 &library,
-                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 light_vertex,
                 light_fragment,
-                (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
             light_world_position: f32x4::default().into(),
             matrix_model_to_world,

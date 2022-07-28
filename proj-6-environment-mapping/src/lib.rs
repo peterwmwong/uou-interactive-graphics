@@ -21,7 +21,6 @@ const BG_STENCIL_REF_VALUE: u32 = 0;
 const MIRROR_PLANE_STENCIL_REF_VALUE: u32 = 1;
 const MODEL_STENCIL_REF_VALUE: u32 = 2;
 
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const STENCIL_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Stencil8;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -65,7 +64,7 @@ fn create_main_render_pipeline(
         "Model",
         device,
         library,
-        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
             HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
@@ -73,7 +72,7 @@ fn create_main_render_pipeline(
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        (Depth(DEPTH_TEXTURE_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
+        (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
     )
 }
 
@@ -207,10 +206,10 @@ impl RendererDelgate for Delegate {
                 "BG",
                 &device,
                 &library,
-                [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 bg_vertex,
                 bg_fragment,
-                (Depth(DEPTH_TEXTURE_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
+                (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
             ),
             main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
             matrix_mirror_plane_model_to_world,
@@ -224,7 +223,7 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
+            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             camera_space: ProjectedSpace::default(),
             mirror_camera_space: ProjectedSpace::default(),
             mirror_model_space: ModelSpace::default(),

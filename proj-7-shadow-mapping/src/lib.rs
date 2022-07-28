@@ -20,7 +20,6 @@ use std::{
 
 const DEFAULT_AMBIENT_AMOUNT: u32 = 15;
 const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
-const DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -112,7 +111,7 @@ fn create_pipeline(
         "Model",
         device,
         library,
-        [(DEFAULT_PIXEL_FORMAT, BlendMode::NoBlend)],
+        [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
             HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
@@ -120,7 +119,7 @@ fn create_pipeline(
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
         },
-        (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     )
 }
 
@@ -150,7 +149,7 @@ impl RendererDelgate for Delegate {
             ),
             camera_space: Default::default(),
             command_queue: device.new_command_queue(),
-            depth_texture: DepthTexture::new("Depth", DEPTH_TEXTURE_FORMAT),
+            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
                 desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
@@ -226,7 +225,7 @@ impl RendererDelgate for Delegate {
                 [],
                 main_vertex,
                 NoFragmentFunction,
-                (Depth(DEPTH_TEXTURE_FORMAT), NoStencil),
+                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
             shading_mode,
             shadow_map_texture: None,
