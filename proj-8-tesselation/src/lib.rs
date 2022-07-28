@@ -220,6 +220,12 @@ impl RendererDelgate for Delegate {
         command_buffer.set_label("Command Buffer");
 
         // Render Shadow Map
+        let usage_tesselation_factors_buffer: &dyn ResourceUsage = &BufferUsage(
+            &self.tessellation_factors_buffer,
+            MTLResourceUsage::Read,
+            MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+        );
+        let usage_displacement_texture;
         self.shadow_map_pipeline.new_pass(
             "Shadow Map",
             command_buffer,
@@ -233,18 +239,21 @@ impl RendererDelgate for Delegate {
             NoStencil,
             &self.tessellation_factors_buffer,
             &self.depth_state,
-            &[
-                &TextureUsage(
-                    &self.displacement_texture.as_deref().unwrap(),
+            // TODO: See RenderPipeline::new todo on making this more like Binds w/skip, should make
+            //       this bit of ugliness go away.
+            &(if let Some(displacement_texture) = &self.displacement_texture {
+                usage_displacement_texture = TextureUsage(
+                    displacement_texture.deref(),
                     MTLResourceUsage::Sample,
                     MTLRenderStages::Vertex,
-                ),
-                &BufferUsage(
-                    &self.tessellation_factors_buffer,
-                    MTLResourceUsage::Read,
-                    MTLRenderStages::Vertex | MTLRenderStages::Fragment,
-                ),
-            ],
+                );
+                [
+                    &usage_displacement_texture,
+                    usage_tesselation_factors_buffer,
+                ]
+            } else {
+                [usage_tesselation_factors_buffer; 2]
+            }),
             |p| {
                 p.draw_patches_with_bind(
                     main_vertex_binds {
@@ -252,9 +261,11 @@ impl RendererDelgate for Delegate {
                             &self.light_matrix_world_to_projection,
                         ),
                         displacement_scale: Bind::Value(&self.displacement_scale),
-                        disp_tx: BindTexture::Texture(
-                            self.displacement_texture.as_deref().unwrap(),
-                        ),
+                        disp_tx: if let Some(displacement_texture) = &self.displacement_texture {
+                            BindTexture::Texture(displacement_texture)
+                        } else {
+                            BindTexture::Skip
+                        },
                     },
                     NoBinds,
                     4,
@@ -284,11 +295,11 @@ impl RendererDelgate for Delegate {
                     &self.light_model.heap,
                     MTLRenderStages::Vertex | MTLRenderStages::Fragment,
                 ),
-                &TextureUsage(
-                    &self.displacement_texture.as_deref().unwrap(),
-                    MTLResourceUsage::Sample,
-                    MTLRenderStages::Vertex,
-                ),
+                // &TextureUsage(
+                //     &self.displacement_texture.as_deref().unwrap(),
+                //     MTLResourceUsage::Sample,
+                //     MTLRenderStages::Vertex,
+                // ),
                 &TextureUsage(
                     &self.normal_texture,
                     MTLResourceUsage::Sample,
@@ -337,9 +348,13 @@ impl RendererDelgate for Delegate {
                                     &self.camera_space.matrix_world_to_projection,
                                 ),
                                 displacement_scale: Bind::Value(&self.displacement_scale),
-                                disp_tx: BindTexture::Texture(
-                                    self.displacement_texture.as_deref().unwrap(),
-                                ),
+                                disp_tx: if let Some(displacement_texture) =
+                                    &self.displacement_texture
+                                {
+                                    BindTexture::Texture(displacement_texture)
+                                } else {
+                                    BindTexture::Skip
+                                },
                             },
                             main_fragment_binds {
                                 camera: Bind::Value(&self.camera_space),
