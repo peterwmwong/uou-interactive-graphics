@@ -2,7 +2,7 @@ I'm learning computer graphics by watching the [**a l a r m i n g l y well produ
 
 This repository contains my attempt to complete the projects associated with the course.
 
-> :exclamation: **_WARNING:_** Developed and tested *ONLY* on Metal 3 (MacOS Ventura Beta 2, Xcode 14 Beta 2, MacBook Pro M1 Max). Outside of this setup, I have no idea whether any of this code works.
+> :exclamation: **_WARNING:_** Developed and tested *ONLY* on Metal 3 (MacOS Ventura Beta 4, Xcode 14 Beta 4, MacBook Pro M1 Max). Outside of this setup, I have no idea whether any of this code works.
 
 # [Project 1: Hello World](./proj-1-hello-world/)
 
