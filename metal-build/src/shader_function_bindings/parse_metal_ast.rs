@@ -69,6 +69,7 @@ impl Binds {
 pub enum FunctionType {
     Vertex,
     Fragment,
+    Compute,
 }
 
 impl FunctionType {
@@ -76,6 +77,7 @@ impl FunctionType {
         match self {
             FunctionType::Vertex => "Vertex",
             FunctionType::Fragment => "Fragment",
+            FunctionType::Compute => "Compute",
         }
     }
 }
@@ -151,6 +153,26 @@ impl FunctionConstants {
 
 #[derive(PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
+pub struct ParseFunction {
+    pub fn_name: String,
+    pub binds: Vec<Binds>,
+    pub shader_type: Option<FunctionType>,
+    pub referenced_function_constants: BTreeSet<FunctionConstantRef>,
+}
+
+impl ParseFunction {
+    fn new(fn_name: &str) -> Self {
+        Self {
+            fn_name: fn_name.to_owned(),
+            binds: vec![],
+            shader_type: None,
+            referenced_function_constants: BTreeSet::new(),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct Function {
     pub fn_name: String,
     pub binds: Vec<Binds>,
@@ -158,13 +180,21 @@ pub struct Function {
     pub referenced_function_constants: BTreeSet<FunctionConstantRef>,
 }
 
-impl Function {
-    fn new(fn_name: &str) -> Self {
+impl From<ParseFunction> for Function {
+    #[inline]
+    fn from(
+        ParseFunction {
+            fn_name,
+            binds,
+            shader_type,
+            referenced_function_constants,
+        }: ParseFunction,
+    ) -> Self {
         Self {
-            fn_name: fn_name.to_owned(),
-            binds: vec![],
-            shader_type: FunctionType::Vertex,
-            referenced_function_constants: BTreeSet::new(),
+            fn_name,
+            binds,
+            shader_type: shader_type.expect("Failed to parse shader type"),
+            referenced_function_constants,
         }
     }
 }
@@ -251,7 +281,8 @@ pub fn parse_shader_functions_from_reader<R: Read>(
     // Example: | `-MetalVertexAttr 0x14a132850 <line:8:3>
     // Example: | `-MetalFragmentAttr 0x14a132850 <line:8:3>
     let rx_fn_metal_shader_type_attr =
-        Regex::new(r"^\| (?P<last_child>[`|])-Metal(?P<shader_type>Vertex|Fragment)Attr ").unwrap();
+        Regex::new(r"^\| (?P<last_child>[`|])-Metal(?P<shader_type>Vertex|Fragment|Kernel)Attr ")
+            .unwrap();
 
     // Example: | `-
     let rx_fn_last_child = Regex::new(r"^\| `-").unwrap();
@@ -308,19 +339,19 @@ pub fn parse_shader_functions_from_reader<R: Read>(
     }
     enum State {
         FindingRoot,
-        Function(Function),
-        FunctionParam(Function, ShaderFunctionParamInfo, FunctionChild),
-        FunctionParamBufferOrTexture(Function, Binds, FunctionChild),
+        Function(ParseFunction),
+        FunctionParam(ParseFunction, ShaderFunctionParamInfo, FunctionChild),
+        FunctionParamBufferOrTexture(ParseFunction, Binds, FunctionChild),
         Variable(FunctionConstant, FunctionConstantAddress),
         VariableValue(FunctionConstant, FunctionConstantAddress),
     }
     let mut fn_consts = FunctionConstants::new();
-    let mut shader_fns = vec![];
+    let mut shader_fns: Vec<Function> = vec![];
     let mut parse_next_state = |state: State, l: String| {
         match state {
             State::FindingRoot => {
                 if let Some(c) = rx_fn.captures(&l) {
-                    return State::Function(Function::new(&c["fn_name"]));
+                    return State::Function(ParseFunction::new(&c["fn_name"]));
                 } else if let Some(c) = rx_var.captures(&l) {
                     return State::Variable(
                         FunctionConstant::new(&c["name"], &c["data_type"]),
@@ -344,17 +375,21 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                 } else if let Some(c) = rx_fn_metal_shader_type_attr.captures(&l) {
                     let shader_type = &c["shader_type"];
                     match shader_type {
-                        "Vertex" => fun.shader_type = FunctionType::Vertex,
-                        "Fragment" => fun.shader_type = FunctionType::Fragment,
+                        "Vertex" => fun.shader_type = Some(FunctionType::Vertex),
+                        "Fragment" => fun.shader_type = Some(FunctionType::Fragment),
+                        "Kernel" => fun.shader_type = Some(FunctionType::Compute),
                         _ => panic!("Unexpected Metal function attribute ({shader_type})"),
                     }
                     // TODO: This may not be true for compute or object functions with parameterized attributes
                     // Example: [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
                     if FunctionChild::is_last_child(&c) {
-                        shader_fns.push(fun);
+                        shader_fns.push(fun.into());
                         return State::FindingRoot;
                     }
                 } else if rx_fn_last_child.is_match(&l) {
+                    if fun.shader_type.is_some() {
+                        shader_fns.push(fun.into());
+                    }
                     return State::FindingRoot;
                 } else {
                     if let Some(c) = rx_fn_constant_ref.captures(&l) {
@@ -426,7 +461,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                     fun.binds.push(bind.with_new_index(index));
                     match fun_last_child {
                         FunctionChild::Last => {
-                            shader_fns.push(fun);
+                            shader_fns.push(fun.into());
                             return State::FindingRoot;
                         }
                         FunctionChild::NotLast => return State::Function(fun),
@@ -647,9 +682,7 @@ TranslationUnitDecl 0x1598302e8 <<invalid sloc>> <invalid sloc>
         fn test_non_binds() {
             /*
             [[vertex]]
-            float4 test(uint vertex_id [[vertex_id]]) {
-                return 0;
-            }
+            float4 test(uint vertex_id [[vertex_id]]) { return 0; }
             */
             test(format!("\
 TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
@@ -674,6 +707,64 @@ TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
                     binds: vec![],
                     shader_type: FunctionType::Vertex,
                     referenced_function_constants: BTreeSet::new()
+                }]
+            );
+        }
+
+        #[test]
+        fn test_shader_types() {
+            /*
+            [[patch(quad, 4)]]
+            [[vertex]]
+            float4 test_vertex(){ return 0; }
+            */
+            test(b"\
+TranslationUnitDecl 0x1570302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x157075460 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x157030f20 '__metal_intersection_query_t'
+|-ImportDecl 0x1570754f0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x157813150 <line:6:1, col:17> col:17 Namespace 0x157075628 'metal'
+|-FunctionDecl 0x157813b08 <line:8:1, col:33> col:8 test 'float4 ()'
+| |-CompoundStmt 0x157828080 <col:21, col:33>
+| | `-ReturnStmt 0x157828068 <col:23, col:30>
+| |   `-ImplicitCastExpr 0x157828050 <col:30> 'float4':'float __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x157828038 <col:30> 'float' <IntegralToFloating>
+| |       `-IntegerLiteral 0x157828018 <col:30> 'int' 0
+| |-MetalVertexAttr 0x157813ba8 <line:7:3>
+| `-MetalPatchAttr 0x157813be8 <line:6:3, col:16> Quad
+|   `-IntegerLiteral 0x157813a48 <col:15> 'int' 4
+`-<undeserialized declarations>
+",
+                [],
+                [Function {
+                    fn_name: "test".to_owned(),
+                    binds: vec![],
+                    shader_type: FunctionType::Vertex,
+                    referenced_function_constants: BTreeSet::new(),
+                }]
+            );
+
+            /*
+            [[kernel]]
+            void test_vertex(){ }
+            */
+            test(b"\
+TranslationUnitDecl 0x13c8302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x13c875460 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x13c830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x13c8754f0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x13c933f50 <line:6:1, col:17> col:17 Namespace 0x13c875628 'metal'
+|-FunctionDecl 0x13c934898 <line:7:1, col:21> col:6 test 'void ()'
+| |-CompoundStmt 0x13c934990 <col:19, col:21>
+| `-MetalKernelAttr 0x13c934938 <line:6:3>
+`-<undeserialized declarations>
+",
+                [],
+                [Function {
+                    fn_name: "test".to_owned(),
+                    binds: vec![],
+                    shader_type: FunctionType::Compute,
+                    referenced_function_constants: BTreeSet::new(),
                 }]
             );
         }
