@@ -37,7 +37,7 @@ struct VertexOut
 
 [[vertex]]
 VertexOut main_vertex(         uint       vertex_id                  [[vertex_id]],
-                      constant float4x4 & matrix_model_to_projection [[buffer(0)]])
+                      constant float4x4 & m_model_to_projection [[buffer(0)]])
 {
     constexpr const float2 plane_triange_strip_vertices[4] = {
         {-1.h, -1.h}, // Bottom Left
@@ -49,7 +49,7 @@ VertexOut main_vertex(         uint       vertex_id                  [[vertex_id
     const float4 position   = float4(position2d, 0, 1);
     const float2 tx_coord   = fma(position2d, 0.5, 0.5);
     return {
-        .position  = matrix_model_to_projection * position,
+        .position  = m_model_to_projection * position,
         .tx_coord  = 1. - tx_coord
     };
 }

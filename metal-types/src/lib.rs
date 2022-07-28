@@ -187,7 +187,7 @@ impl f32x4x4 {
     }
 
     // TODO: Add translate_scale_rotate()
-    // - Many projects need this for matrix_model_to_world and instead perform the heavy 3 matrix
+    // - Many projects need this for m_model_to_world and instead perform the heavy 3 matrix
     //   multiplications.
     // - Generates an immense amount of instructions, because floating point operations cannot be
     //   used in const evaluation.

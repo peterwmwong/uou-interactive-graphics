@@ -35,7 +35,7 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
     light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (Depth, NoStencil)>,
     light_position: float4,
     light: Camera,
-    matrix_model_to_world: f32x4x4,
+    m_model_to_world: f32x4x4,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
     model_space: ModelSpace,
     model: Model<Geometry, HasMaterial<Material>>,
@@ -125,7 +125,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
         // - We can create combo helpers, see f32x4x4::scale_translate()
         let model_to_world_scale_rot = f32x4x4::scale(scale, scale, scale, 1.)
             * (f32x4x4::y_rotate(PI) * f32x4x4::x_rotate(PI / 2.));
-        let matrix_model_to_world = model_to_world_scale_rot * f32x4x4::translate(cx, cy, cz);
+        let m_model_to_world = model_to_world_scale_rot * f32x4x4::translate(cx, cy, cz);
 
         Self {
             camera: Camera::new_with_default_distance(
@@ -135,8 +135,8 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 0.,
             ),
             camera_space: ProjectedSpace {
-                matrix_world_to_projection: f32x4x4::identity().into(),
-                matrix_screen_to_world: f32x4x4::identity().into(),
+                m_world_to_projection: f32x4x4::identity().into(),
+                m_screen_to_world: f32x4x4::identity().into(),
                 position_world: f32x4::default().into(),
             },
             command_queue: device.new_command_queue(),
@@ -164,15 +164,15 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 light_fragment,
                 (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
-            matrix_model_to_world,
+            m_model_to_world,
             model,
             model_space: ModelSpace {
-                matrix_model_to_projection: f32x4x4::identity(),
+                m_model_to_projection: f32x4x4::identity(),
                 // IMPORTANT: Not a mistake, using Model-to-World 4x4 Matrix for Normal-to-World 3x3
                 // Matrix. Conceptually, we want a matrix that ONLY applies rotation (no
                 // translation). Since normals are directions (not positions, relative to a point on
                 // a surface), translations are meaningless.
-                matrix_normal_to_world: matrix_model_to_world.into(),
+                m_normal_to_world: m_model_to_world.into(),
             },
             model_pipeline,
             needs_render: false,
@@ -260,12 +260,12 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     fn on_event(&mut self, event: UserEvent) {
         if let Some(u) = self.camera.on_event(event) {
             self.camera_space = ProjectedSpace {
-                matrix_world_to_projection: u.matrix_world_to_projection,
-                matrix_screen_to_world: u.matrix_screen_to_world,
+                m_world_to_projection: u.m_world_to_projection,
+                m_screen_to_world: u.m_screen_to_world,
                 position_world: u.position_world.into(),
             };
-            self.model_space.matrix_model_to_projection =
-                self.camera_space.matrix_world_to_projection * self.matrix_model_to_world;
+            self.model_space.m_model_to_projection =
+                self.camera_space.m_world_to_projection * self.m_model_to_world;
             self.needs_render = true;
         }
         if let Some(CameraUpdate { position_world, .. }) = self.light.on_event(event) {
@@ -290,8 +290,4 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     fn device(&self) -> &Device {
         &self.device
     }
-}
-
-pub fn run() {
-    launch_application::<Delegate<true>>("Project 4 - Textures");
 }

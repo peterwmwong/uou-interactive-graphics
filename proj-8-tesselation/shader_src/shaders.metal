@@ -13,7 +13,7 @@ struct VertexOut
 [[patch(quad, 4)]]
 [[vertex]] VertexOut
 main_vertex(         float2     patch_coord                [[position_in_patch]],
-            constant float4x4 & matrix_world_to_projection [[buffer(0)]],
+            constant float4x4 & m_world_to_projection [[buffer(0)]],
             constant float    & displacement_scale         [[buffer(1)]],
             texture2d<half>     disp_tx                    [[texture(0)]])
 {
@@ -33,7 +33,7 @@ main_vertex(         float2     patch_coord                [[position_in_patch]]
     const float2 lower_middle = mix(br, bl, 1-patch_coord.x);
     const float2 position_xy  = mix(upper_middle, lower_middle, patch_coord.y);
     return {
-        .position = matrix_world_to_projection * float4(position_xy, disp_amount, 1),
+        .position = m_world_to_projection * float4(position_xy, disp_amount, 1),
         .tx_coord = patch_coord
     };
 }
@@ -54,14 +54,14 @@ main_fragment(         VertexOut        in        [[stage_in]],
                                  min_filter::linear);
           half3  normal   = normal_tx.sample(tx_sampler, in.tx_coord).xyz * 2 - 1; // [0,1] -> [-1,1]
                  normal.z = -normal.z;
-    const float4 pos_w    = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const float4 pos_w    = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos      = pos_w.xyz / pos_w.w;
 
     constexpr sampler shadow_sampler(address::clamp_to_border,
                                      border_color::opaque_white,
                                      compare_func::less_equal,
                                      filter::linear);
-          float4 shadow_tx_coord = light.matrix_world_to_projection * float4(pos, 1);
+          float4 shadow_tx_coord = light.m_world_to_projection * float4(pos, 1);
                  shadow_tx_coord = shadow_tx_coord / shadow_tx_coord.w;
     const float  is_lit          = shadow_tx.sample_compare(shadow_sampler, shadow_tx_coord.xy, shadow_tx_coord.z);
     const half4  diffuse_color   = 0.5 * is_lit;
@@ -89,12 +89,12 @@ struct LightVertexOut
 
 vertex LightVertexOut
 light_vertex(        uint       vertex_id                  [[vertex_id]],
-            constant float4x4 & matrix_model_to_projection [[buffer(0)]],
+            constant float4x4 & m_model_to_projection [[buffer(0)]],
             constant Geometry & geometry                   [[buffer(1)]])
 {
     const uint idx = geometry.indices[vertex_id];
     return {
-        .position = matrix_model_to_projection * float4(geometry.positions[idx], 1.0),
+        .position = m_model_to_projection * float4(geometry.positions[idx], 1.0),
         .tx_coord = geometry.tx_coords[idx]    * float2(1,-1) + float2(0,1)
     };
 }

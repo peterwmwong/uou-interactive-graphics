@@ -18,8 +18,8 @@ main_vertex(         uint         vertex_id       [[vertex_id]],
     const float4 position = float4(geometry.positions[idx], 1.0);
     const float3 normal   = geometry.normals[idx];
     return {
-        .position  = model.matrix_model_to_projection * position,
-        .normal    = model.matrix_normal_to_world * normal
+        .position  = model.m_model_to_projection * position,
+        .normal    = model.m_normal_to_world * normal
     };
 }
 
@@ -32,7 +32,7 @@ main_fragment(         VertexOut        in        [[stage_in]],
     if (OnlyNormals) return half4(half3(n * float3(1,1,-1)), 1);
 
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
-    const float4 pos_w = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const float4 pos_w = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos   = pos_w.xyz / pos_w.w;
 
     /*
@@ -105,7 +105,7 @@ light_vertex(constant ProjectedSpace & camera    [[buffer(0)]],
              constant float4         & light_pos [[buffer(1)]])
 {
     return {
-        .position = camera.matrix_world_to_projection * light_pos,
+        .position = camera.m_world_to_projection * light_pos,
         .size = 50,
     };
 }

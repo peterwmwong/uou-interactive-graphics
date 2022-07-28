@@ -41,16 +41,16 @@ impl PipelineFunction<FragmentFunctionType> for checkerboard_fragment {}
 
 #[allow(non_camel_case_types)]
 pub struct main_vertex_binds<'c> {
-    pub matrix_model_to_projection: Bind<'c, float4x4>,
+    pub m_model_to_projection: Bind<'c, float4x4>,
 }
 impl Binds for main_vertex_binds<'_> {
     const SKIP: Self = Self {
-        matrix_model_to_projection: Bind::Skip,
+        m_model_to_projection: Bind::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
-        self.matrix_model_to_projection.bind::<F>(encoder, 0);
+        self.m_model_to_projection.bind::<F>(encoder, 0);
     }
 }
 

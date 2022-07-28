@@ -54,7 +54,7 @@
 - Rethink Memory/Heap Allocation/Layout Strategy
     - Most projects allocate the following resources:
         - Model Resources
-            - matrix_model_to_world (normal_to_world can be derived from this)
+            - m_model_to_world (normal_to_world can be derived from this)
             - Geometry Buffers
                 - indices
                 - positions
@@ -68,29 +68,29 @@
                 - Constants
                     - specular shineness
         - Camera Space (previously known as World) Argument Buffer
-            - matrix_world_to_projection
-            - matrix_screen_to_world
+            - m_world_to_projection
+            - m_screen_to_world
             - position_world
         - Depth Texture
         - Light/Shadow Caster Resources
             - Shadow Map Depth Texture
             - Light Space Argument Buffer
-                - matrix_world_to_projection
+                - m_world_to_projection
     - What belongs where?
         - Usage
             - Vertex Shader needs
                 - Model
                     - Geometry Buffers
-                    - matrix_model_to_world
+                    - m_model_to_world
             - Fragment Shader needs
                 - Model
                     - Material
                 - Camera Space
-                    - matrix_screen_to_world
+                    - m_screen_to_world
                     - position_in_world
                 - Light Resources
                     - Shadow Map Depth Texture
-                    - matrix_world_to_projection
+                    - m_world_to_projection
                     - position_in_world
         - How much does colocation affect performance?
             - ex. All Fragment Shader needed resource are in one part a heap vs different parts of the heaps vs different heaps vs some in heaps some in non-heaps

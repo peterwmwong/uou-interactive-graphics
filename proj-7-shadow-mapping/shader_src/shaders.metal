@@ -18,8 +18,8 @@ main_vertex(         uint         vertex_id [[vertex_id]],
 {
     const uint idx = geometry.indices[vertex_id];
     return {
-        .position = model.matrix_model_to_projection * float4(geometry.positions[idx], 1.0),
-        .normal   = model.matrix_normal_to_world     * float3(geometry.normals[idx]),
+        .position = model.m_model_to_projection * float4(geometry.positions[idx], 1.0),
+        .normal   = model.m_normal_to_world     * float3(geometry.normals[idx]),
         .tx_coord = geometry.tx_coords[idx]          * float2(1,-1) + float2(0,1)
     };
 }
@@ -32,10 +32,10 @@ main_fragment(         VertexOut                 in        [[stage_in]],
                        depth2d<float,
                                access::sample>   shadow_tx [[texture(0)]])
 {
-    float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+    float4 pos = camera.m_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
 
-    float4 pos_light = light.matrix_world_to_projection * pos;
+    float4 pos_light = light.m_world_to_projection * pos;
            pos_light = pos_light / pos_light.w;
 
     // Samples outside the shadow map are considered *NOT* in shadow (border_color::opaque_white).

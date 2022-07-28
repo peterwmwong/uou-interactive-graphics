@@ -21,8 +21,8 @@ main_vertex(         uint         vertex_id [[vertex_id]],
     const float3 normal   = geometry.normals[idx];
     const float2 tx_coord = geometry.tx_coords[idx];
     return {
-        .position  = model.matrix_model_to_projection * position,
-        .normal    = model.matrix_normal_to_world * normal,
+        .position  = model.m_model_to_projection * position,
+        .normal    = model.m_normal_to_world * normal,
         // TODO: Should flipping-x be determined by some data in the material?
         .tx_coord  = float2(tx_coord.x, 1. - tx_coord.y)
     };
@@ -35,7 +35,7 @@ main_fragment(         VertexOut        in        [[stage_in]],
               constant float4         & light_pos [[buffer(2)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
-    float4 pos = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+    float4 pos = camera.m_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
     return shade_phong_blinn(
         {
@@ -63,7 +63,7 @@ light_vertex(constant ProjectedSpace & camera    [[buffer(0)]],
              constant float4         & light_pos [[buffer(1)]])
 {
     return {
-        .position = camera.matrix_world_to_projection * light_pos,
+        .position = camera.m_world_to_projection * light_pos,
         .size = 50,
     };
 }

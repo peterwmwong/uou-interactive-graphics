@@ -210,8 +210,8 @@ fn bindgen_test_layout_Material() {
 #[repr(align(16))]
 #[derive(Copy, Clone)]
 pub struct ProjectedSpace {
-    pub matrix_world_to_projection: float4x4,
-    pub matrix_screen_to_world: float4x4,
+    pub m_world_to_projection: float4x4,
+    pub m_screen_to_world: float4x4,
     pub position_world: float4,
 }
 #[test]
@@ -226,40 +226,40 @@ fn bindgen_test_layout_ProjectedSpace() {
         16usize,
         concat!("Alignment of ", stringify!(ProjectedSpace))
     );
-    fn test_field_matrix_world_to_projection() {
+    fn test_field_m_world_to_projection() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<ProjectedSpace>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_world_to_projection) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).m_world_to_projection) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
                 stringify!(ProjectedSpace),
                 "::",
-                stringify!(matrix_world_to_projection)
+                stringify!(m_world_to_projection)
             )
         );
     }
-    test_field_matrix_world_to_projection();
-    fn test_field_matrix_screen_to_world() {
+    test_field_m_world_to_projection();
+    fn test_field_m_screen_to_world() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<ProjectedSpace>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_screen_to_world) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).m_screen_to_world) as usize - ptr as usize
             },
             64usize,
             concat!(
                 "Offset of field: ",
                 stringify!(ProjectedSpace),
                 "::",
-                stringify!(matrix_screen_to_world)
+                stringify!(m_screen_to_world)
             )
         );
     }
-    test_field_matrix_screen_to_world();
+    test_field_m_screen_to_world();
     fn test_field_position_world() {
         assert_eq!(
             unsafe {
@@ -294,20 +294,20 @@ impl Default for ProjectedSpace {
 
 #[allow(non_camel_case_types)]
 pub struct main_vertex_binds<'c> {
-    pub matrix_world_to_projection: Bind<'c, float4x4>,
+    pub m_world_to_projection: Bind<'c, float4x4>,
     pub displacement_scale: Bind<'c, float>,
     pub disp_tx: BindTexture<'c>,
 }
 impl Binds for main_vertex_binds<'_> {
     const SKIP: Self = Self {
-        matrix_world_to_projection: Bind::Skip,
+        m_world_to_projection: Bind::Skip,
         displacement_scale: Bind::Skip,
         disp_tx: BindTexture::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
-        self.matrix_world_to_projection.bind::<F>(encoder, 0);
+        self.m_world_to_projection.bind::<F>(encoder, 0);
         self.displacement_scale.bind::<F>(encoder, 1);
         self.disp_tx.bind::<F>(encoder, 0);
     }
@@ -372,18 +372,18 @@ impl PipelineFunction<FragmentFunctionType> for main_fragment {}
 
 #[allow(non_camel_case_types)]
 pub struct light_vertex_binds<'c> {
-    pub matrix_model_to_projection: Bind<'c, float4x4>,
+    pub m_model_to_projection: Bind<'c, float4x4>,
     pub geometry: Bind<'c, Geometry>,
 }
 impl Binds for light_vertex_binds<'_> {
     const SKIP: Self = Self {
-        matrix_model_to_projection: Bind::Skip,
+        m_model_to_projection: Bind::Skip,
         geometry: Bind::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
-        self.matrix_model_to_projection.bind::<F>(encoder, 0);
+        self.m_model_to_projection.bind::<F>(encoder, 0);
         self.geometry.bind::<F>(encoder, 1);
     }
 }

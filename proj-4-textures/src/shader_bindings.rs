@@ -210,8 +210,8 @@ fn bindgen_test_layout_Material() {
 #[repr(align(16))]
 #[derive(Copy, Clone)]
 pub struct ModelSpace {
-    pub matrix_model_to_projection: float4x4,
-    pub matrix_normal_to_world: float3x3,
+    pub m_model_to_projection: float4x4,
+    pub m_normal_to_world: float3x3,
 }
 #[test]
 fn bindgen_test_layout_ModelSpace() {
@@ -225,40 +225,40 @@ fn bindgen_test_layout_ModelSpace() {
         16usize,
         concat!("Alignment of ", stringify!(ModelSpace))
     );
-    fn test_field_matrix_model_to_projection() {
+    fn test_field_m_model_to_projection() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_model_to_projection) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).m_model_to_projection) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
                 stringify!(ModelSpace),
                 "::",
-                stringify!(matrix_model_to_projection)
+                stringify!(m_model_to_projection)
             )
         );
     }
-    test_field_matrix_model_to_projection();
-    fn test_field_matrix_normal_to_world() {
+    test_field_m_model_to_projection();
+    fn test_field_m_normal_to_world() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<ModelSpace>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_normal_to_world) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).m_normal_to_world) as usize - ptr as usize
             },
             64usize,
             concat!(
                 "Offset of field: ",
                 stringify!(ModelSpace),
                 "::",
-                stringify!(matrix_normal_to_world)
+                stringify!(m_normal_to_world)
             )
         );
     }
-    test_field_matrix_normal_to_world();
+    test_field_m_normal_to_world();
 }
 impl Default for ModelSpace {
     fn default() -> Self {
@@ -273,8 +273,8 @@ impl Default for ModelSpace {
 #[repr(align(16))]
 #[derive(Copy, Clone)]
 pub struct ProjectedSpace {
-    pub matrix_world_to_projection: float4x4,
-    pub matrix_screen_to_world: float4x4,
+    pub m_world_to_projection: float4x4,
+    pub m_screen_to_world: float4x4,
     pub position_world: float4,
 }
 #[test]
@@ -289,40 +289,40 @@ fn bindgen_test_layout_ProjectedSpace() {
         16usize,
         concat!("Alignment of ", stringify!(ProjectedSpace))
     );
-    fn test_field_matrix_world_to_projection() {
+    fn test_field_m_world_to_projection() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<ProjectedSpace>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_world_to_projection) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).m_world_to_projection) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
                 stringify!(ProjectedSpace),
                 "::",
-                stringify!(matrix_world_to_projection)
+                stringify!(m_world_to_projection)
             )
         );
     }
-    test_field_matrix_world_to_projection();
-    fn test_field_matrix_screen_to_world() {
+    test_field_m_world_to_projection();
+    fn test_field_m_screen_to_world() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<ProjectedSpace>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).matrix_screen_to_world) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).m_screen_to_world) as usize - ptr as usize
             },
             64usize,
             concat!(
                 "Offset of field: ",
                 stringify!(ProjectedSpace),
                 "::",
-                stringify!(matrix_screen_to_world)
+                stringify!(m_screen_to_world)
             )
         );
     }
-    test_field_matrix_screen_to_world();
+    test_field_m_screen_to_world();
     fn test_field_position_world() {
         assert_eq!(
             unsafe {

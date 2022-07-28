@@ -17,8 +17,8 @@ main_vertex(         uint             vertex_id             [[vertex_id]],
             constant ModelSpace     & model                 [[buffer(2)]])
 {
     const uint idx      = geometry.indices[vertex_id];
-    const float4 pos    = model.matrix_model_to_projection * float4(geometry.positions[idx], 1.0);
-    const float3 normal = model.matrix_normal_to_world     * float3(geometry.normals[idx]);
+    const float4 pos    = model.m_model_to_projection * float4(geometry.positions[idx], 1.0);
+    const float3 normal = model.m_normal_to_world     * float3(geometry.normals[idx]);
     return { .position = pos, .normal = normal };
 }
 
@@ -31,17 +31,17 @@ main_fragment(         VertexOut           in          [[stage_in]],
               // the environment (flip the environment texture). Instead of creating a
               // separate "mirrored" environment texture, we change the sampling
               // direction achieving the same result.
-              constant float3x3          & matrix_env  [[buffer(2)]],
+              constant float3x3          & m_env  [[buffer(2)]],
               constant float             & darken      [[buffer(3)]],
                        texturecube<half>   env_texture [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
-    const float4 pos_w      = camera.matrix_screen_to_world * float4(in.position.xyz, 1);
+    const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const half3  pos        = half3(pos_w.xyz / pos_w.w);
     const half3  camera_pos = half3(camera.position_world.xyz);
     const half3  camera_dir = normalize(pos - camera_pos.xyz);
     const half3  normal     = half3(normalize(in.normal));
-    const half3  ref        = half3x3(matrix_env) * reflect(camera_dir, normal);
+    const half3  ref        = half3x3(m_env) * reflect(camera_dir, normal);
 
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
     const half4 color       = env_texture.sample(tx_sampler, float3(ref));
@@ -88,7 +88,7 @@ bg_fragment(         BGVertexOut         in          [[stage_in]],
                      texturecube<half>   env_texture [[texture(0)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    const float4 pos   = camera.matrix_screen_to_world * float4(in.position.xy, 1, 1);
+    const float4 pos   = camera.m_screen_to_world * float4(in.position.xy, 1, 1);
     const half4  color = env_texture.sample(tx_sampler, pos.xyz);
     return color;
 }

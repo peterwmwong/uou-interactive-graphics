@@ -14,9 +14,9 @@ const Z_RANGE: f32 = F - N;
 
 pub struct CameraUpdate {
     pub position_world: f32x4,
-    pub matrix_screen_to_world: f32x4x4,
-    pub matrix_camera_to_world: f32x4x4,
-    pub matrix_world_to_projection: f32x4x4,
+    pub m_screen_to_world: f32x4x4,
+    pub m_camera_to_world: f32x4x4,
+    pub m_world_to_projection: f32x4x4,
 }
 
 pub struct Camera<const DRAG_SCALE: usize = 250> {
@@ -80,28 +80,26 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
 
     fn create_update(&self) -> CameraUpdate {
         let &[rotx, roty] = self.ray.rotation_xy.neg().as_array();
-        let matrix_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
+        let m_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
             * f32x4x4::rotate(rotx, roty, 0.);
-        let matrix_camera_to_world = matrix_world_to_camera.inverse();
-        let position_world = matrix_camera_to_world * f32x4::from_array([0., 0., 0., 1.]);
+        let m_camera_to_world = m_world_to_camera.inverse();
+        let position_world = m_camera_to_world * f32x4::from_array([0., 0., 0., 1.]);
 
         let aspect_ratio = self.screen_size[0] / self.screen_size[1];
-        let matrix_world_to_projection =
-            calc_matrix_camera_to_projection(aspect_ratio, 60_f32.to_radians())
-                * matrix_world_to_camera;
+        let m_world_to_projection =
+            calc_m_camera_to_projection(aspect_ratio, 60_f32.to_radians()) * m_world_to_camera;
 
-        let matrix_world_to_projection = matrix_world_to_projection;
+        let m_world_to_projection = m_world_to_projection;
         let scale_xy = f32x2::splat(2.) / self.screen_size;
-        let matrix_screen_to_projection =
+        let m_screen_to_projection =
             f32x4x4::scale_translate(scale_xy[0], -scale_xy[1], 1., -1., 1., 0.);
-        let matrix_screen_to_world =
-            matrix_world_to_projection.inverse() * matrix_screen_to_projection;
+        let m_screen_to_world = m_world_to_projection.inverse() * m_screen_to_projection;
 
         CameraUpdate {
             position_world,
-            matrix_camera_to_world,
-            matrix_screen_to_world,
-            matrix_world_to_projection,
+            m_camera_to_world,
+            m_screen_to_world,
+            m_world_to_projection,
         }
     }
 }
@@ -123,7 +121,7 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
 ///   - **IMPORTANT** Metal's NDC coordinate space has a Z range of [0, 1], **NOT [-1, 1]** (OpenGL).
 ///
 /// ```ignore
-/// let matrix_orthographic = f32x4x4::new(
+/// let m_orthographic = f32x4x4::new(
 ///   [2. / w, 0.,     0.,           0.],
 ///   [0.,     2. / h, 0.,           0.],
 ///   [0.,     0.,     1. / (F - N), -N / (F - N)],
@@ -136,7 +134,7 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
 /// - Scale X and Y based on Z (make stuff far away smaller)
 ///
 /// ```ignore
-/// let matrix_perspective = = f32x4x4::new(
+/// let m_perspective = = f32x4x4::new(
 ///   [N,  0., 0.,     0.],
 ///   [0., N,  0.,     0.],
 ///   [0., 0., N + F, -N * F],
@@ -147,10 +145,10 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
 /// # Overall Result
 ///
 /// ```ignore
-/// matrix_orthographic * matrix_perspective;
+/// m_orthographic * m_perspective;
 /// ```
 #[inline]
-pub fn calc_matrix_camera_to_projection(aspect_ratio: f32, fov: f32) -> f32x4x4 {
+pub fn calc_m_camera_to_projection(aspect_ratio: f32, fov: f32) -> f32x4x4 {
     let sy = 1. / (fov / 2.).tan();
     let sx = sy / aspect_ratio;
     f32x4x4::new(
