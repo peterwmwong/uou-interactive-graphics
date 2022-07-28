@@ -152,13 +152,13 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         self.needs_render = false;
-
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
+        let depth_tx = self.depth_texture.texture();
         self.model_pipeline.new_pass(
-            "Render",
+            "Model and Light",
             command_buffer,
             [(
                 render_target,
@@ -166,12 +166,7 @@ impl RendererDelgate for Delegate {
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
             )],
-            (
-                self.depth_texture.texture(),
-                1.,
-                MTLLoadAction::Clear,
-                MTLStoreAction::DontCare,
-            ),
+            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
             NoStencil,
             &self.depth_state,
             &[&HeapUsage(
@@ -179,30 +174,28 @@ impl RendererDelgate for Delegate {
                 MTLRenderStages::Vertex | MTLRenderStages::Fragment,
             )],
             |p| {
-                p.debug_group("Model", || {
-                    p.bind(
+                p.bind(
+                    main_vertex_binds {
+                        model: Bind::Value(&self.model_space),
+                        ..Binds::SKIP
+                    },
+                    main_fragment_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        light_pos: Bind::Value(&self.light_world_position),
+                    },
+                );
+                for draw in self.model.draws() {
+                    p.draw_primitives_with_bind(
                         main_vertex_binds {
-                            model: Bind::Value(&self.model_space),
+                            geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..Binds::SKIP
                         },
-                        main_fragment_binds {
-                            camera: Bind::Value(&self.camera_space),
-                            light_pos: Bind::Value(&self.light_world_position),
-                        },
+                        main_fragment_binds::SKIP,
+                        MTLPrimitiveType::Triangle,
+                        0,
+                        draw.vertex_count,
                     );
-                    for draw in self.model.draws() {
-                        p.draw_primitives_with_bind(
-                            main_vertex_binds {
-                                geometry: Bind::buffer_with_rolling_offset(draw.geometry),
-                                ..Binds::SKIP
-                            },
-                            main_fragment_binds::SKIP,
-                            MTLPrimitiveType::Triangle,
-                            0,
-                            draw.vertex_count,
-                        );
-                    }
-                });
+                }
                 p.into_subpass("Light", &self.light_pipeline, None, |p| {
                     p.draw_primitives_with_bind(
                         light_vertex_binds {

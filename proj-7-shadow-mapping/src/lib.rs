@@ -229,8 +229,6 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-
-        // Render Shadow Map
         let shadow_tx = self.shadow_map_texture.texture();
         let depth_tx = self.depth_texture.texture();
         if needs_render_shadow_map {
@@ -241,10 +239,7 @@ impl RendererDelgate for Delegate {
                 (shadow_tx, 1., MTLLoadAction::Clear, MTLStoreAction::Store),
                 NoStencil,
                 &self.depth_state,
-                &[&HeapUsage(
-                    &self.model.model.heap,
-                    MTLRenderStages::Vertex | MTLRenderStages::Fragment,
-                )],
+                &[&HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES)],
                 |p| {
                     p.bind(
                         main_vertex_binds {
@@ -268,9 +263,8 @@ impl RendererDelgate for Delegate {
                 },
             );
         }
-        // Render Models
         self.model_pipeline.new_pass(
-            "Render Models",
+            "Model, Plane, and Light",
             command_buffer,
             [(
                 render_target,

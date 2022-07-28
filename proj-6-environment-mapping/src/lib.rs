@@ -259,11 +259,12 @@ impl RendererDelgate for Delegate {
             }
         };
         self.needs_render = false;
-
         let command_buffer = self
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
+        let depth_tx = self.depth_texture.texture();
+        let stenc_tx = self.stencil_texture.texture();
         self.main_render_pipeline.new_pass(
             "Model",
             command_buffer,
@@ -273,18 +274,8 @@ impl RendererDelgate for Delegate {
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
             )],
-            (
-                self.depth_texture.texture(),
-                1.,
-                MTLLoadAction::Clear,
-                MTLStoreAction::DontCare,
-            ),
-            (
-                self.stencil_texture.texture(),
-                0,
-                MTLLoadAction::Clear,
-                MTLStoreAction::DontCare,
-            ),
+            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
+            (stenc_tx, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
             (
                 &self.model_depth_state,
                 MODEL_STENCIL_REF_VALUE,

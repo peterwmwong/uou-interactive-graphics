@@ -197,7 +197,7 @@ impl<G: Sized + Copy + Clone, MK: MaterialKind> Model<G, MK> {
             desc.set_storage_mode(MTLStorageMode::Shared);
             desc.set_size((heap_size + geometry.heap_size()) as _);
             let heap = device.new_heap(&desc);
-            heap.set_label("Model Heap");
+            heap.set_label(obj_file_ref.file_name().unwrap().to_str().unwrap());
 
             // IMPORTANT: Load material textures *BEFORE* geometry. Heap size calculations
             // (specifically alignment padding) assume this.

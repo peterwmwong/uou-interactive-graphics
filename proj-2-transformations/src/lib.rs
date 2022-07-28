@@ -84,7 +84,7 @@ impl RendererDelgate for Delegate {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         self.render_pipeline.new_pass(
-            "Render Teapot",
+            "Teapot",
             command_buffer,
             [(
                 render_target,
