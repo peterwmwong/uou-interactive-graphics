@@ -3,8 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{Camera, CameraUpdate, DepthTexture, ShadingModeSelector},
-    math_helpers::round_up_pow_of_2,
+    components::{Camera, CameraUpdate, DepthTexture, ShadingModeSelector, ShadowMapTexture},
     metal::*,
     metal_types::*,
     pipeline::*,
@@ -12,12 +11,7 @@ use metal_app::{
     *,
 };
 use shader_bindings::*;
-use std::{
-    f32::consts::PI,
-    ops::Deref,
-    path::PathBuf,
-    simd::{f32x2, u32x2},
-};
+use std::{f32::consts::PI, ops::Deref, path::PathBuf, simd::f32x2};
 
 const DEPTH_COMPARISON_BIAS: f32 = 4e-3;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 16., 0.]);
@@ -27,8 +21,6 @@ const INITIAL_TESSELATION_FACTOR: u16 = 32;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const MAX_DISPLACEMENT_SCALE: f32 = 1.;
 const MAX_TESSELATION_FACTOR: u16 = 64;
-const MAX_TEXTURE_SIZE: u16 = 16384;
-const SHADOW_MAP_DEPTH_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Depth16Unorm;
 
 impl From<&CameraUpdate> for ProjectedSpace {
     fn from(update: &CameraUpdate) -> Self {
@@ -62,7 +54,7 @@ struct Delegate {
     shading_mode: ShadingModeSelector,
     shadow_map_pipeline:
         TesselationRenderPipeline<0, main_vertex, NoFragmentFunction, (Depth, NoStencil)>,
-    shadow_map_texture: Option<Texture>,
+    shadow_map_texture: ShadowMapTexture,
     show_triangulation: bool,
     tessellation_factor: u16,
     tessellation_factors_buffer: TypedBuffer<MTLQuadTessellationFactorsHalf>,
@@ -193,7 +185,7 @@ impl RendererDelgate for Delegate {
                     (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
                 )
             },
-            shadow_map_texture: None,
+            shadow_map_texture: ShadowMapTexture::new("Shadow", DEFAULT_DEPTH_FORMAT),
             show_triangulation: false,
             tessellation_factor: INITIAL_TESSELATION_FACTOR,
             tessellation_factors_buffer: TypedBuffer::from_data(
@@ -218,7 +210,7 @@ impl RendererDelgate for Delegate {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Command Buffer");
 
-        // Render Shadow Map
+        let shadow_tx = self.shadow_map_texture.texture();
         let usage_tesselation_factors_buffer: &dyn ResourceUsage = &BufferUsage(
             &self.tessellation_factors_buffer,
             MTLResourceUsage::Read,
@@ -229,12 +221,7 @@ impl RendererDelgate for Delegate {
             "Shadow Map",
             command_buffer,
             [],
-            (
-                self.shadow_map_texture.as_deref().unwrap(),
-                1.,
-                MTLLoadAction::Clear,
-                MTLStoreAction::Store,
-            ),
+            (shadow_tx, 1., MTLLoadAction::Clear, MTLStoreAction::Store),
             NoStencil,
             &self.tessellation_factors_buffer,
             &self.depth_state,
@@ -271,9 +258,8 @@ impl RendererDelgate for Delegate {
                 )
             },
         );
-        // Render Plane and Light
         self.light_pipeline.new_pass(
-            "Light",
+            "Light and Plane",
             command_buffer,
             [(
                 render_target,
@@ -294,11 +280,17 @@ impl RendererDelgate for Delegate {
                     &self.light_model.heap,
                     MTLRenderStages::Vertex | MTLRenderStages::Fragment,
                 ),
+                // TODO: Add this back in once resources has been restructured
                 // &TextureUsage(
                 //     &self.displacement_texture.as_deref().unwrap(),
                 //     MTLResourceUsage::Sample,
                 //     MTLRenderStages::Vertex,
                 // ),
+                &TextureUsage(
+                    shadow_tx,
+                    MTLResourceUsage::Sample | MTLResourceUsage::Write,
+                    MTLRenderStages::Vertex | MTLRenderStages::Fragment,
+                ),
                 &TextureUsage(
                     &self.normal_texture,
                     MTLResourceUsage::Sample,
@@ -360,9 +352,7 @@ impl RendererDelgate for Delegate {
                                 light: Bind::Value(&self.light_space),
                                 shade_tri: Bind::Value(&false),
                                 normal_tx: BindTexture::Texture(&self.normal_texture),
-                                shadow_tx: BindTexture::Texture(
-                                    self.shadow_map_texture.as_deref().unwrap(),
-                                ),
+                                shadow_tx: BindTexture::Texture(shadow_tx),
                             },
                             4,
                         );
@@ -454,34 +444,9 @@ impl RendererDelgate for Delegate {
             self.needs_render = true;
         }
         if self.depth_texture.on_event(event, &self.device) {
-            let t = self.depth_texture.texture();
-            let xy = u32x2::from_array([t.width() as _, t.height() as _]);
-            if let Some(tx) = &self.shadow_map_texture {
-                #[inline(always)]
-                fn is_shadow_map_correctly_sized(cur: NSUInteger, target: u32) -> bool {
-                    ((target << 1)..=(target << 2)).contains(&(cur as _))
-                }
-                if is_shadow_map_correctly_sized(tx.width(), xy[0])
-                    && is_shadow_map_correctly_sized(tx.height(), xy[1])
-                {
-                    return;
-                }
-            }
-            let new_xy =
-                round_up_pow_of_2(xy << u32x2::splat(1)).min(u32x2::splat(MAX_TEXTURE_SIZE as _));
-
-            #[cfg(debug_assertions)]
-            println!("Allocating new Shadow Map {new_xy:?}");
-
-            let desc = TextureDescriptor::new();
-            desc.set_width(new_xy[0] as _);
-            desc.set_height(new_xy[1] as _);
-            desc.set_pixel_format(SHADOW_MAP_DEPTH_TEXTURE_FORMAT);
-            desc.set_storage_mode(MTLStorageMode::Private);
-            desc.set_usage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-            let shadow_map_texture = self.device.new_texture(&desc);
-            shadow_map_texture.set_label("Shadow Map Depth");
-            self.shadow_map_texture = Some(shadow_map_texture);
+            self.needs_render = true;
+        }
+        if self.shadow_map_texture.on_event(event, &self.device) {
             self.needs_render = true;
         }
         match event {

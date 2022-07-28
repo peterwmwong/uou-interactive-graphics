@@ -10,6 +10,7 @@ use std::marker::PhantomData;
 // TODO: START HERE 2
 // TODO: START HERE 2
 // Create a TypedTexture, to enforce the pipeline and the render pass have the same pixel format.
+// - There's probably overlap with components::TextureAndConfig
 
 #[derive(Copy, Clone)]
 pub enum BlendMode {

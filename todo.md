@@ -32,11 +32,7 @@
         - If we wrap `metal::Library` with our own type, we could prevent shader functions from
           other libraries being mixed up.
 - Encapsulate Shadow Mapping... somehow
-    - Some overlap with Encapsulate Render Pipeline
     - Parts
-        - Depth Texture
-            - Param: Depth Pixel Format
-            - Handle creation/resizing
         - Render Pipeline
             - Depth Only
             - Param: Label
