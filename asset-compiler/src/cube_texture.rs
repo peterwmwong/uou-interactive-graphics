@@ -176,9 +176,8 @@ pub fn load_cube_texture_asset_dir<P: AsRef<Path>>(device: &Device, cube_asset_d
         device.new_texture(&desc)
     };
 
-    let mut command_buffers: [MaybeUninit<&IOCommandBufferRef>; 6] = MaybeUninit::uninit_array();
+    let command_buffer = queue.new_command_buffer();
     for (face, face_file) in CUBE_ASSET_DIR_FILENAMES.iter().enumerate() {
-        let command_buffer = queue.new_command_buffer();
         encode_load_cube_face_texture(
             &device,
             &command_buffer,
@@ -188,18 +187,14 @@ pub fn load_cube_texture_asset_dir<P: AsRef<Path>>(device: &Device, cube_asset_d
             height,
             cube_asset_dir.as_ref().join(face_file),
         );
-        command_buffer.commit();
-        command_buffers[face].write(command_buffer);
     }
-    let command_buffers = unsafe { MaybeUninit::array_assume_init(command_buffers) };
-    for command_buffer in command_buffers {
-        command_buffer.wait_until_completed();
-        assert_eq!(
-            command_buffer.status(),
-            MTLIOStatus::complete,
-            "Failed to load texture for face."
-        );
-    }
+    command_buffer.commit();
+    command_buffer.wait_until_completed();
+    assert_eq!(
+        command_buffer.status(),
+        MTLIOStatus::complete,
+        "Failed to load texture for face."
+    );
     cube_texture
 }
 
