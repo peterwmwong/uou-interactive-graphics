@@ -21,18 +21,22 @@ pub struct GeometryToEncode {
     pub positions_buffer: MetalGPUAddress,
     pub normals_buffer: MetalGPUAddress,
     pub tx_coords_buffer: MetalGPUAddress,
+    pub indices_buffer_offset: u32,
+    pub positions_buffer_offset: u32,
+    pub normals_buffer_offset: u32,
+    pub tx_coords_buffer_offset: u32,
 }
 
-pub(crate) struct GeometryBuffers<T: Sized + Copy + Clone> {
-    pub(crate) arguments: TypedBuffer<T>,
+pub struct GeometryBuffers<T: Sized + Copy + Clone> {
+    pub arguments: TypedBuffer<T>,
     // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
-    _indices: TypedBuffer<u32>,
-    _positions: TypedBuffer<f32>,
-    _normals: TypedBuffer<f32>,
-    _tx_coords: TypedBuffer<f32>,
+    pub indices: TypedBuffer<u32>,
+    pub positions: TypedBuffer<f32>,
+    pub normals: TypedBuffer<f32>,
+    pub tx_coords: TypedBuffer<f32>,
 }
 
-pub(crate) struct Geometry<'a, T: Sized + Copy + Clone, DI> {
+pub struct Geometry<'a, T: Sized + Copy + Clone, DI> {
     objects: &'a [tobj::Model],
     arguments_sizer: TypedBufferSizer<T>,
     indices_sizer: TypedBufferSizer<u32>,
@@ -40,16 +44,16 @@ pub(crate) struct Geometry<'a, T: Sized + Copy + Clone, DI> {
     normals_sizer: TypedBufferSizer<f32>,
     tx_coords_sizer: TypedBufferSizer<f32>,
     heap_size: usize,
-    pub(crate) max_bounds: MaxBounds,
-    pub(crate) draws: Vec<DI>,
+    pub max_bounds: MaxBounds,
+    pub draws: Vec<DI>,
     _p: PhantomData<T>,
 }
 
 impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
-    pub(crate) fn new<D: Fn(String, usize, Option<usize>) -> DI>(
+    pub fn new<D: FnMut(String, usize, Option<usize>) -> DI>(
         objects: &'a [tobj::Model],
-        device: &Device,
-        new_draw_item: D,
+        device: &DeviceRef,
+        mut new_draw_item: D,
     ) -> Self {
         let mut heap_size = 0;
 
@@ -140,14 +144,31 @@ impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
                 &normals_buf.buffer,
                 &tx_coords_buf.buffer,
             ]);
+        let (
+            initial_indices_gpu_address,
+            initial_positions_gpu_address,
+            initial_normals_gpu_address,
+            initial_tx_coords_gpu_address,
+        ) = (
+            indices_gpu_address,
+            positions_gpu_address,
+            normals_gpu_address,
+            tx_coords_gpu_address,
+        );
         for (i, tobj::Model { mesh, .. }) in self.objects.into_iter().enumerate() {
             encode_arg(
                 &mut arguments[i],
                 GeometryToEncode {
                     indices_buffer: indices_gpu_address,
+                    indices_buffer_offset: (indices_gpu_address - initial_indices_gpu_address) as _,
                     positions_buffer: positions_gpu_address,
+                    positions_buffer_offset: (positions_gpu_address - initial_positions_gpu_address)
+                        as _,
                     normals_buffer: normals_gpu_address,
+                    normals_buffer_offset: (normals_gpu_address - initial_normals_gpu_address) as _,
                     tx_coords_buffer: tx_coords_gpu_address,
+                    tx_coords_buffer_offset: (tx_coords_gpu_address - initial_tx_coords_gpu_address)
+                        as _,
                 },
             );
             indices = rolling_copy(&mesh.indices, indices);
@@ -161,10 +182,10 @@ impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
         }
         GeometryBuffers {
             arguments: arguments_buffer,
-            _indices: indices_buf,
-            _positions: positions_buf,
-            _normals: normals_buf,
-            _tx_coords: tx_coords_buf,
+            indices: indices_buf,
+            positions: positions_buf,
+            normals: normals_buf,
+            tx_coords: tx_coords_buf,
         }
     }
 }

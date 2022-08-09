@@ -264,6 +264,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
 
     // Example: | |-ParmVarDecl 0x14a132638 <line:10:5, col:29> col:29 yolo 'const constant packed_float4 *'
     // Example: | |-ParmVarDecl 0x116879d78 <line:7:5, col:21> col:21 tex0 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
+    // Example: | |-ParmVarDecl 0x12614a0d0 <line:10:5, col:37> col:37 accelerationStructure 'metal::raytracing::instance_acceleration_structure':'metal::raytracing::_acceleration_structure<metal::raytracing::instancing>'
     let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x[0-9a-f]+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) '(?P<address_space>const constant |device |\w+[\w:<>, ]+':')(metal::)?(?P<data_type>[\w:<>, ]+)(?P<multiplicity> [*&]|)'").unwrap();
 
     // Example: | | `-MetalBufferIndexAttr 0x14a132698 <col:36, col:44>
@@ -411,6 +412,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                     return State::FunctionParamBufferOrTexture(
                         fun,
                         if buffer_or_texture == "Buffer" {
+                            let data_type = info.data_type.clone();
                             Binds::Buffer {
                                 index: Binds::INVALID_INDEX,
                                 name: info.name,
@@ -420,7 +422,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                                 } else {
                                     debug_assert_eq!(
                                         info.multiplicity, " &",
-                                        "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
+                                        "Unexpected multiplicity, expected '&' or '*'. data_type: {data_type} Line: {l}"
                                     );
                                     BindType::One
                                 },
@@ -767,6 +769,49 @@ TranslationUnitDecl 0x13c8302e8 <<invalid sloc>> <invalid sloc>
                     referenced_function_constants: BTreeSet::new(),
                 }]
             );
+        }
+
+        // #[test]
+        fn test_shader_with_raytracing() {
+            test(b"\
+TranslationUnitDecl 0x1260302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x126075660 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x126030f20 '__metal_intersection_query_t'
+|-ImportDecl 0x1260756f0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x126134150 <line:6:1, col:17> col:17 Namespace 0x126075828 'metal'
+|-UsingDirectiveDecl 0x1261349e8 <metal-build/test_shader_src/shader_fn/shaders.metal:4:1, col:17> col:17 Namespace 0x126075828 'metal'
+|-UsingDecl 0x126149d48 <line:5:1, col:19> col:19 raytracing::instance_acceleration_structure
+|-UsingShadowDecl 0x126149d98 <col:19> col:19 implicit TypeAlias 0x126134ae8 'instance_acceleration_structure'
+| `-TypedefType 0x126149c10 'metal::raytracing::instance_acceleration_structure' sugar imported
+|   |-TypeAlias 0x126134ae8 'instance_acceleration_structure'
+|   `-TemplateSpecializationType 0x126149b80 'acceleration_structure<metal::raytracing::instancing>' sugar imported alias acceleration_structure
+|     |-TemplateArgument type 'metal::raytracing::instancing'
+|     |-TemplateSpecializationType 0x126149b30 '_acceleration_structure<metal::raytracing::instancing>' sugar imported _acceleration_structure
+|     | |-TemplateArgument type 'metal::raytracing::instancing':'metal::raytracing::instancing'
+|     | `-RecordType 0x126149b10 'metal::raytracing::_acceleration_structure<metal::raytracing::instancing>' imported
+|     |   `-ClassTemplateSpecialization 0x126149970 '_acceleration_structure'
+|     `-RecordType 0x126149b10 'metal::raytracing::_acceleration_structure<metal::raytracing::instancing>' imported
+|       `-ClassTemplateSpecialization 0x126149970 '_acceleration_structure'
+|-FunctionDecl 0x12614a4b8 <line:8:1, line:13:1> line:8:7 test 'half4 (float4, metal::raytracing::instance_acceleration_structure)'
+| |-ParmVarDecl 0x12614a0d0 <line:10:5, col:37> col:37 accelerationStructure 'metal::raytracing::instance_acceleration_structure':'metal::raytracing::_acceleration_structure<metal::raytracing::instancing>'
+| | `-MetalBufferIndexAttr 0x12614a378 <col:61, col:69>
+| |   `-IntegerLiteral 0x12614a0a0 <col:68> 'int' 0
+| |-CompoundStmt 0x12614a628 <line:11:3, line:13:1>
+| | `-ReturnStmt 0x12614a610 <line:12:5, col:12>
+| |   `-ImplicitCastExpr 0x12614a5f8 <col:12> 'half4':'half __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x12614a5e0 <col:12> 'half' <IntegralToFloating>
+| |       `-IntegerLiteral 0x12614a5c0 <col:12> 'int' 0
+| `-MetalFragmentAttr 0x12614a568 <line:7:3>
+`-<undeserialized declarations>
+",
+                [],
+                [Function {
+                    fn_name: "test".to_owned(),
+                    binds: vec![],
+                    shader_type: FunctionType::Fragment,
+                    referenced_function_constants: BTreeSet::new(),
+                }],
+            )
         }
 
         #[test]

@@ -1,4 +1,4 @@
-mod geometry;
+pub mod geometry;
 mod materials;
 
 use crate::metal::*;

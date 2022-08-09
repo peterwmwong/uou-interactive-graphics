@@ -74,6 +74,7 @@ impl RendererDelgate for Delegate {
                  positions_buffer,
                  normals_buffer,
                  tx_coords_buffer,
+                 ..
              }| {
                 arg.indices = indices_buffer;
                 arg.positions = positions_buffer;

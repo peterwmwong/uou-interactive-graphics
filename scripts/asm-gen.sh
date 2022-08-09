@@ -8,7 +8,11 @@ TMP_OUTPUT_PATH="/tmp/$CRATE_NAME-$OUTPUT_POSTFIX-TMP.js"
 OUTPUT_PATH="/tmp/$CRATE_NAME-$OUTPUT_POSTFIX.js"
 
 ADDITIONAL_CRATES="|metal|dispatch"
-DEFAULT_CARGO_ASM_ARGS="asm --release --lib --full-name -p $CRATE_NAME"
+# TODO: Not all crates are either a lib or binary
+# - Add another parameter to this script "$3" that determines this
+#   - `bin` or `lib`
+# - Update tasks.json to pass this new parameter
+DEFAULT_CARGO_ASM_ARGS="asm --release --full-name --bin $CRATE_NAME"
 
 get_function_list() {
     cargo $DEFAULT_CARGO_ASM_ARGS |

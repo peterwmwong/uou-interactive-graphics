@@ -15,6 +15,7 @@
             "metal-shaders/shader_src/*",
             "metal-build/test_shader_src/**",
             "proj-*/shader_src/*",
+            "x-rt/shader_src/*",
         ]
     },
     "git.autoRepositoryDetection": false
