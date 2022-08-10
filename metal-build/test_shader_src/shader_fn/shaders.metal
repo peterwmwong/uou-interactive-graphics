@@ -2,6 +2,7 @@
 #include "./function-constants.h"
 
 using namespace metal;
+using raytracing::instance_acceleration_structure;
 
 struct TestStruct {
     float one;
@@ -13,6 +14,7 @@ float4 test_vertex(
     constant float2 &        buf1      [[buffer(1)]],
              uint            vertex_id [[vertex_id]],
     device   float3 *        buf2      [[buffer(2)]],
+    instance_acceleration_structure accelerationStructure [[buffer(6)]],
     device   float3 &        buf3      [[buffer(3)]],
              texture2d<half> tex1      [[texture(1)]],
     constant TestStruct &    buf5      [[buffer(5)]],
@@ -27,6 +29,7 @@ float4 test_fragment(
              uint            prim_id   [[primitive_id]],
     constant float  *        buf0      [[buffer(0)]],
     constant float2 &        buf1      [[buffer(1)]],
+    instance_acceleration_structure accelerationStructure [[buffer(6)]],
     device   float3 *        buf2      [[buffer(2)]],
     device   float3 &        buf3      [[buffer(3)]],
              texture2d<half> tex1      [[texture(1)]],

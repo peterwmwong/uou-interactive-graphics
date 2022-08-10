@@ -1,6 +1,6 @@
 use super::pipeline_function::PipelineFunctionType;
 use crate::typed_buffer::TypedBuffer;
-use metal::TextureRef;
+use metal::{AccelerationStructureRef, TextureRef};
 
 /*
 TODO: Consider optimizing Binding API for consistent Bind Variant usage
@@ -36,11 +36,10 @@ pub enum BindBuffer<'a, T: Sized + Copy + Clone> {
 impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindBuffer<'a, T> {
     #[inline]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
+        use BindBuffer::*;
         match self {
-            BindBuffer::WithOffset(buf, offset) => {
-                F::buffer_and_offset(encoder, index, (buf, offset))
-            }
-            BindBuffer::Offset(offset) => F::buffer_offset::<T>(encoder, index, offset),
+            WithOffset(buf, offset) => F::buffer_and_offset(encoder, index, (buf, offset)),
+            Offset(offset) => F::buffer_offset::<T>(encoder, index, offset),
         }
     }
 }
@@ -53,10 +52,11 @@ pub enum Bind<'a, T: Sized + Copy + Clone> {
 impl<'a, T: Sized + Copy + Clone> AnyBind<T> for Bind<'a, T> {
     #[inline]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
+        use Bind::*;
         match self {
-            Bind::Value(&v) => F::bytes(encoder, index, &[v]),
-            Bind::Buffer(bind_buf) => bind_buf.bind::<F>(encoder, index),
-            _ => {}
+            Value(&v) => F::bytes(encoder, index, &[v]),
+            Buffer(bind_buf) => bind_buf.bind::<F>(encoder, index),
+            Skip => {}
         }
     }
 }
@@ -69,10 +69,11 @@ pub enum BindMany<'a, T: Sized + Copy + Clone> {
 impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindMany<'a, T> {
     #[inline]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
+        use BindMany::*;
         match self {
-            BindMany::Values(v) => F::bytes(encoder, index, v),
-            BindMany::Buffer(bind_buf) => bind_buf.bind::<F>(encoder, index),
-            _ => {}
+            Values(v) => F::bytes(encoder, index, v),
+            Buffer(bind_buf) => bind_buf.bind::<F>(encoder, index),
+            Skip => {}
         }
     }
 }
@@ -115,9 +116,28 @@ pub enum BindTexture<'a> {
 impl<'a> BindTexture<'a> {
     #[inline]
     pub fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
+        use BindTexture::*;
         match self {
-            BindTexture::Texture(texture) => F::texture(encoder, index, texture),
-            _ => {}
+            Texture(texture) => F::texture(encoder, index, texture),
+            Skip => {}
+        }
+    }
+}
+
+pub enum BindAccelerationStructure<'a> {
+    AccelerationStructure(&'a AccelerationStructureRef),
+    Skip,
+}
+
+impl<'a> BindAccelerationStructure<'a> {
+    #[inline]
+    pub fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
+        use BindAccelerationStructure::*;
+        match self {
+            AccelerationStructure(accel_struct) => {
+                F::acceleration_structure(encoder, index, accel_struct)
+            }
+            Skip => {}
         }
     }
 }

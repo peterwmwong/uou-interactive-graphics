@@ -40,6 +40,10 @@ pub enum Binds {
         index: u8,
         name: String,
     },
+    AccelerationStructure {
+        index: u8,
+        name: String,
+    },
 }
 impl Binds {
     pub const INVALID_INDEX: u8 = u8::MAX;
@@ -60,6 +64,7 @@ impl Binds {
                 immutable,
             },
             Texture { name, .. } => Texture { index, name },
+            AccelerationStructure { name, .. } => AccelerationStructure { index, name },
         }
     }
 }
@@ -256,6 +261,10 @@ pub fn parse_shader_functions_from_reader<R: Read>(
 
     // TODO: Optimize Hex Address RegEx. Currently 0x\w+, could be 0x[0-9a-f]+
 
+    // Example: |-TypedefDecl 0x13d841e60 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+    // Example: |-FunctionDecl 0x13d8ffd78 <line:26:14, col:79> col:21 test_vertex 'float4 (const constant int *)'
+    let rx_any_top_level = Regex::new(r"^\|-[A-Z]").unwrap();
+
     // Example: |-FunctionDecl 0x14a1327a8 <line:9:1, line:11:15> line:9:8 main_vertex 'float4 (const constant packed_float4 *)'
     let rx_fn = Regex::new(
         r"^\|-FunctionDecl 0x[0-9a-f]+ <([^:]+)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+ (?P<fn_name>\w+) ",
@@ -265,7 +274,7 @@ pub fn parse_shader_functions_from_reader<R: Read>(
     // Example: | |-ParmVarDecl 0x14a132638 <line:10:5, col:29> col:29 yolo 'const constant packed_float4 *'
     // Example: | |-ParmVarDecl 0x116879d78 <line:7:5, col:21> col:21 tex0 'texture2d<half>':'metal::texture2d<half, metal::access::sample, void>'
     // Example: | |-ParmVarDecl 0x12614a0d0 <line:10:5, col:37> col:37 accelerationStructure 'metal::raytracing::instance_acceleration_structure':'metal::raytracing::_acceleration_structure<metal::raytracing::instancing>'
-    let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x[0-9a-f]+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) '(?P<address_space>const constant |device |\w+[\w:<>, ]+':')(metal::)?(?P<data_type>[\w:<>, ]+)(?P<multiplicity> [*&]|)'").unwrap();
+    let rx_fn_param = Regex::new(r"^\| (?P<last_child>[`|])-ParmVarDecl 0x[0-9a-f]+ <(line|col)(:\d+)+, (line|col)(:\d+)+> (line|col)(:\d+)+( used)? (?P<name>\w+) '(?P<address_space>const constant |device |)(metal::)?(?P<data_type>\w[\w:<>, ]+)(?P<multiplicity> [*&]|)'").unwrap();
 
     // Example: | | `-MetalBufferIndexAttr 0x14a132698 <col:36, col:44>
     let rx_fn_param_metal_buffer_texture_index_attr = Regex::new(
@@ -392,12 +401,16 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                         shader_fns.push(fun.into());
                     }
                     return State::FindingRoot;
-                } else {
-                    if let Some(c) = rx_fn_constant_ref.captures(&l) {
-                        let addr = FunctionConstantAddress::from_captures(&c);
-                        if let Some(index) = fn_consts.get_ref(addr) {
-                            fun.referenced_function_constants.insert(index);
-                        }
+                } else if let Some(c) = rx_fn_constant_ref.captures(&l) {
+                    let addr = FunctionConstantAddress::from_captures(&c);
+                    if let Some(index) = fn_consts.get_ref(addr) {
+                        fun.referenced_function_constants.insert(index);
+                    }
+                } else if rx_any_top_level.is_match(&l) {
+                    if let Some(c) = rx_fn.captures(&l) {
+                        return State::Function(ParseFunction::new(&c["fn_name"]));
+                    } else {
+                        return State::FindingRoot;
                     }
                 }
                 return State::Function(fun);
@@ -413,28 +426,37 @@ pub fn parse_shader_functions_from_reader<R: Read>(
                         fun,
                         if buffer_or_texture == "Buffer" {
                             let data_type = info.data_type.clone();
-                            Binds::Buffer {
-                                index: Binds::INVALID_INDEX,
-                                name: info.name,
-                                data_type: info.data_type,
-                                bind_type: if info.multiplicity == " *" {
-                                    BindType::Many
-                                } else {
-                                    debug_assert_eq!(
+                            if data_type == "raytracing::instance_acceleration_structure"
+                                || data_type == "raytracing::primitive_acceleration_structure"
+                            {
+                                Binds::AccelerationStructure {
+                                    index: Binds::INVALID_INDEX,
+                                    name: info.name,
+                                }
+                            } else {
+                                Binds::Buffer {
+                                    index: Binds::INVALID_INDEX,
+                                    name: info.name,
+                                    data_type: info.data_type,
+                                    bind_type: if info.multiplicity == " *" {
+                                        BindType::Many
+                                    } else {
+                                        debug_assert_eq!(
                                         info.multiplicity, " &",
                                         "Unexpected multiplicity, expected '&' or '*'. data_type: {data_type} Line: {l}"
                                     );
-                                    BindType::One
-                                },
-                                immutable: if info.address_space == "const constant " {
-                                    true
-                                } else {
-                                    debug_assert_eq!(
+                                        BindType::One
+                                    },
+                                    immutable: if info.address_space == "const constant " {
+                                        true
+                                    } else {
+                                        debug_assert_eq!(
                                         info.address_space, "device ",
                                         "Unexpected multiplicity, expected '&' or '*'. Line: {l}"
                                     );
-                                    false
-                                },
+                                        false
+                                    },
+                                }
                             }
                         } else {
                             debug_assert_eq!(buffer_or_texture, "Texture");
@@ -771,8 +793,21 @@ TranslationUnitDecl 0x13c8302e8 <<invalid sloc>> <invalid sloc>
             );
         }
 
-        // #[test]
+        #[test]
         fn test_shader_with_raytracing() {
+            /*
+            #include <metal_stdlib>
+            using namespace metal;
+
+            using raytracing::instance_acceleration_structure;
+
+            [[fragment]]
+            half4 test(
+                instance_acceleration_structure accelerationStructure [[buffer(0)]]
+            ) {
+                return 0;
+            }
+            */
             test(b"\
 TranslationUnitDecl 0x1260302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x126075660 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
@@ -807,11 +842,71 @@ TranslationUnitDecl 0x1260302e8 <<invalid sloc>> <invalid sloc>
                 [],
                 [Function {
                     fn_name: "test".to_owned(),
-                    binds: vec![],
+                    binds: vec![
+                        Binds::AccelerationStructure {
+                            index: 0,
+                            name: "accelerationStructure".to_owned(),
+                        },
+                    ],
                     shader_type: FunctionType::Fragment,
                     referenced_function_constants: BTreeSet::new(),
                 }],
-            )
+            );
+
+            /*
+            #include <metal_stdlib>
+            using namespace metal;
+
+            using raytracing::primitive_acceleration_structure;
+
+            [[fragment]]
+            half4 test(
+                primitive_acceleration_structure accelerationStructure [[buffer(1)]]
+            ) {
+                return 0;
+            }
+            */
+            test(b"\
+TranslationUnitDecl 0x1428302e8 <<invalid sloc>> <invalid sloc>
+|-TypedefDecl 0x14302fc60 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
+| `-BuiltinType 0x142830f20 '__metal_intersection_query_t'
+|-ImportDecl 0x14302fcf0 <<built-in>:1:1> col:1 implicit metal_types
+|-UsingDirectiveDecl 0x1430ecd50 <line:2:1, col:17> col:17 Namespace 0x14302fdf0 'metal'
+|-UsingDecl 0x1430f5e68 <line:4:1, col:19> col:19 raytracing::primitive_acceleration_structure
+|-UsingShadowDecl 0x1430f5eb8 <col:19> col:19 implicit TypeAlias 0x1430ece50 'primitive_acceleration_structure'
+| `-TypedefType 0x1430f5d30 'metal::raytracing::primitive_acceleration_structure' sugar imported
+|   |-TypeAlias 0x1430ece50 'primitive_acceleration_structure'
+|   `-TemplateSpecializationType 0x1430f5ce0 'acceleration_structure<>' sugar imported alias acceleration_structure
+|     |-TemplateSpecializationType 0x1430f5cb0 '_acceleration_structure<>' sugar imported _acceleration_structure
+|     | `-RecordType 0x1430f5c90 'metal::raytracing::_acceleration_structure<>' imported
+|     |   `-ClassTemplateSpecialization 0x1430ed718 '_acceleration_structure'
+|     `-RecordType 0x1430f5c90 'metal::raytracing::_acceleration_structure<>' imported
+|       `-ClassTemplateSpecialization 0x1430ed718 '_acceleration_structure'
+|-FunctionDecl 0x1430f6658 <line:7:1, line:11:1> line:7:7 test 'half4 (metal::raytracing::primitive_acceleration_structure)'
+| |-ParmVarDecl 0x1430f6130 <line:8:5, col:38> col:38 accelerationStructure 'metal::raytracing::primitive_acceleration_structure':'metal::raytracing::_acceleration_structure<>'
+| | `-MetalBufferIndexAttr 0x1430f6548 <col:62, col:70>
+| |   `-IntegerLiteral 0x1430f6100 <col:69> 'int' 1
+| |-CompoundStmt 0x1430f67c0 <line:9:3, line:11:1>
+| | `-ReturnStmt 0x1430f67a8 <line:10:5, col:12>
+| |   `-ImplicitCastExpr 0x1430f6790 <col:12> 'half4':'half __attribute__((ext_vector_type(4)))' <VectorSplat>
+| |     `-ImplicitCastExpr 0x1430f6778 <col:12> 'half' <IntegralToFloating>
+| |       `-IntegerLiteral 0x1430f6758 <col:12> 'int' 0
+| `-MetalFragmentAttr 0x1430f6700 <line:6:3>
+`-<undeserialized declarations>
+            ",
+                [],
+                [Function {
+                    fn_name: "test".to_owned(),
+                    binds: vec![
+                        Binds::AccelerationStructure {
+                            index: 1,
+                            name: "accelerationStructure".to_owned(),
+                        },
+                    ],
+                    shader_type: FunctionType::Fragment,
+                    referenced_function_constants: BTreeSet::new(),
+                }],
+            );
         }
 
         #[test]
@@ -1148,6 +1243,10 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                             bind_type: BindType::Many,
                             immutable: false,
                         },
+                        Binds::AccelerationStructure {
+                            index: 6,
+                            name: "accelerationStructure".to_owned(),
+                        },
                         Binds::Buffer {
                             index: 3,
                             name: "buf3".to_owned(),
@@ -1193,6 +1292,10 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
                             data_type: "float2".to_owned(),
                             bind_type: BindType::One,
                             immutable: true,
+                        },
+                        Binds::AccelerationStructure {
+                            index: 6,
+                            name: "accelerationStructure".to_owned(),
                         },
                         Binds::Buffer {
                             index: 2,

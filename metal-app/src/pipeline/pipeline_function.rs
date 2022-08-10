@@ -1,6 +1,6 @@
 use super::{bind::Binds, function::Function};
 use crate::typed_buffer::TypedBuffer;
-use metal::{FunctionRef, LibraryRef, TextureRef};
+use metal::{AccelerationStructureRef, FunctionRef, LibraryRef, TextureRef};
 
 pub trait PipelineFunctionType {
     type Descriptor;
@@ -24,6 +24,11 @@ pub trait PipelineFunctionType {
         offset: usize,
     );
     fn texture<'a, 'b>(encoder: &'a Self::CommandEncoder, index: usize, texture: &'b TextureRef);
+    fn acceleration_structure<'a, 'b>(
+        encoder: &'a Self::CommandEncoder,
+        index: usize,
+        accel_struct: &'b AccelerationStructureRef,
+    );
 }
 
 pub trait PipelineFunction<F: PipelineFunctionType>: Function {

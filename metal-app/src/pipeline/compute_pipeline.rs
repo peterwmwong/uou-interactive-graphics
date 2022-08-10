@@ -50,4 +50,13 @@ impl PipelineFunctionType for ComputeFunctionType {
     fn texture<'a, 'b>(encoder: &'a Self::CommandEncoder, index: usize, texture: &'b TextureRef) {
         encoder.set_texture(index as _, Some(texture));
     }
+
+    #[inline(always)]
+    fn acceleration_structure<'a, 'b>(
+        encoder: &'a Self::CommandEncoder,
+        index: usize,
+        accel_struct: &'b metal::AccelerationStructureRef,
+    ) {
+        encoder.set_acceleration_structure(Some(accel_struct), index as _);
+    }
 }

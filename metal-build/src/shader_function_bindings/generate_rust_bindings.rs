@@ -84,6 +84,13 @@ pub struct {fn_name}_binds<'c> {{"#
     pub {rust_shader_bind_name}: BindTexture<'c>,"#
                         ));
                     }
+                    AccelerationStructure { name, .. } => {
+                        let rust_shader_bind_name = escape_name(&name);
+                        w(&format!(
+                            r#"
+    pub {rust_shader_bind_name}: BindAccelerationStructure<'c>,"#
+                        ));
+                    }
                 }
             }
             w(&format!(
@@ -110,6 +117,13 @@ impl Binds for {fn_name}_binds<'_> {{
         {rust_shader_bind_name}: BindTexture::Skip,"#
                         ));
                     }
+                    AccelerationStructure { name, .. } => {
+                        let rust_shader_bind_name = escape_name(name);
+                        w(&format!(
+                            r#"
+        {rust_shader_bind_name}: BindAccelerationStructure::Skip,"#
+                        ));
+                    }
                 }
             }
             w(r#"
@@ -119,7 +133,9 @@ impl Binds for {fn_name}_binds<'_> {{
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {"#);
             for bind in &binds {
                 match bind {
-                    Buffer { name, index, .. } | Texture { name, index, .. } => {
+                    Buffer { name, index, .. }
+                    | Texture { name, index, .. }
+                    | AccelerationStructure { name, index } => {
                         let rust_shader_bind_name = escape_name(name);
                         w(&format!(
                             r#"
@@ -211,6 +227,7 @@ pub struct test_vertex_binds<'c> {
     pub buf0: BindMany<'c, float>,
     pub buf1: Bind<'c, float2>,
     pub buf2: BindMany<'c, float3>,
+    pub accelerationStructure: BindAccelerationStructure<'c>,
     pub buf3: Bind<'c, float3>,
     pub tex1: BindTexture<'c>,
     pub buf5: Bind<'c, TestStruct>,
@@ -221,6 +238,7 @@ impl Binds for test_vertex_binds<'_> {
         buf0: BindMany::Skip,
         buf1: Bind::Skip,
         buf2: BindMany::Skip,
+        accelerationStructure: BindAccelerationStructure::Skip,
         buf3: Bind::Skip,
         tex1: BindTexture::Skip,
         buf5: Bind::Skip,
@@ -232,6 +250,7 @@ impl Binds for test_vertex_binds<'_> {
         self.buf0.bind::<F>(encoder, 0);
         self.buf1.bind::<F>(encoder, 1);
         self.buf2.bind::<F>(encoder, 2);
+        self.accelerationStructure.bind::<F>(encoder, 6);
         self.buf3.bind::<F>(encoder, 3);
         self.tex1.bind::<F>(encoder, 1);
         self.buf5.bind::<F>(encoder, 5);
@@ -259,6 +278,7 @@ impl PipelineFunction<VertexFunctionType> for test_vertex {}
 pub struct test_fragment_binds<'c> {
     pub buf0: BindMany<'c, float>,
     pub buf1: Bind<'c, float2>,
+    pub accelerationStructure: BindAccelerationStructure<'c>,
     pub buf2: BindMany<'c, float3>,
     pub buf3: Bind<'c, float3>,
     pub tex1: BindTexture<'c>,
@@ -269,6 +289,7 @@ impl Binds for test_fragment_binds<'_> {
     const SKIP: Self = Self {
         buf0: BindMany::Skip,
         buf1: Bind::Skip,
+        accelerationStructure: BindAccelerationStructure::Skip,
         buf2: BindMany::Skip,
         buf3: Bind::Skip,
         tex1: BindTexture::Skip,
@@ -280,6 +301,7 @@ impl Binds for test_fragment_binds<'_> {
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.buf0.bind::<F>(encoder, 0);
         self.buf1.bind::<F>(encoder, 1);
+        self.accelerationStructure.bind::<F>(encoder, 6);
         self.buf2.bind::<F>(encoder, 2);
         self.buf3.bind::<F>(encoder, 3);
         self.tex1.bind::<F>(encoder, 1);
