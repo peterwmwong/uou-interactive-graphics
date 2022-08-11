@@ -21,6 +21,7 @@ pub struct GeometryToEncode {
     pub positions_buffer: MetalGPUAddress,
     pub normals_buffer: MetalGPUAddress,
     pub tx_coords_buffer: MetalGPUAddress,
+    // TODO: Consider renaming this `*_buffer_byte_offset` to make it clear this is not an element offset.
     pub indices_buffer_offset: u32,
     pub positions_buffer_offset: u32,
     pub normals_buffer_offset: u32,
@@ -28,6 +29,19 @@ pub struct GeometryToEncode {
 }
 
 pub struct GeometryBuffers<T: Sized + Copy + Clone> {
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // Consider moving `arguments` out and into Model.
+    // - x-rt has exposed how inconvenient it is to use Geometry...
+    //   - `arguments` is created but never used, you can't opt-out of creating `arguments`
+    //   - But x-rt still needs a way to create something (primitive acceleration structures) for each tobj::Mesh/draw
+    // - Seems like seperable Model concern
+    // - Also, consider moving out `draws`, DI is fully controlled with Model anyways.
+    // - Also(2), consider combining `new_draw_item` and `encode_arg`.
+    //   - When calling encode_arg, we have all/same the information as we have in Geometry::new()
+    //   - Why burden the caller with 2 callbacks, and trying to figure out what is created and how
+    //     it should be used.
     pub arguments: TypedBuffer<T>,
     // Each buffer needs to be owned and not dropped (causing deallocation from the owning MTLHeap).
     pub indices: TypedBuffer<u32>,

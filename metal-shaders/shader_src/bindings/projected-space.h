@@ -1,5 +1,7 @@
 #pragma once
 
+#include "./metal.h"
+
 // Transforms and origin location defining a projected coordinate space in relation to the World
 // coordinate space.
 //

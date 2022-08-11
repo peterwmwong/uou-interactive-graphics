@@ -1,10 +1,8 @@
 #pragma once
 
-#ifdef __METAL_VERSION__
+#include "./metal.h"
 
-// TODO: Can this be removed
-#include <metal_stdlib>
-using namespace metal;
+#ifdef __METAL_VERSION__
 
 #define ARG_CONSTANT_PTR(x) constant x*
 #define ARG_TEXTURE(x) x
