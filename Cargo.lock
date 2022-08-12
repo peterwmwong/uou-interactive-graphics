@@ -457,7 +457,7 @@ checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 [[package]]
 name = "metal"
 version = "0.23.1"
-source = "git+https://github.com/peterwmwong/metal-rs.git?rev=380db143b9526df1f1c81a4cabcbfd051beefaf7#380db143b9526df1f1c81a4cabcbfd051beefaf7"
+source = "git+https://github.com/peterwmwong/metal-rs.git?rev=e7f2bf8c8c270ef666670e7b164541047491e1ed#e7f2bf8c8c270ef666670e7b164541047491e1ed"
 dependencies = [
  "bitflags",
  "block",

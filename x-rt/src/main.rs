@@ -24,6 +24,7 @@ const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 
 struct Draw {
+    name: String,
     vertex_byte_offset: u32,
     index_byte_offset: u32,
     triangle_count: u32,
@@ -34,7 +35,7 @@ struct Draw {
 // TODO: START HERE
 // - Refactor/Extract into metal-app
 pub struct ModelAccelerationStructure {
-    heap: Heap,
+    prim_accel_struct_heap: Heap,
     inst_accel_struct: AccelerationStructure,
 }
 
@@ -50,9 +51,10 @@ impl ModelAccelerationStructure {
 
         let mut draws: Vec<Draw> = vec![];
         let mut geometry: Geometry<u8, u8> =
-            Geometry::new(&models, device, |_name, vertex_count, _material_id| {
+            Geometry::new(&models, device, |name, vertex_count, _material_id| {
                 assert_eq!(vertex_count % 3, 0);
                 draws.push(Draw {
+                    name,
                     triangle_count: (vertex_count / 3) as _,
                     vertex_byte_offset: 0,
                     index_byte_offset: 0,
@@ -66,6 +68,7 @@ impl ModelAccelerationStructure {
             desc.set_storage_mode(MTLStorageMode::Shared);
             device.new_heap(&desc)
         };
+        geometry_heap.set_label("geometry_heap");
 
         let mut i = 0;
         let geometry_buffers = geometry.allocate_and_encode(
@@ -115,9 +118,9 @@ impl ModelAccelerationStructure {
             }
         };
 
-        // ======================================
-        // Build Primitive Acceleration Structure
-        // ======================================
+        // ========================================
+        // Define Primitive Acceleration Structures
+        // ========================================
         let tri_accel_struct_descs: Vec<AccelerationStructureTriangleGeometryDescriptor> = draws
             .into_iter()
             .map(|draw| {
@@ -130,6 +133,8 @@ impl ModelAccelerationStructure {
                 as_geo_tri.set_index_buffer_offset(draw.index_byte_offset as _);
                 as_geo_tri.set_index_type(MTLIndexType::UInt32);
                 as_geo_tri.set_triangle_count(draw.triangle_count as _);
+                as_geo_tri.set_opaque(true);
+                as_geo_tri.set_label(&draw.name);
                 as_geo_tri
             })
             .collect();
@@ -147,36 +152,25 @@ impl ModelAccelerationStructure {
         let mut as_sizes =
             device.acceleration_structure_sizes_with_descriptor(&prim_accel_struct_desc);
         as_sizes.acceleration_structure_size = size + align;
-        let heap_with_as_primitive = {
+        let prim_accel_struct_heap = {
             let desc = HeapDescriptor::new();
             desc.set_storage_mode(MTLStorageMode::Private);
             desc.set_size(as_sizes.acceleration_structure_size);
             device.new_heap(&desc)
         };
-        let prim_accel_struct = heap_with_as_primitive
+        let prim_accel_struct = prim_accel_struct_heap
             .new_acceleration_structure(size)
             .expect("Failed to allocate acceleration structure");
-
-        let scratch_buffer = device.new_buffer(
+        let prim_scratch_buffer = device.new_buffer(
             as_sizes.build_scratch_buffer_size,
             MTLResourceOptions::StorageModePrivate
                 | MTLResourceOptions::HazardTrackingModeUntracked,
         );
-        let cmd_buf = cmd_queue.new_command_buffer();
-        let encoder = cmd_buf.new_acceleration_structure_command_encoder();
-        encoder.build_acceleration_structure(
-            &prim_accel_struct,
-            &prim_accel_struct_desc,
-            &scratch_buffer,
-            0,
-        );
-        encoder.end_encoding();
-        cmd_buf.commit();
-        cmd_buf.wait_until_completed();
+        prim_scratch_buffer.set_label("prim_scratch_buffer");
 
-        // =====================================
-        // Build Instance Acceleration Structure
-        // =====================================
+        // ======================================
+        // Define Instance Acceleration Structure
+        // ======================================
         let inst_accel_struct_desc = InstanceAccelerationStructureDescriptor::descriptor();
         inst_accel_struct_desc.set_instanced_acceleration_structures(&Array::from_slice(&[
             &prim_accel_struct as &AccelerationStructureRef,
@@ -184,42 +178,56 @@ impl ModelAccelerationStructure {
         inst_accel_struct_desc.set_instance_count(1);
 
         let as_instance_descriptor_buffer = device.new_buffer_with_data(
-            (&AccelerationStructureInstanceDescriptor {
+            (&MTLAccelerationStructureInstanceDescriptor {
                 // Identity Matrix (column major 4x3)
                 transformation_matrix: m_model_to_world,
-                options: AccelerationStructureInstanceOptions::None,
+                options: MTLAccelerationStructureInstanceOptions::Opaque,
+                // options: MTLAccelerationStructureInstanceOptions::None,
                 mask: 0xFF,
                 intersection_function_table_offset: 0,
                 acceleration_structure_index: 0,
-            } as *const AccelerationStructureInstanceDescriptor) as *const _,
-            std::mem::size_of::<AccelerationStructureInstanceDescriptor>() as _,
-            MTLResourceOptions::StorageModeShared,
+            } as *const MTLAccelerationStructureInstanceDescriptor) as *const _,
+            std::mem::size_of::<MTLAccelerationStructureInstanceDescriptor>() as _,
+            MTLResourceOptions::StorageModeShared | MTLResourceOptions::HazardTrackingModeUntracked,
         );
+        as_instance_descriptor_buffer.set_label("as_instance_descriptor_buffer");
         inst_accel_struct_desc.set_instance_descriptor_buffer(Some(&as_instance_descriptor_buffer));
         let cmd_buf = cmd_queue.new_command_buffer();
         let as_sizes = device.acceleration_structure_sizes_with_descriptor(&inst_accel_struct_desc);
-        let scratch_buffer = device.new_buffer(
+        let inst_accel_struct = device
+            .new_acceleration_structure(as_sizes.acceleration_structure_size)
+            .expect("Failed to allocate instance acceleration structure");
+        let inst_scratch_buffer = device.new_buffer(
             as_sizes.build_scratch_buffer_size,
             MTLResourceOptions::StorageModePrivate
                 | MTLResourceOptions::HazardTrackingModeUntracked,
         );
-        let inst_accel_struct = device
-            .new_acceleration_structure(as_sizes.acceleration_structure_size)
-            .expect("Failed to allocate instance acceleration structure");
+        inst_scratch_buffer.set_label("inst_scratch_buffer");
 
-        let encoder = cmd_buf.new_acceleration_structure_command_encoder();
-        encoder.build_acceleration_structure(
-            &inst_accel_struct,
-            &inst_accel_struct_desc,
-            &scratch_buffer,
-            0,
-        );
-        encoder.end_encoding();
-        cmd_buf.commit();
-        cmd_buf.wait_until_completed();
+        // ======================================
+        // Initiate build Acceleration Structures
+        // ======================================
+        {
+            let encoder = cmd_buf.new_acceleration_structure_command_encoder();
+            encoder.build_acceleration_structure(
+                &prim_accel_struct,
+                &prim_accel_struct_desc,
+                &prim_scratch_buffer,
+                0,
+            );
+            encoder.build_acceleration_structure(
+                &inst_accel_struct,
+                &inst_accel_struct_desc,
+                &inst_scratch_buffer,
+                0,
+            );
+            encoder.end_encoding();
+            cmd_buf.commit();
+            cmd_buf.wait_until_completed();
+        }
 
         Self {
-            heap: heap_with_as_primitive,
+            prim_accel_struct_heap,
             inst_accel_struct,
         }
     }
@@ -289,7 +297,7 @@ impl RendererDelgate for Delegate {
             NoStencil,
             NoDepthState,
             &[&HeapUsage(
-                &self.model_accel_struct.heap,
+                &self.model_accel_struct.prim_accel_struct_heap,
                 MTLRenderStages::Fragment,
             )],
             |p| {

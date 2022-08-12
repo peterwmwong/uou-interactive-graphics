@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 
-metal = { git = "https://github.com/peterwmwong/metal-rs.git", rev = "380db143b9526df1f1c81a4cabcbfd051beefaf7" }
+metal = { git = "https://github.com/peterwmwong/metal-rs.git", rev = "e7f2bf8c8c270ef666670e7b164541047491e1ed" }
 png = "0.17.5"
