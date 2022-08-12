@@ -167,9 +167,11 @@ pub fn load_cube_texture_asset_dir<P: AsRef<Path>>(device: &Device, cube_asset_d
         let desc = TextureDescriptor::new();
         desc.set_pixel_format(pixel_format);
         desc.set_texture_type(MTLTextureType::Cube);
-        desc.set_resource_options(
-            MTLResourceOptions::StorageModeShared | MTLResourceOptions::CPUCacheModeWriteCombined,
-        );
+        #[cfg(test)]
+        let opts = MTLResourceOptions::StorageModeShared;
+        #[cfg(not(test))]
+        let opts = MTLResourceOptions::StorageModePrivate;
+        desc.set_resource_options(opts);
         desc.set_usage(MTLTextureUsage::ShaderRead);
         desc.set_width(width as _);
         desc.set_height(height as _);
