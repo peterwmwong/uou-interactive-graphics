@@ -20,6 +20,15 @@ use std::{
     simd::{f32x2, SimdFloat},
 };
 
+#[allow(dead_code)]
+enum AccelerationStructureUpdateStrategy {
+    Refit,
+    Rebuild,
+}
+use AccelerationStructureUpdateStrategy::*;
+
+const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
+
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -46,7 +55,10 @@ struct Draw {
 // TODO: START HERE
 // TODO: START HERE
 // - Refactor/Extract into metal-app
+#[allow(dead_code)]
 pub struct ModelAccelerationStructure {
+    geometry_heap: Heap,
+    geometry_buffers: GeometryBuffers<u8>,
     inst_accel_struct_desc_buffer: TypedBuffer<MTLAccelerationStructureInstanceDescriptor>,
     inst_accel_struct_desc: InstanceAccelerationStructureDescriptor,
     inst_accel_struct: AccelerationStructure,
@@ -232,6 +244,8 @@ impl ModelAccelerationStructure {
         }
 
         Self {
+            geometry_heap,
+            geometry_buffers,
             inst_accel_struct_desc_buffer,
             inst_accel_struct_desc,
             inst_accel_struct,
@@ -244,27 +258,50 @@ impl ModelAccelerationStructure {
         }
     }
 
-    fn translate_x(&mut self, command_queue: &CommandQueueRef, translate_x: f32) {
+    fn translate_x(
+        &mut self,
+        device: &DeviceRef,
+        command_queue: &CommandQueueRef,
+        translate_x: f32,
+    ) {
         self.m_model_to_world = f32x4x4::translate(translate_x, 0., 0.) * self.m_model_to_world;
         self.inst_accel_struct_desc_buffer.get_mut()[0].transformation_matrix =
             into_mtlpacked_float4x3(self.m_model_to_world);
 
+        if matches!(ACCELERATION_STRUCTURE_UPDATE_STRATEGY, Rebuild) {
+            let as_sizes =
+                device.acceleration_structure_sizes_with_descriptor(&self.inst_accel_struct_desc);
+            self.inst_accel_struct = device
+                .new_acceleration_structure(as_sizes.acceleration_structure_size)
+                .expect("Failed to allocate instance acceleration structure");
+        }
+
         // Refit
         {
-            let cmd_buf = command_queue.new_command_buffer_with_unretained_references();
+            let cmd_buf = command_queue.new_command_buffer();
             let encoder = cmd_buf.new_acceleration_structure_command_encoder();
+            encoder.use_heap(&self.geometry_heap);
             encoder.use_heap(&self.prim_accel_struct_heap);
             encoder.use_resource(
                 &self.inst_accel_struct_desc_buffer.buffer,
                 MTLResourceUsage::Read,
             );
-            encoder.refit(
-                &self.inst_accel_struct,
-                &self.inst_accel_struct_desc,
-                None,
-                &self.inst_scratch_buffer,
-                0,
-            );
+
+            match ACCELERATION_STRUCTURE_UPDATE_STRATEGY {
+                Refit => encoder.refit(
+                    &self.inst_accel_struct,
+                    &self.inst_accel_struct_desc,
+                    None,
+                    &self.inst_scratch_buffer,
+                    0,
+                ),
+                Rebuild => encoder.build_acceleration_structure(
+                    &self.inst_accel_struct,
+                    &self.inst_accel_struct_desc,
+                    &self.inst_scratch_buffer,
+                    0,
+                ),
+            }
             encoder.end_encoding();
             cmd_buf.commit();
             cmd_buf.wait_until_completed();
@@ -323,7 +360,8 @@ impl RendererDelgate for Delegate {
             device,
         };
         // TODO: TEMPORARY TO EXPOSE INITIAL REFIT CORRUPTION PROBLEM
-        s.model_accel_struct.translate_x(&s.command_queue, 0.);
+        s.model_accel_struct
+            .translate_x(&s.device, &s.command_queue, 0.);
         s
     }
 
@@ -384,7 +422,7 @@ impl RendererDelgate for Delegate {
                     return;
                 };
                 self.model_accel_struct
-                    .translate_x(&self.command_queue, translate_x);
+                    .translate_x(&self.device, &self.command_queue, translate_x);
                 self.needs_render = true;
             }
             _ => {}
