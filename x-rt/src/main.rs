@@ -9,12 +9,13 @@ use metal_app::{
     metal::{MTLLoadAction::*, MTLStoreAction::*, *},
     metal_types::*,
     pipeline::*,
+    typed_buffer::TypedBuffer,
     ModifierKeys, RendererDelgate, UserEvent, DEFAULT_COLOR_FORMAT,
 };
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
-    ops::Neg,
+    ops::{Deref, Neg},
     path::{Path, PathBuf},
     simd::{f32x2, SimdFloat},
 };
@@ -22,6 +23,17 @@ use std::{
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
+
+fn into_mtlpacked_float4x3(m: f32x4x4) -> MTLPackedFloat4x3 {
+    MTLPackedFloat4x3 {
+        columns: [
+            MTLPackedFloat3(m.columns[0][0], m.columns[0][1], m.columns[0][2]),
+            MTLPackedFloat3(m.columns[1][0], m.columns[1][1], m.columns[1][2]),
+            MTLPackedFloat3(m.columns[2][0], m.columns[2][1], m.columns[2][2]),
+            MTLPackedFloat3(m.columns[3][0], m.columns[3][1], m.columns[3][2]),
+        ],
+    }
+}
 
 struct Draw {
     name: String,
@@ -35,8 +47,15 @@ struct Draw {
 // TODO: START HERE
 // - Refactor/Extract into metal-app
 pub struct ModelAccelerationStructure {
-    prim_accel_struct_heap: Heap,
+    inst_accel_struct_desc_buffer: TypedBuffer<MTLAccelerationStructureInstanceDescriptor>,
+    inst_accel_struct_desc: InstanceAccelerationStructureDescriptor,
     inst_accel_struct: AccelerationStructure,
+    inst_scratch_buffer: Buffer,
+    m_model_to_world: f32x4x4,
+    prim_accel_struct_desc: PrimitiveAccelerationStructureDescriptor,
+    prim_accel_struct_heap: Heap,
+    prim_accel_struct: AccelerationStructure,
+    prim_scratch_buffer: Buffer,
 }
 
 impl ModelAccelerationStructure {
@@ -85,37 +104,13 @@ impl ModelAccelerationStructure {
             },
         );
 
-        let m_model_to_world = {
+        let m_model_to_world: f32x4x4 = {
             let MaxBounds { center, size } = geometry.max_bounds;
             let [cx, cy, cz, _] = center.neg().to_array();
             let scale = 1. / size.reduce_max();
-            let transform = f32x4x4::scale(scale, scale, scale, 1.)
+            f32x4x4::scale(scale, scale, scale, 1.)
                 * f32x4x4::x_rotate(PI / 2.)
-                * f32x4x4::translate(cx, cy, cz);
-            MTLPackedFloat4x3 {
-                columns: [
-                    MTLPackedFloat3(
-                        transform.columns[0][0],
-                        transform.columns[0][1],
-                        transform.columns[0][2],
-                    ),
-                    MTLPackedFloat3(
-                        transform.columns[1][0],
-                        transform.columns[1][1],
-                        transform.columns[1][2],
-                    ),
-                    MTLPackedFloat3(
-                        transform.columns[2][0],
-                        transform.columns[2][1],
-                        transform.columns[2][2],
-                    ),
-                    MTLPackedFloat3(
-                        transform.columns[3][0],
-                        transform.columns[3][1],
-                        transform.columns[3][2],
-                    ),
-                ],
-            }
+                * f32x4x4::translate(cx, cy, cz)
         };
 
         // ========================================
@@ -163,8 +158,7 @@ impl ModelAccelerationStructure {
             .expect("Failed to allocate acceleration structure");
         let prim_scratch_buffer = device.new_buffer(
             as_sizes.build_scratch_buffer_size,
-            MTLResourceOptions::StorageModePrivate
-                | MTLResourceOptions::HazardTrackingModeUntracked,
+            MTLResourceOptions::StorageModePrivate,
         );
         prim_scratch_buffer.set_label("prim_scratch_buffer");
 
@@ -177,30 +171,34 @@ impl ModelAccelerationStructure {
         ]));
         inst_accel_struct_desc.set_instance_count(1);
 
-        let as_instance_descriptor_buffer = device.new_buffer_with_data(
-            (&MTLAccelerationStructureInstanceDescriptor {
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Work through a refit case: change the `transformation_matrix` and rebuild in-place (pass nil to destinationAccelerationStructure)?
+        // - https://developer.apple.com/documentation/metal/mtlaccelerationstructurecommandencoder/3553898-refit
+
+        let inst_accel_struct_desc_buffer = TypedBuffer::from_data(
+            "Instance Acceleration Structure Descriptor",
+            device.deref(),
+            &[MTLAccelerationStructureInstanceDescriptor {
                 // Identity Matrix (column major 4x3)
-                transformation_matrix: m_model_to_world,
+                transformation_matrix: into_mtlpacked_float4x3(m_model_to_world),
                 options: MTLAccelerationStructureInstanceOptions::Opaque,
-                // options: MTLAccelerationStructureInstanceOptions::None,
                 mask: 0xFF,
                 intersection_function_table_offset: 0,
                 acceleration_structure_index: 0,
-            } as *const MTLAccelerationStructureInstanceDescriptor) as *const _,
-            std::mem::size_of::<MTLAccelerationStructureInstanceDescriptor>() as _,
-            MTLResourceOptions::StorageModeShared | MTLResourceOptions::HazardTrackingModeUntracked,
+            }],
+            MTLResourceOptions::StorageModeShared,
         );
-        as_instance_descriptor_buffer.set_label("as_instance_descriptor_buffer");
-        inst_accel_struct_desc.set_instance_descriptor_buffer(Some(&as_instance_descriptor_buffer));
-        let cmd_buf = cmd_queue.new_command_buffer();
+        inst_accel_struct_desc
+            .set_instance_descriptor_buffer(Some(&inst_accel_struct_desc_buffer.buffer));
         let as_sizes = device.acceleration_structure_sizes_with_descriptor(&inst_accel_struct_desc);
         let inst_accel_struct = device
             .new_acceleration_structure(as_sizes.acceleration_structure_size)
             .expect("Failed to allocate instance acceleration structure");
         let inst_scratch_buffer = device.new_buffer(
             as_sizes.build_scratch_buffer_size,
-            MTLResourceOptions::StorageModePrivate
-                | MTLResourceOptions::HazardTrackingModeUntracked,
+            MTLResourceOptions::StorageModePrivate,
         );
         inst_scratch_buffer.set_label("inst_scratch_buffer");
 
@@ -208,7 +206,13 @@ impl ModelAccelerationStructure {
         // Initiate build Acceleration Structures
         // ======================================
         {
+            let cmd_buf = cmd_queue.new_command_buffer_with_unretained_references();
             let encoder = cmd_buf.new_acceleration_structure_command_encoder();
+            encoder.use_heap(&prim_accel_struct_heap);
+            encoder.use_resource(
+                &inst_accel_struct_desc_buffer.buffer,
+                MTLResourceUsage::Read,
+            );
             encoder.build_acceleration_structure(
                 &prim_accel_struct,
                 &prim_accel_struct_desc,
@@ -224,11 +228,47 @@ impl ModelAccelerationStructure {
             encoder.end_encoding();
             cmd_buf.commit();
             cmd_buf.wait_until_completed();
+            assert_eq!(cmd_buf.status(), MTLCommandBufferStatus::Completed);
         }
 
         Self {
-            prim_accel_struct_heap,
+            inst_accel_struct_desc_buffer,
+            inst_accel_struct_desc,
             inst_accel_struct,
+            inst_scratch_buffer,
+            m_model_to_world,
+            prim_accel_struct_desc,
+            prim_accel_struct_heap,
+            prim_accel_struct,
+            prim_scratch_buffer,
+        }
+    }
+
+    fn translate_x(&mut self, command_queue: &CommandQueueRef, translate_x: f32) {
+        self.m_model_to_world = f32x4x4::translate(translate_x, 0., 0.) * self.m_model_to_world;
+        self.inst_accel_struct_desc_buffer.get_mut()[0].transformation_matrix =
+            into_mtlpacked_float4x3(self.m_model_to_world);
+
+        // Refit
+        {
+            let cmd_buf = command_queue.new_command_buffer_with_unretained_references();
+            let encoder = cmd_buf.new_acceleration_structure_command_encoder();
+            encoder.use_heap(&self.prim_accel_struct_heap);
+            encoder.use_resource(
+                &self.inst_accel_struct_desc_buffer.buffer,
+                MTLResourceUsage::Read,
+            );
+            encoder.refit(
+                &self.inst_accel_struct,
+                &self.inst_accel_struct_desc,
+                None,
+                &self.inst_scratch_buffer,
+                0,
+            );
+            encoder.end_encoding();
+            cmd_buf.commit();
+            cmd_buf.wait_until_completed();
+            assert_eq!(cmd_buf.status(), MTLCommandBufferStatus::Completed);
         }
     }
 }
@@ -254,7 +294,7 @@ impl RendererDelgate for Delegate {
         ));
         let model_file = PathBuf::from(model_file_path);
         let command_queue = device.new_command_queue();
-        Self {
+        let mut s = Self {
             camera: Camera::new(
                 INITIAL_CAMERA_DISTANCE,
                 INITIAL_CAMERA_ROTATION,
@@ -281,7 +321,10 @@ impl RendererDelgate for Delegate {
                 (NoDepth, NoStencil),
             ),
             device,
-        }
+        };
+        // TODO: TEMPORARY TO EXPOSE INITIAL REFIT CORRUPTION PROBLEM
+        s.model_accel_struct.translate_x(&s.command_queue, 0.);
+        s
     }
 
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
@@ -328,6 +371,23 @@ impl RendererDelgate for Delegate {
                 position_world: self.camera_position,
             };
             self.needs_render = true;
+        }
+
+        use UserEvent::*;
+        match event {
+            KeyDown { key_code, .. } => {
+                let translate_x = if key_code == UserEvent::KEY_CODE_RIGHT {
+                    0.1
+                } else if key_code == UserEvent::KEY_CODE_LEFT {
+                    -0.1
+                } else {
+                    return;
+                };
+                self.model_accel_struct
+                    .translate_x(&self.command_queue, translate_x);
+                self.needs_render = true;
+            }
+            _ => {}
         }
     }
 

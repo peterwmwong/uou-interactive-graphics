@@ -49,6 +49,14 @@ pub enum UserEvent {
     },
 }
 
+// TODO: Apply constants to all projects doing key capture w/magic values.
+impl UserEvent {
+    pub const KEY_CODE_DOWN: c_ushort = 125;
+    pub const KEY_CODE_LEFT: c_ushort = 123;
+    pub const KEY_CODE_RIGHT: c_ushort = 124;
+    pub const KEY_CODE_UP: c_ushort = 126;
+}
+
 pub fn remove_modifier_keys(event: UserEvent, modifier_keys_to_remove: ModifierKeys) -> UserEvent {
     match event {
         UserEvent::MouseDown {
