@@ -1,3 +1,4 @@
+#![feature(array_chunks)]
 #![feature(generic_associated_types)]
 #![feature(portable_simd)]
 mod shader_bindings;
@@ -15,9 +16,12 @@ use metal_app::{
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
+    fs::read,
+    mem::transmute,
     ops::{Deref, Neg},
     path::{Path, PathBuf},
-    simd::{f32x2, SimdFloat},
+    ptr::copy_nonoverlapping,
+    simd::{f32x2, f32x4, SimdFloat},
 };
 
 #[allow(dead_code)]
@@ -57,8 +61,10 @@ struct Draw {
 // - Refactor/Extract into metal-app
 #[allow(dead_code)]
 pub struct ModelAccelerationStructure {
-    geometry_heap: Heap,
-    geometry_buffers: GeometryBuffers<u8>,
+    // geometry_heap: Heap,
+    // geometry_buffers: GeometryBuffers<u8>,
+    geometry_positions_buffer: Buffer,
+    geometry_indices_buffer: Buffer,
     inst_accel_struct_desc_buffer: TypedBuffer<MTLAccelerationStructureInstanceDescriptor>,
     inst_accel_struct_desc: InstanceAccelerationStructureDescriptor,
     inst_accel_struct: AccelerationStructure,
@@ -76,67 +82,113 @@ impl ModelAccelerationStructure {
         device: &DeviceRef,
         cmd_queue: &CommandQueueRef,
     ) -> Self {
-        let obj_file = obj_file.as_ref();
-        let (models, ..) =
-            tobj::load_obj(obj_file, &tobj::GPU_LOAD_OPTIONS).expect("Failed to load OBJ file");
+        // let obj_file = obj_file.as_ref();
+        // let (models, ..) =
+        //     tobj::load_obj(obj_file, &tobj::GPU_LOAD_OPTIONS).expect("Failed to load OBJ file");
 
-        let mut draws: Vec<Draw> = vec![];
-        let mut geometry: Geometry<u8, u8> =
-            Geometry::new(&models, device, |name, vertex_count, _material_id| {
-                assert_eq!(vertex_count % 3, 0);
-                draws.push(Draw {
-                    name,
-                    triangle_count: (vertex_count / 3) as _,
-                    vertex_byte_offset: 0,
-                    index_byte_offset: 0,
-                });
-                0
-            });
-        let geometry_heap = {
-            let desc = HeapDescriptor::new();
-            desc.set_size(geometry.heap_size() as _);
-            desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
-            desc.set_storage_mode(MTLStorageMode::Shared);
-            device.new_heap(&desc)
-        };
-        geometry_heap.set_label("geometry_heap");
+        // let mut draws: Vec<Draw> = vec![];
+        // let mut geometry: Geometry<u8, u8> =
+        //     Geometry::new(&models, device, |name, vertex_count, _material_id| {
+        //         assert_eq!(vertex_count % 3, 0);
+        //         draws.push(Draw {
+        //             name,
+        //             triangle_count: (vertex_count / 3) as _,
+        //             vertex_byte_offset: 0,
+        //             index_byte_offset: 0,
+        //         });
+        //         0
+        //     });
+        // let geometry_heap = {
+        //     let desc = HeapDescriptor::new();
+        //     desc.set_size(geometry.heap_size() as _);
+        //     desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
+        //     desc.set_storage_mode(MTLStorageMode::Shared);
+        //     device.new_heap(&desc)
+        // };
+        // geometry_heap.set_label("geometry_heap");
 
-        let mut i = 0;
-        let geometry_buffers = geometry.allocate_and_encode(
-            &geometry_heap,
-            |_,
-             GeometryToEncode {
-                 indices_buffer_offset,
-                 positions_buffer_offset,
-                 ..
-             }| {
-                draws[i].index_byte_offset = indices_buffer_offset;
-                draws[i].vertex_byte_offset = positions_buffer_offset;
-                i += 1;
-            },
-        );
+        // let mut i = 0;
+        // let geometry_buffers = geometry.allocate_and_encode(
+        //     &geometry_heap,
+        //     |_,
+        //      GeometryToEncode {
+        //          indices_buffer_offset,
+        //          positions_buffer_offset,
+        //          ..
+        //      }| {
+        //         draws[i].index_byte_offset = indices_buffer_offset;
+        //         draws[i].vertex_byte_offset = positions_buffer_offset;
+        //         i += 1;
+        //     },
+        // );
 
-        let m_model_to_world: f32x4x4 = {
-            let MaxBounds { center, size } = geometry.max_bounds;
-            let [cx, cy, cz, _] = center.neg().to_array();
-            let scale = 1. / size.reduce_max();
-            f32x4x4::scale(scale, scale, scale, 1.)
-                * f32x4x4::x_rotate(PI / 2.)
-                * f32x4x4::translate(cx, cy, cz)
-        };
+        // let m_model_to_world: f32x4x4 = {
+        //     let MaxBounds { center, size } = geometry.max_bounds;
+        //     let [cx, cy, cz, _] = center.neg().to_array();
+        //     let scale = 1. / size.reduce_max();
+        //     f32x4x4::scale(scale, scale, scale, 1.)
+        //         * f32x4x4::x_rotate(PI / 2.)
+        //         * f32x4x4::translate(cx, cy, cz)
+        // };
 
         // ========================================
         // Define Primitive Acceleration Structures
         // ========================================
+        // std::fs::write("/tmp/triangle_count.bin", unsafe {
+        //     let t = [draws[0].triangle_count];
+        //     std::slice::from_raw_parts(t.as_ptr() as _, std::mem::size_of::<u32>())
+        // })
+        // .expect("Failed to write triangle_count");
+        // std::fs::write("/tmp/m_model_to_world.bin", unsafe {
+        //     std::slice::from_raw_parts(
+        //         m_model_to_world.columns.as_ptr() as _,
+        //         std::mem::size_of::<f32x4x4>(),
+        //     )
+        // })
+        // .expect("Failed to write max_bounds");
+        // std::fs::write("/tmp/positions.bin", unsafe {
+        //     std::slice::from_raw_parts(
+        //         geometry_buffers.positions.get_mut().as_ptr() as _,
+        //         geometry_buffers.positions.len * geometry_buffers.positions.element_size(),
+        //     )
+        // })
+        // .expect("Failed to write positions");
+        // std::fs::write("/tmp/indices.bin", unsafe {
+        //     std::slice::from_raw_parts(
+        //         geometry_buffers.indices.get_mut().as_ptr() as _,
+        //         geometry_buffers.indices.len * geometry_buffers.indices.element_size(),
+        //     )
+        // })
+        // .expect("Failed to write indices");
+
+        let triangle_count =
+            unsafe { *(read("/tmp/triangle_count.bin").unwrap().as_ptr() as *const u32) };
+        let m_model_to_world =
+            unsafe { *(read("/tmp/m_model_to_world.bin").unwrap().as_ptr() as *const f32x4x4) };
+        fn get_buffer(device: &DeviceRef, name: &str) -> Buffer {
+            let bytes = read(&format!("/tmp/{name}.bin")).unwrap();
+            let buf = device.new_buffer(bytes.len() as _, MTLResourceOptions::StorageModeShared);
+            unsafe { copy_nonoverlapping(bytes.as_ptr(), buf.contents() as _, bytes.len()) };
+            buf
+        }
+        let geometry_positions_buffer = get_buffer(device, "positions");
+        let geometry_indices_buffer = get_buffer(device, "indices");
+        let draws: Vec<Draw> = vec![Draw {
+            name: "teapot".to_owned(),
+            vertex_byte_offset: 0,
+            index_byte_offset: 0,
+            triangle_count,
+        }];
+
         let tri_accel_struct_descs: Vec<AccelerationStructureTriangleGeometryDescriptor> = draws
             .into_iter()
             .map(|draw| {
                 let as_geo_tri = AccelerationStructureTriangleGeometryDescriptor::descriptor();
                 as_geo_tri.set_vertex_format(MTLAttributeFormat::Float3);
-                as_geo_tri.set_vertex_buffer(Some(&geometry_buffers.positions.buffer));
+                as_geo_tri.set_vertex_buffer(Some(&geometry_positions_buffer));
                 as_geo_tri.set_vertex_buffer_offset(draw.vertex_byte_offset as _);
-                as_geo_tri.set_vertex_stride((std::mem::size_of::<f32>() * 3) as _);
-                as_geo_tri.set_index_buffer(Some(&geometry_buffers.indices.buffer));
+                as_geo_tri.set_vertex_stride(std::mem::size_of::<[f32; 3]>() as _);
+                as_geo_tri.set_index_buffer(Some(&geometry_indices_buffer));
                 as_geo_tri.set_index_buffer_offset(draw.index_byte_offset as _);
                 as_geo_tri.set_index_type(MTLIndexType::UInt32);
                 as_geo_tri.set_triangle_count(draw.triangle_count as _);
@@ -244,8 +296,10 @@ impl ModelAccelerationStructure {
         }
 
         Self {
-            geometry_heap,
-            geometry_buffers,
+            // geometry_heap,
+            // geometry_buffers,
+            geometry_positions_buffer,
+            geometry_indices_buffer,
             inst_accel_struct_desc_buffer,
             inst_accel_struct_desc,
             inst_accel_struct,
@@ -280,7 +334,7 @@ impl ModelAccelerationStructure {
         {
             let cmd_buf = command_queue.new_command_buffer();
             let encoder = cmd_buf.new_acceleration_structure_command_encoder();
-            encoder.use_heap(&self.geometry_heap);
+            // encoder.use_heap(&self.geometry_heap);
             encoder.use_heap(&self.prim_accel_struct_heap);
             encoder.use_resource(
                 &self.inst_accel_struct_desc_buffer.buffer,
