@@ -2,6 +2,11 @@
 
 - Model asset
     - Geometry
+        - Look at https://github.com/zeux/meshoptimizer
+            - mesh shader optimizations!
+            - vertex quantization! (normalized integers)
+                - Metal 3 Ray Tracing Acceleration Structures support this now too
+        - Use MTLIO too?
     - Materials
 
 # metal-shaders

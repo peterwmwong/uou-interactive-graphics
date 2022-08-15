@@ -2,7 +2,7 @@
 #include "./shader_bindings.h"
 
 using namespace metal;
-using raytracing::instance_acceleration_structure;
+using raytracing::primitive_acceleration_structure;
 
 struct VertexOut
 {
@@ -22,7 +22,7 @@ VertexOut main_vertex(
 [[fragment]]
 half4 main_fragment(
              VertexOut                         in                    [[stage_in]],
-             instance_acceleration_structure   accelerationStructure [[buffer(0)]],
+             primitive_acceleration_structure  accelerationStructure [[buffer(0)]],
     constant ProjectedSpace                  & camera                [[buffer(1)]],
     constant float4                          & camera_pos            [[buffer(2)]]
 ) {
@@ -36,7 +36,7 @@ half4 main_fragment(
     r.min_distance = 0.001;
     r.max_distance = FLT_MAX;
 
-    raytracing::intersector<raytracing::instancing> intersector;
+    raytracing::intersector<> intersector;
     intersector.assume_geometry_type(raytracing::geometry_type::triangle);
     auto intersection = intersector.intersect(r, accelerationStructure);
     return (intersection.type == raytracing::intersection_type::triangle) ? half4(half3(intersection.distance), 1) : 0;

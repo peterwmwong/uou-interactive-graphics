@@ -315,7 +315,21 @@
                 "--",
                 "${workspaceFolder}/common-assets/teapot/teapot.obj"
             ],
-            "label": "Run x-rt"
+            "label": "Run x-rt teapot"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "x-rt",
+                "--",
+                "${workspaceFolder}/common-assets/yoda/yoda.obj"
+            ],
+            "label": "Run x-rt yoda"
         },
     ]
 }

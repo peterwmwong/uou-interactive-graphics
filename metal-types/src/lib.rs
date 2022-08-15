@@ -3,6 +3,7 @@
 mod rust_bindgen_only_metal_types;
 mod rust_bindgen_only_metal_types_list;
 
+use metal::{MTLPackedFloat3, MTLPackedFloat4x3};
 pub use rust_bindgen_only_metal_types::*;
 pub use rust_bindgen_only_metal_types_list::*;
 
@@ -335,6 +336,33 @@ impl From<f32x4x4> for float3x3 {
     fn from(f32x4x4 { columns: c }: f32x4x4) -> Self {
         float3x3 {
             columns: [c[0], c[1], c[2]],
+        }
+    }
+}
+
+impl From<f32x4x4> for MTLPackedFloat4x3 {
+    #[inline(always)]
+    fn from(m: f32x4x4) -> Self {
+        Self {
+            columns: [
+                MTLPackedFloat3(m.columns[0][0], m.columns[0][1], m.columns[0][2]),
+                MTLPackedFloat3(m.columns[1][0], m.columns[1][1], m.columns[1][2]),
+                MTLPackedFloat3(m.columns[2][0], m.columns[2][1], m.columns[2][2]),
+                MTLPackedFloat3(m.columns[3][0], m.columns[3][1], m.columns[3][2]),
+            ],
+        }
+    }
+}
+impl From<MTLPackedFloat4x3> for f32x4x4 {
+    #[inline(always)]
+    fn from(m: MTLPackedFloat4x3) -> Self {
+        f32x4x4 {
+            columns: [
+                [m.columns[0].0, m.columns[0].1, m.columns[0].2, 0.],
+                [m.columns[1].0, m.columns[1].1, m.columns[1].2, 0.],
+                [m.columns[2].0, m.columns[2].1, m.columns[2].2, 0.],
+                [m.columns[3].0, m.columns[3].1, m.columns[3].2, 1.],
+            ],
         }
     }
 }
