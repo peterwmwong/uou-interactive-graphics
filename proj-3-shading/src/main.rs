@@ -186,7 +186,7 @@ impl RendererDelgate for Delegate {
                     },
                 );
                 for draw in self.model.draws() {
-                    p.draw_primitives_with_bind(
+                    p.draw_primitives_with_binds(
                         main_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..Binds::SKIP
@@ -198,7 +198,7 @@ impl RendererDelgate for Delegate {
                     );
                 }
                 p.into_subpass("Light", &self.light_pipeline, None, |p| {
-                    p.draw_primitives_with_bind(
+                    p.draw_primitives_with_binds(
                         light_vertex_binds {
                             camera: Bind::Value(&self.camera_space),
                             light_pos: Bind::Value(&self.light_world_position),

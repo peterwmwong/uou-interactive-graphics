@@ -105,7 +105,7 @@ impl RendererDelgate for Delegate {
                     NoBinds,
                 );
                 for draw in self.model.draws() {
-                    p.draw_primitives_with_bind(
+                    p.draw_primitives_with_binds(
                         main_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..Binds::SKIP

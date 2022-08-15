@@ -113,6 +113,11 @@ pub enum BindTexture<'a> {
     Texture(&'a TextureRef),
     Skip,
 }
+#[allow(non_snake_case)]
+pub fn BindTexture<'a>(texture: &'a TextureRef) -> BindTexture<'a> {
+    BindTexture::Texture(texture)
+}
+
 impl<'a> BindTexture<'a> {
     #[inline]
     pub fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize) {
@@ -127,6 +132,13 @@ impl<'a> BindTexture<'a> {
 pub enum BindAccelerationStructure<'a> {
     AccelerationStructure(&'a AccelerationStructureRef),
     Skip,
+}
+
+#[allow(non_snake_case)]
+pub fn BindAccelerationStructure<'a>(
+    accel: &'a AccelerationStructureRef,
+) -> BindAccelerationStructure<'a> {
+    BindAccelerationStructure::AccelerationStructure(accel)
 }
 
 impl<'a> BindAccelerationStructure<'a> {

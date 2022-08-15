@@ -89,7 +89,6 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
         let m_world_to_projection =
             calc_m_camera_to_projection(aspect_ratio, 60_f32.to_radians()) * m_world_to_camera;
 
-        let m_world_to_projection = m_world_to_projection;
         let scale_xy = f32x2::splat(2.) / self.screen_size;
         let m_screen_to_projection =
             f32x4x4::scale_translate(scale_xy[0], -scale_xy[1], 1., -1., 1., 0.);

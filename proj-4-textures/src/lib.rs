@@ -221,7 +221,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 );
                 for draw in self.model.draws() {
                     p.debug_group(draw.name, || {
-                        p.draw_primitives_with_bind(
+                        p.draw_primitives_with_binds(
                             main_vertex_binds {
                                 geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                                 model: Bind::Skip,
@@ -241,7 +241,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 }
                 if RENDER_LIGHT {
                     p.into_subpass("Light", &self.light_pipeline, None, |p| {
-                        p.draw_primitives_with_bind(
+                        p.draw_primitives_with_binds(
                             light_vertex_binds {
                                 camera: Bind::Value(&self.camera_space),
                                 light_pos: Bind::Value(&self.light_position),

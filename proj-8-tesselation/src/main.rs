@@ -246,7 +246,7 @@ impl RendererDelgate for Delegate {
                         m_world_to_projection: Bind::Value(&self.light_m_world_to_projection),
                         displacement_scale: Bind::Value(&self.displacement_scale),
                         disp_tx: if let Some(displacement_texture) = &self.displacement_texture {
-                            BindTexture::Texture(displacement_texture)
+                            BindTexture(displacement_texture)
                         } else {
                             BindTexture::Skip
                         },
@@ -312,7 +312,7 @@ impl RendererDelgate for Delegate {
                     Binds::SKIP,
                 );
                 for draw in self.light_model.draws() {
-                    p.draw_primitives_with_bind(
+                    p.draw_primitives_with_binds(
                         light_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..Binds::SKIP
@@ -340,7 +340,7 @@ impl RendererDelgate for Delegate {
                                 disp_tx: if let Some(displacement_texture) =
                                     &self.displacement_texture
                                 {
-                                    BindTexture::Texture(displacement_texture)
+                                    BindTexture(displacement_texture)
                                 } else {
                                     BindTexture::Skip
                                 },
@@ -349,8 +349,8 @@ impl RendererDelgate for Delegate {
                                 camera: Bind::Value(&self.camera_space),
                                 light: Bind::Value(&self.light_space),
                                 shade_tri: Bind::Value(&false),
-                                normal_tx: BindTexture::Texture(&self.normal_texture),
-                                shadow_tx: BindTexture::Texture(shadow_tx),
+                                normal_tx: BindTexture(&self.normal_texture),
+                                shadow_tx: BindTexture(shadow_tx),
                             },
                             4,
                         );

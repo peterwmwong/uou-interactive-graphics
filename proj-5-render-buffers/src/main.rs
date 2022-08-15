@@ -164,12 +164,12 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             NoDepthState,
             &[],
             |p| {
-                p.draw_primitives_with_bind(
+                p.draw_primitives_with_binds(
                     main_vertex_binds {
                         m_model_to_projection: Bind::Value(&self.m_model_to_projection),
                     },
                     main_fragment_binds {
-                        texture: BindTexture::Texture(plane_texture),
+                        texture: BindTexture(plane_texture),
                         mode: Bind::Value(&self.plane_texture_filter_mode),
                     },
                     MTLPrimitiveType::TriangleStrip,

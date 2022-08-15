@@ -32,7 +32,7 @@ impl PipelineFunctionType for ComputeFunctionType {
     ) {
         encoder.set_buffer(
             index as _,
-            Some(&buffer.buffer),
+            Some(&buffer.raw),
             (std::mem::size_of::<T>() * offset) as _,
         );
     }

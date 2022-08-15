@@ -68,7 +68,7 @@ impl<T: Sized + Copy + Clone> TypedBufferSizer<T> {
     }
 }
 pub struct TypedBuffer<T: Sized + Copy + Clone> {
-    pub buffer: Buffer,
+    pub raw: Buffer,
     pub len: usize,
     _type: PhantomData<T>,
 }
@@ -84,7 +84,7 @@ impl<T: Sized + Copy + Clone> TypedBuffer<T> {
         let buffer = allocator.with_capacity::<T>(capacity, options);
         buffer.set_label(label);
         Self {
-            buffer,
+            raw: buffer,
             len: capacity,
             _type: PhantomData,
         }
@@ -109,7 +109,7 @@ impl<T: Sized + Copy + Clone> TypedBuffer<T> {
 
     #[inline]
     pub fn get_mut(&self) -> &mut [T] {
-        let contents = self.buffer.contents() as *mut T;
+        let contents = self.raw.contents() as *mut T;
         unsafe { std::slice::from_raw_parts_mut(contents, self.len) }
     }
 }

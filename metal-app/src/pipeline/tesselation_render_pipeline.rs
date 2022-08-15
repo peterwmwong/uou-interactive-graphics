@@ -178,7 +178,7 @@ impl<
         }
         encoder.set_render_pipeline_state(&self.pipeline);
         depth_state.setup_render_pass(encoder);
-        set_tesselation_factor_buffer(encoder, &tesselation_factor_buffer.buffer);
+        set_tesselation_factor_buffer(encoder, &tesselation_factor_buffer.raw);
         fun(TesselationRenderPass {
             encoder,
             _vertex: PhantomData,

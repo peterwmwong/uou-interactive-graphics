@@ -153,10 +153,10 @@ impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
         let mut tx_coords = tx_coords_buf.get_mut();
         let [mut indices_gpu_address, mut positions_gpu_address, mut normals_gpu_address, mut tx_coords_gpu_address] =
             get_gpu_addresses([
-                &indices_buf.buffer,
-                &positions_buf.buffer,
-                &normals_buf.buffer,
-                &tx_coords_buf.buffer,
+                &indices_buf.raw,
+                &positions_buf.raw,
+                &normals_buf.raw,
+                &tx_coords_buf.raw,
             ]);
         let (
             initial_indices_gpu_address,

@@ -246,7 +246,7 @@ impl RendererDelgate for Delegate {
                           model: &Model<Geometry, NoMaterial>| {
             for draw in model.draws() {
                 p.debug_group(draw.name, || {
-                    p.draw_primitives_with_bind(
+                    p.draw_primitives_with_binds(
                         main_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             ..main_vertex_binds::SKIP
@@ -304,7 +304,7 @@ impl RendererDelgate for Delegate {
                         light_pos: Bind::Value(&LIGHT_POSITION.into()),
                         m_env: Bind::Value(&f32x4x4::identity().into()),
                         darken: Bind::Value(&0_f32),
-                        env_texture: BindTexture::Texture(&self.cubemap_texture),
+                        env_texture: BindTexture(&self.cubemap_texture),
                     },
                 );
                 draw_model(&p, &self.model);
@@ -354,7 +354,7 @@ impl RendererDelgate for Delegate {
                         BG_STENCIL_REF_VALUE,
                     )),
                     |p| {
-                        p.draw_primitives_with_bind(
+                        p.draw_primitives_with_binds(
                             NoBinds,
                             bg_fragment_binds {
                                 camera: Bind::Value(&self.camera_space),

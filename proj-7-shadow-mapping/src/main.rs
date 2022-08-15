@@ -248,7 +248,7 @@ impl RendererDelgate for Delegate {
                         NoBinds,
                     );
                     for draw in self.model.model.draws() {
-                        p.draw_primitives_with_bind(
+                        p.draw_primitives_with_binds(
                             main_vertex_binds {
                                 model: Bind::Skip,
                                 geometry: Bind::buffer_with_rolling_offset(draw.geometry),
@@ -290,7 +290,7 @@ impl RendererDelgate for Delegate {
                     main_fragment_binds {
                         camera: Bind::Value(&self.camera_space),
                         light: Bind::Value(&self.light_space),
-                        shadow_tx: BindTexture::Texture(shadow_tx),
+                        shadow_tx: BindTexture(shadow_tx),
                         ..Binds::SKIP
                     },
                 );
@@ -304,7 +304,7 @@ impl RendererDelgate for Delegate {
                             Binds::SKIP,
                         );
                         for draw in m.model.draws() {
-                            p.draw_primitives_with_bind(
+                            p.draw_primitives_with_binds(
                                 main_vertex_binds {
                                     geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                                     ..Binds::SKIP

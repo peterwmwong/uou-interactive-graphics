@@ -270,7 +270,7 @@ impl PipelineFunctionType for VertexFunctionType {
     ) {
         encoder.set_vertex_buffer(
             index as _,
-            Some(&buffer.buffer),
+            Some(&buffer.raw),
             (std::mem::size_of::<T>() * offset) as _,
         );
     }
@@ -330,7 +330,7 @@ impl PipelineFunctionType for FragmentFunctionType {
     ) {
         encoder.set_fragment_buffer(
             index as _,
-            Some(&buffer.buffer),
+            Some(&buffer.raw),
             (std::mem::size_of::<T>() * offset) as _,
         );
     }
@@ -470,7 +470,7 @@ impl<
     }
 
     #[inline]
-    pub fn draw_primitives_with_bind<'b>(
+    pub fn draw_primitives_with_binds<'b>(
         &'a self,
         vertex_binds: V::Binds<'b>,
         fragment_binds: F::Binds<'b>,
@@ -531,7 +531,7 @@ impl<
                 depth_state.setup_render_pass(encoder)
             }
             if let Some(buf) = new_tesselation_factors_buffer {
-                set_tesselation_factor_buffer(encoder, &buf.buffer);
+                set_tesselation_factor_buffer(encoder, &buf.raw);
             }
             fun(TesselationRenderPass {
                 encoder,
@@ -560,7 +560,7 @@ pub struct BufferUsage<'a, T: Sized + Copy + Clone>(
 impl<T: Sized + Copy + Clone> ResourceUsage for BufferUsage<'_, T> {
     #[inline]
     fn use_resource<'b>(&self, encoder: &RenderCommandEncoderRef) {
-        encoder.use_resource_at(&self.0.buffer, self.1, self.2)
+        encoder.use_resource_at(&self.0.raw, self.1, self.2)
     }
 }
 
