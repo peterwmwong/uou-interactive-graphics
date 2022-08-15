@@ -552,6 +552,7 @@ pub trait ResourceUsage {
     fn use_resource<'b>(&self, encoder: &'b RenderCommandEncoderRef);
 }
 
+#[derive(Copy, Clone)]
 pub struct BufferUsage<'a, T: Sized + Copy + Clone>(
     pub &'a TypedBuffer<T>,
     pub MTLResourceUsage,
@@ -564,6 +565,7 @@ impl<T: Sized + Copy + Clone> ResourceUsage for BufferUsage<'_, T> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct HeapUsage<'a>(pub &'a HeapRef, pub MTLRenderStages);
 impl ResourceUsage for HeapUsage<'_> {
     #[inline]
@@ -572,6 +574,7 @@ impl ResourceUsage for HeapUsage<'_> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct TextureUsage<'a>(
     pub &'a TextureRef,
     pub MTLResourceUsage,

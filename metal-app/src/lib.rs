@@ -16,6 +16,7 @@ pub mod image_helpers;
 pub mod math_helpers;
 mod metal_helpers;
 mod model;
+pub mod model_acceleration_structure;
 mod objc_helpers;
 pub mod pipeline;
 mod renderer;

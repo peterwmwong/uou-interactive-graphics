@@ -29,6 +29,7 @@ pub trait AnyBind<T: Sized + Copy + Clone> {
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder, index: usize);
 }
 
+#[derive(Copy, Clone)]
 pub enum BindBuffer<'a, T: Sized + Copy + Clone> {
     WithOffset(&'a TypedBuffer<T>, usize),
     Offset(usize),
@@ -44,6 +45,7 @@ impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindBuffer<'a, T> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum Bind<'a, T: Sized + Copy + Clone> {
     Value(&'a T),
     Buffer(BindBuffer<'a, T>),
