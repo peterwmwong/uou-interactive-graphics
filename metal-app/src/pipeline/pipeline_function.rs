@@ -24,11 +24,13 @@ pub trait PipelineFunctionType {
         offset: usize,
     );
     fn texture<'a, 'b>(encoder: &'a Self::CommandEncoder, index: usize, texture: &'b TextureRef);
+    fn texture_null(encoder: &Self::CommandEncoder, index: usize);
     fn acceleration_structure<'a, 'b>(
         encoder: &'a Self::CommandEncoder,
         index: usize,
         accel_struct: &'b AccelerationStructureRef,
     );
+    fn acceleration_structure_null(encoder: &Self::CommandEncoder, index: usize);
 }
 
 pub trait PipelineFunction<F: PipelineFunctionType>: Function {

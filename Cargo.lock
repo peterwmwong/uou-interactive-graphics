@@ -699,6 +699,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "proj-7-ray-traced-shadows"
+version = "0.1.0"
+dependencies = [
+ "metal-app",
+ "metal-build",
+]
+
+[[package]]
 name = "proj-7-shadow-mapping"
 version = "0.1.0"
 dependencies = [

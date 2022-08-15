@@ -1,0 +1,10 @@
+[package]
+name = "proj-7-ray-traced-shadows"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+metal-build = { path = "../metal-build" }
+
+[dependencies]
+metal-app = { path = "../metal-app" }

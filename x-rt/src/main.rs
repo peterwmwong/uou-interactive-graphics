@@ -9,12 +9,14 @@ use metal_app::{
     metal_types::*,
     model_acceleration_structure::ModelAccelerationStructure,
     pipeline::*,
-    ModifierKeys, RendererDelgate, UserEvent, DEFAULT_COLOR_FORMAT,
+    MaxBounds, ModifierKeys, RendererDelgate, UserEvent, DEFAULT_COLOR_FORMAT,
 };
 use shader_bindings::*;
 use std::{
+    f32::consts::PI,
+    ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4},
+    simd::{f32x2, f32x4, SimdFloat},
 };
 
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
@@ -56,6 +58,13 @@ impl RendererDelgate for Delegate {
                 model_file,
                 &device,
                 &command_queue,
+                |MaxBounds { center, size }| {
+                    let [cx, cy, cz, _] = center.neg().to_array();
+                    let scale = 1. / size.reduce_max();
+                    f32x4x4::scale(scale, scale, scale, 1.)
+                        * f32x4x4::x_rotate(PI / 2.)
+                        * f32x4x4::translate(cx, cy, cz)
+                },
             ),
             command_queue,
             needs_render: false,

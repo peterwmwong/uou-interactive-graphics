@@ -6,7 +6,7 @@ use crate::{
     pipeline::{BindAccelerationStructure, HeapUsage, ResourceUsage},
     typed_buffer::TypedBuffer,
 };
-use std::{f32::consts::PI, ops::Neg, path::Path, simd::SimdFloat};
+use std::path::Path;
 
 #[allow(dead_code)]
 pub enum AccelerationStructureUpdateStrategy {
@@ -39,6 +39,7 @@ impl ModelAccelerationStructure {
         obj_file: P,
         device: &DeviceRef,
         cmd_queue: &CommandQueueRef,
+        init_m_model_to_world: impl FnOnce(&MaxBounds) -> f32x4x4,
     ) -> Self {
         let obj_file = obj_file.as_ref();
         let (models, ..) =
@@ -80,14 +81,7 @@ impl ModelAccelerationStructure {
             },
         );
 
-        let m_model_to_world: f32x4x4 = {
-            let MaxBounds { center, size } = geometry.max_bounds;
-            let [cx, cy, cz, _] = center.neg().to_array();
-            let scale = 1. / size.reduce_max();
-            f32x4x4::scale(scale, scale, scale, 1.)
-                * f32x4x4::x_rotate(PI / 2.)
-                * f32x4x4::translate(cx, cy, cz)
-        };
+        let m_model_to_world = init_m_model_to_world(&geometry.max_bounds);
         let model_to_world_transform_buffer = TypedBuffer::from_data(
             "Triangle Transform Matrix",
             device,

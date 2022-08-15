@@ -291,12 +291,20 @@ impl PipelineFunctionType for VertexFunctionType {
         encoder.set_vertex_texture(index as _, Some(texture));
     }
     #[inline]
+    fn texture_null(encoder: &Self::CommandEncoder, index: usize) {
+        encoder.set_vertex_texture(index as _, None);
+    }
+    #[inline]
     fn acceleration_structure<'a, 'b>(
         encoder: &'a Self::CommandEncoder,
         index: usize,
         accel_struct: &'b AccelerationStructureRef,
     ) {
         encoder.set_vertex_acceleration_structure(index as _, Some(accel_struct));
+    }
+    #[inline]
+    fn acceleration_structure_null(encoder: &Self::CommandEncoder, index: usize) {
+        encoder.set_vertex_acceleration_structure(index as _, None);
     }
 }
 
@@ -347,12 +355,20 @@ impl PipelineFunctionType for FragmentFunctionType {
         encoder.set_fragment_texture(index as _, Some(texture));
     }
     #[inline]
+    fn texture_null(encoder: &Self::CommandEncoder, index: usize) {
+        encoder.set_fragment_texture(index as _, None);
+    }
+    #[inline]
     fn acceleration_structure<'a, 'b>(
         encoder: &'a Self::CommandEncoder,
         index: usize,
         accel_struct: &'b AccelerationStructureRef,
     ) {
         encoder.set_fragment_acceleration_structure(index as _, Some(accel_struct));
+    }
+    #[inline]
+    fn acceleration_structure_null(encoder: &Self::CommandEncoder, index: usize) {
+        encoder.set_fragment_acceleration_structure(index as _, None);
     }
 }
 

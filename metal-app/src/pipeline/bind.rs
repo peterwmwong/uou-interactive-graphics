@@ -113,6 +113,7 @@ impl_bind_buffer_helpers!(BindMany);
 
 pub enum BindTexture<'a> {
     Texture(&'a TextureRef),
+    Null,
     Skip,
 }
 #[allow(non_snake_case)]
@@ -126,6 +127,7 @@ impl<'a> BindTexture<'a> {
         use BindTexture::*;
         match self {
             Texture(texture) => F::texture(encoder, index, texture),
+            Null => F::texture_null(encoder, index),
             Skip => {}
         }
     }
@@ -133,6 +135,7 @@ impl<'a> BindTexture<'a> {
 
 pub enum BindAccelerationStructure<'a> {
     AccelerationStructure(&'a AccelerationStructureRef),
+    Null,
     Skip,
 }
 
@@ -151,6 +154,7 @@ impl<'a> BindAccelerationStructure<'a> {
             AccelerationStructure(accel_struct) => {
                 F::acceleration_structure(encoder, index, accel_struct)
             }
+            Null => F::acceleration_structure_null(encoder, index),
             Skip => {}
         }
     }
