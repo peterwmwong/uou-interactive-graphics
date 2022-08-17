@@ -17,6 +17,9 @@ pub struct MaxBounds {
 }
 
 pub struct GeometryToEncode {
+    // TODO: Can we make this &str?
+    pub name: String,
+    pub num_indices: usize,
     pub indices_buffer: MetalGPUAddress,
     pub positions_buffer: MetalGPUAddress,
     pub normals_buffer: MetalGPUAddress,
@@ -169,10 +172,12 @@ impl<'a, T: Sized + Copy + Clone, DI> Geometry<'a, T, DI> {
             normals_gpu_address,
             tx_coords_gpu_address,
         );
-        for (i, tobj::Model { mesh, .. }) in self.objects.into_iter().enumerate() {
+        for (i, tobj::Model { mesh, name, .. }) in self.objects.into_iter().enumerate() {
             encode_arg(
                 &mut arguments[i],
                 GeometryToEncode {
+                    name: name.to_owned(),
+                    num_indices: mesh.indices.len(),
                     indices_buffer: indices_gpu_address,
                     indices_buffer_offset: (indices_gpu_address - initial_indices_gpu_address) as _,
                     positions_buffer: positions_gpu_address,

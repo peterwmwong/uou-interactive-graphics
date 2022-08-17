@@ -457,7 +457,7 @@ checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 [[package]]
 name = "metal"
 version = "0.23.1"
-source = "git+https://github.com/peterwmwong/metal-rs.git?rev=e8020b6b79f7dfaad290e3563bda4a7fa34b534d#e8020b6b79f7dfaad290e3563bda4a7fa34b534d"
+source = "git+https://github.com/peterwmwong/metal-rs.git?rev=71e5f4954e32516d9d804607ce51510cd33f773d#71e5f4954e32516d9d804607ce51510cd33f773d"
 dependencies = [
  "bitflags",
  "block",
@@ -478,6 +478,7 @@ dependencies = [
  "dispatch",
  "display-link",
  "foreign-types",
+ "half",
  "metal",
  "metal-types",
  "objc",
@@ -689,6 +690,17 @@ dependencies = [
 
 [[package]]
 name = "proj-6-environment-mapping"
+version = "0.1.0"
+dependencies = [
+ "asset-compiler",
+ "build-hash",
+ "metal-app",
+ "metal-build",
+ "png",
+]
+
+[[package]]
+name = "proj-6-ray-traced-reflections"
 version = "0.1.0"
 dependencies = [
  "asset-compiler",

@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 half = "2.1.0"
-metal = { git = "https://github.com/peterwmwong/metal-rs.git", rev = "e8020b6b79f7dfaad290e3563bda4a7fa34b534d" }
+metal = { git = "https://github.com/peterwmwong/metal-rs.git", rev = "71e5f4954e32516d9d804607ce51510cd33f773d" }
 
 [build-dependencies]
 bindgen = "0.60.1"

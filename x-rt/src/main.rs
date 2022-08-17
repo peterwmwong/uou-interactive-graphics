@@ -58,7 +58,7 @@ impl RendererDelgate for Delegate {
                 model_file,
                 &device,
                 &command_queue,
-                |MaxBounds { center, size }| {
+                |MaxBounds { center, size }, _| {
                     let [cx, cy, cz, _] = center.neg().to_array();
                     let scale = 1. / size.reduce_max();
                     f32x4x4::scale(scale, scale, scale, 1.)
@@ -101,6 +101,9 @@ impl RendererDelgate for Delegate {
                         accelerationStructure: self.model_accel_struct.bind(),
                         camera: Bind::Value(&self.camera_space),
                         camera_pos: Bind::Value(&self.camera_position),
+                        normal_to_world: Bind::Value(
+                            &self.model_accel_struct.get_model_to_world_matrix(0).into(),
+                        ),
                     },
                     MTLPrimitiveType::Triangle,
                     0,
@@ -133,6 +136,7 @@ impl RendererDelgate for Delegate {
                     return;
                 };
                 self.model_accel_struct.update_model_to_world_matrix(
+                    0,
                     f32x4x4::translate(translate_x, 0., 0.),
                     &self.command_queue,
                 );

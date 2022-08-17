@@ -6,7 +6,7 @@ use crate::{
     pipeline::{BindAccelerationStructure, HeapUsage, ResourceUsage},
     typed_buffer::TypedBuffer,
 };
-use std::path::Path;
+use std::{ops::Deref, path::Path};
 
 #[allow(dead_code)]
 pub enum AccelerationStructureUpdateStrategy {
@@ -19,6 +19,13 @@ use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct PrimitiveData {
+    pub normals: [[u16; 3]; 3],
+    pub padding: [u8; 2],
+}
+
 struct Draw {
     name: String,
     vertex_byte_offset: u32,
@@ -27,7 +34,7 @@ struct Draw {
 }
 pub struct ModelAccelerationStructure {
     geometry_heap: Heap,
-    model_to_world_transform_buffer: TypedBuffer<MTLPackedFloat4x3>,
+    model_to_world_transform_buffers: TypedBuffer<MTLPackedFloat4x3>,
     prim_as_desc: PrimitiveAccelerationStructureDescriptor,
     prim_as_heap: Heap,
     prim_as_rebuild_buffer: Buffer,
@@ -35,66 +42,88 @@ pub struct ModelAccelerationStructure {
 }
 
 impl ModelAccelerationStructure {
+    #[inline]
     pub fn from_file<P: AsRef<Path>>(
         obj_file: P,
         device: &DeviceRef,
         cmd_queue: &CommandQueueRef,
-        init_m_model_to_world: impl FnOnce(&MaxBounds) -> f32x4x4,
+        init_m_model_to_world: impl FnMut(&MaxBounds, usize) -> f32x4x4,
     ) -> Self {
-        let obj_file = obj_file.as_ref();
-        let (models, ..) =
-            tobj::load_obj(obj_file, &tobj::GPU_LOAD_OPTIONS).expect("Failed to load OBJ file");
+        Self::from_files(&[obj_file], device, cmd_queue, init_m_model_to_world)
+    }
 
-        let mut draws: Vec<Draw> = vec![];
-        let mut geometry: Geometry<u8, u8> =
-            Geometry::new(&models, device, |name, vertex_count, _material_id| {
-                assert_eq!(vertex_count % 3, 0);
-                draws.push(Draw {
-                    name,
-                    triangle_count: (vertex_count / 3) as _,
-                    vertex_byte_offset: 0,
-                    index_byte_offset: 0,
-                });
-                0
-            });
+    pub fn from_files<P: AsRef<Path>>(
+        obj_files: &[P],
+        device: &DeviceRef,
+        cmd_queue: &CommandQueueRef,
+        mut init_m_model_to_world: impl FnMut(&MaxBounds, usize) -> f32x4x4,
+    ) -> Self {
+        let mut geometry_heap_size = 0;
+
+        let models: Vec<Vec<tobj::Model>> = obj_files
+            .into_iter()
+            .map(|obj_file| {
+                let (models, ..) = tobj::load_obj(obj_file.as_ref(), &tobj::GPU_LOAD_OPTIONS)
+                    .expect("Failed to load OBJ file");
+                models
+            })
+            .collect();
+        let geometries: Vec<Geometry<u8, u8>> = models
+            .iter()
+            .map(|models| {
+                let geometry: Geometry<u8, u8> =
+                    Geometry::new(&models, device, |_name, _vertex_count, _material_id| 0);
+                geometry_heap_size += geometry.heap_size();
+                geometry
+            })
+            .collect();
+
         let geometry_heap = {
             let desc = HeapDescriptor::new();
-            desc.set_size(geometry.heap_size() as _);
+            desc.set_size(geometry_heap_size as _);
             desc.set_cpu_cache_mode(MTLCPUCacheMode::WriteCombined);
             desc.set_storage_mode(MTLStorageMode::Shared);
             device.new_heap(&desc)
         };
         geometry_heap.set_label("geometry_heap");
 
-        let mut i = 0;
-        let geometry_buffers = geometry.allocate_and_encode(
-            &geometry_heap,
-            |_,
-             GeometryToEncode {
-                 indices_buffer_offset,
-                 positions_buffer_offset,
-                 ..
-             }| {
-                draws[i].index_byte_offset = indices_buffer_offset;
-                draws[i].vertex_byte_offset = positions_buffer_offset;
-                i += 1;
-            },
-        );
-
-        let m_model_to_world = init_m_model_to_world(&geometry.max_bounds);
-        let model_to_world_transform_buffer = TypedBuffer::from_data(
-            "Triangle Transform Matrix",
-            device,
-            &[m_model_to_world.into()],
-            MTLResourceOptions::StorageModeShared,
-        );
+        let model_to_world_transform_buffers: TypedBuffer<MTLPackedFloat4x3> =
+            TypedBuffer::with_capacity(
+                "Triangle Transform Matrix",
+                device,
+                geometries.len(),
+                MTLResourceOptions::StorageModeShared,
+            );
+        let model_to_world_transforms = model_to_world_transform_buffers.get_mut();
 
         // ========================================
         // Define Primitive Acceleration Structures
         // ========================================
-        let tri_as_descs: Vec<AccelerationStructureTriangleGeometryDescriptor> = draws
-            .into_iter()
-            .map(|draw| {
+        let mut tri_as_descs: Vec<AccelerationStructureTriangleGeometryDescriptor> =
+            Vec::with_capacity(geometries.len());
+        for (i, mut geometry) in geometries.into_iter().enumerate() {
+            let mut draws: Vec<Draw> = vec![];
+            let geometry_buffers = geometry.allocate_and_encode(
+                &geometry_heap,
+                |_,
+                 GeometryToEncode {
+                     name,
+                     num_indices,
+                     indices_buffer_offset,
+                     positions_buffer_offset,
+                     ..
+                 }| {
+                    draws.push(Draw {
+                        name,
+                        triangle_count: (num_indices / 3) as _,
+                        vertex_byte_offset: positions_buffer_offset,
+                        index_byte_offset: indices_buffer_offset,
+                    });
+                },
+            );
+            model_to_world_transforms[i] = init_m_model_to_world(&geometry.max_bounds, i).into();
+
+            tri_as_descs.extend(draws.into_iter().map(|draw| {
                 let tri_as_desc = AccelerationStructureTriangleGeometryDescriptor::descriptor();
                 tri_as_desc.set_vertex_format(MTLAttributeFormat::Float3);
                 tri_as_desc.set_vertex_buffer(Some(&geometry_buffers.positions.raw));
@@ -107,11 +136,44 @@ impl ModelAccelerationStructure {
                 tri_as_desc.set_opaque(true);
                 tri_as_desc.set_label(&draw.name);
                 tri_as_desc
-                    .set_transformation_matrix_buffer(Some(&model_to_world_transform_buffer.raw));
-                tri_as_desc
-            })
-            .collect();
+                    .set_transformation_matrix_buffer(Some(&model_to_world_transform_buffers.raw));
+                tri_as_desc.set_transformation_matrix_buffer_offset(
+                    (model_to_world_transform_buffers.element_size() * i) as _,
+                );
 
+                // TODO: Extract out, make it optional the caller can add whatever primitive data
+                // Normals as primitive data. It is the non-indexed version of the
+                // `geometry_buffers.normals`.
+                {
+                    let normals_buffer: TypedBuffer<PrimitiveData> = TypedBuffer::with_capacity(
+                        "Normal Primitive Data",
+                        device.deref(),
+                        draw.triangle_count as _,
+                        MTLResourceOptions::StorageModeShared,
+                    );
+                    let h = |v: f32| half::f16::from_f32(v).to_bits();
+                    // TODO: How "bad" (<0 or >1) are the incoming normals?
+                    // - More UNorm-able normals should improve performance (use half precision
+                    //   arithmetic) and correctness (less error)
+                    // - How far can we push this... 8 bits?
+                    let normals = normals_buffer.get_mut();
+                    let raw = geometry_buffers.normals.get_mut();
+                    let indices = geometry_buffers.indices.get_mut();
+                    for i in 0..(draw.triangle_count as usize) {
+                        for v_i in 0..3 {
+                            let raw_i = (indices[i * 3 + v_i] * 3) as usize;
+                            normals[i].normals[v_i] =
+                                [h(raw[raw_i]), h(raw[raw_i + 1]), h(raw[raw_i + 2])];
+                        }
+                    }
+                    tri_as_desc.set_primitive_data_buffer(Some(&normals_buffer.raw));
+                    tri_as_desc.set_primitive_data_buffer_offset(0);
+                    tri_as_desc.set_primitive_data_element_size(normals_buffer.element_size() as _);
+                    tri_as_desc.set_primitive_data_stride(normals_buffer.element_size() as _);
+                }
+                tri_as_desc
+            }));
+        }
         let tri_as_desc_refs: Vec<&AccelerationStructureGeometryDescriptorRef> = tri_as_descs
             .iter()
             .map(|a| a as &AccelerationStructureGeometryDescriptorRef)
@@ -162,7 +224,7 @@ impl ModelAccelerationStructure {
 
         Self {
             geometry_heap,
-            model_to_world_transform_buffer,
+            model_to_world_transform_buffers,
             prim_as_desc,
             prim_as_heap,
             prim_as: prim_accel_struct,
@@ -170,21 +232,28 @@ impl ModelAccelerationStructure {
         }
     }
 
+    pub fn get_model_to_world_matrix(&self, i: usize) -> f32x4x4 {
+        self.model_to_world_transform_buffers.get_mut()[i].into()
+    }
+
     pub fn update_model_to_world_matrix(
         &mut self,
+        i: usize,
         transform_matrix_to_mul: f32x4x4,
         cmd_queue: &CommandQueueRef,
     ) {
-        let m: f32x4x4 = self.model_to_world_transform_buffer.get_mut()[0].into();
-        self.set_model_to_world_matrix(transform_matrix_to_mul * m, cmd_queue);
+        let m = &mut self.model_to_world_transform_buffers.get_mut()[i];
+        *m = (transform_matrix_to_mul * f32x4x4::from(*m)).into();
+        self.update(cmd_queue);
     }
 
     pub fn set_model_to_world_matrix(
         &mut self,
+        i: usize,
         model_to_world_matrix: f32x4x4,
         cmd_queue: &CommandQueueRef,
     ) {
-        self.model_to_world_transform_buffer.get_mut()[0] = model_to_world_matrix.into();
+        self.model_to_world_transform_buffers.get_mut()[i] = model_to_world_matrix.into();
         self.update(cmd_queue);
     }
 

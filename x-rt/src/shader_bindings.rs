@@ -108,12 +108,14 @@ impl PipelineFunction<VertexFunctionType> for main_vertex {}
 pub struct main_fragment_binds<'c> {
     pub accelerationStructure: BindAccelerationStructure<'c>,
     pub camera: Bind<'c, ProjectedSpace>,
+    pub normal_to_world: Bind<'c, float3x3>,
     pub camera_pos: Bind<'c, float4>,
 }
 impl Binds for main_fragment_binds<'_> {
     const SKIP: Self = Self {
         accelerationStructure: BindAccelerationStructure::Skip,
         camera: Bind::Skip,
+        normal_to_world: Bind::Skip,
         camera_pos: Bind::Skip,
     };
 
@@ -121,7 +123,8 @@ impl Binds for main_fragment_binds<'_> {
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.accelerationStructure.bind::<F>(encoder, 0);
         self.camera.bind::<F>(encoder, 1);
-        self.camera_pos.bind::<F>(encoder, 2);
+        self.normal_to_world.bind::<F>(encoder, 2);
+        self.camera_pos.bind::<F>(encoder, 3);
     }
 }
 

@@ -188,7 +188,7 @@ impl RendererDelgate for Delegate {
                 &model_file_path,
                 &device,
                 &command_queue,
-                |_| m_model_to_world,
+                |_, _| m_model_to_world,
             ),
             model_light: ModelInstance::new::<80, _>(
                 "Light",

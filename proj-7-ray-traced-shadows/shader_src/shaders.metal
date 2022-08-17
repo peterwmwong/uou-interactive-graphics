@@ -49,6 +49,8 @@ main_fragment(         VertexOut                 in           [[stage_in]],
         r.min_distance = 0.001;
         r.max_distance = FLT_MAX;
         raytracing::intersector<> intersector;
+        // TODO: Figure out what there's a tiny little teapot shadow right behind the light when the
+        // light is positioned right above the ground... weird.
         intersector.assume_geometry_type(raytracing::geometry_type::triangle);
         auto intersection = intersector.intersect(r, accel_struct);
         is_shadow = intersection.type != raytracing::intersection_type::none;
