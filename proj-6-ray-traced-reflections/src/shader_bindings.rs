@@ -243,6 +243,69 @@ impl Default for ProjectedSpace {
         }
     }
 }
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Copy, Clone)]
+pub struct DebugRay {
+    pub points: [float4; 4usize],
+    pub screen_pos: float2,
+}
+#[test]
+fn bindgen_test_layout_DebugRay() {
+    assert_eq!(
+        ::std::mem::size_of::<DebugRay>(),
+        80usize,
+        concat!("Size of: ", stringify!(DebugRay))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<DebugRay>(),
+        16usize,
+        concat!("Alignment of ", stringify!(DebugRay))
+    );
+    fn test_field_points() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).points) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(DebugRay),
+                "::",
+                stringify!(points)
+            )
+        );
+    }
+    test_field_points();
+    fn test_field_screen_pos() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).screen_pos) as usize - ptr as usize
+            },
+            64usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(DebugRay),
+                "::",
+                stringify!(screen_pos)
+            )
+        );
+    }
+    test_field_screen_pos();
+}
+impl Default for DebugRay {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 
 /****************
  Shader functions
@@ -281,8 +344,9 @@ impl PipelineFunction<VertexFunctionType> for main_vertex {}
 pub struct main_fragment_binds<'c> {
     pub camera: Bind<'c, ProjectedSpace>,
     pub light_pos: Bind<'c, float4>,
-    pub m_model_to_worlds: BindMany<'c, float4x3>,
+    pub m_model_to_worlds: BindMany<'c, MTLPackedFloat4x3>,
     pub accel_struct: BindAccelerationStructure<'c>,
+    pub dbg_ray: BindMany<'c, DebugRay>,
     pub env_texture: BindTexture<'c>,
 }
 impl Binds for main_fragment_binds<'_> {
@@ -291,6 +355,7 @@ impl Binds for main_fragment_binds<'_> {
         light_pos: Bind::Skip,
         m_model_to_worlds: BindMany::Skip,
         accel_struct: BindAccelerationStructure::Skip,
+        dbg_ray: BindMany::Skip,
         env_texture: BindTexture::Skip,
     };
 
@@ -300,6 +365,7 @@ impl Binds for main_fragment_binds<'_> {
         self.light_pos.bind::<F>(encoder, 1);
         self.m_model_to_worlds.bind::<F>(encoder, 2);
         self.accel_struct.bind::<F>(encoder, 3);
+        self.dbg_ray.bind::<F>(encoder, 4);
         self.env_texture.bind::<F>(encoder, 0);
     }
 }

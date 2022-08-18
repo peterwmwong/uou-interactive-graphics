@@ -32,8 +32,9 @@ main_fragment(         VertexOut                 in                [[stage_in]],
               // the environment (flip the environment texture). Instead of creating a
               // separate "mirrored" environment texture, we change the sampling
               // direction achieving the same result.
-              constant float4x3                * m_model_to_worlds [[buffer(2)]],
+              constant MTLPackedFloat4x3       * m_model_to_worlds [[buffer(2)]],
               primitive_acceleration_structure   accel_struct      [[buffer(3)]],
+              device   DebugRay                * dbg_ray           [[buffer(4)]],
                        texturecube<half>         env_texture       [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
@@ -56,6 +57,13 @@ main_fragment(         VertexOut                 in                [[stage_in]],
     intersector.set_triangle_cull_mode(raytracing::triangle_cull_mode::back);
     intersector.assume_geometry_type(raytracing::geometry_type::triangle);
     auto intersection = intersector.intersect(r, accel_struct);
+
+    // Are we debugging this screen position? (within a half pixel)
+    // const float2 screen_pos = in.position.xy;
+    // if (all(abs(dbg_ray->screen_pos - screen_pos) <= float2(0.5))) {
+    //     return half4(1, 0, 0, 1);
+    // }
+
     if (intersection.type != raytracing::intersection_type::none) {
         // Assumption: Everything in the acceleration structure has the same (mirror) material.
         // intersection
@@ -66,29 +74,34 @@ main_fragment(         VertexOut                 in                [[stage_in]],
         const float3   n0     = float3(n[0]);
         const float3   n1     = float3(n[1]);
         const float3   n2     = float3(n[2]);
-        const float4x3 m      = m_model_to_worlds[intersection.geometry_id];
+        constant MTLPackedFloat4x3 * m = &m_model_to_worlds[intersection.geometry_id];
         const float3   normal = normalize(
-            float3x3(m[0].xyz, m[1].xyz, m[2].xyz) * ((n0 * b3.x) + (n1 * b3.y) + (n2 * b3.z))
+            float3x3((*m)[0], (*m)[1], (*m)[2])
+            * ((n0 * b3.x) + (n1 * b3.y) + (n2 * b3.z))
         );
+        // TEMPORARY: Visualize the normal reflection (the normal seen from the reflection).
+        color = half4(half3(normal), 1);
 
         // Experiment 1: Generate new ray (reflect the reflection ray)
         //
-        // r.origin = r.origin + r.direction * intersection.distance;
         // r.direction = reflect(r.direction, normal);
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // 1. Continue with the visualization of DebugRay
+        // 2. Verify w/DebugRay
+        // 3. Add a 2nd bounce ray instersection (if intersection exists)
+        // 4. Verify results with w/DebugRay
+        // 5. Use 2nd bounce ray intersection for shading
+
+        // color = env_texture.sample(tx_sampler, r.direction);
+        // r.origin = r.origin + r.direction * intersection.distance;
         // auto intersection2 = intersector.intersect(r, accel_struct);
-        // if (intersection2.type != raytracing::intersection_type::none) {
+        // if (intersection2.type == raytracing::intersection_type::none) {
+        //     color = env_texture.sample(tx_sampler, r.direction);
+        // } else {
         //     return half4(0, 1, 0, 1);
         // }
-        // color = env_texture.sample(tx_sampler, float3(reflect(r.direction, normal)));
-
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Looking at the reflection of the top lid of the teapot, the visualized normal looks
-        // wrong! It's blue all around (rotating the teapot along the y-axis). The normal being
-        // reflected should be red (positive x component) when seeing the reflection on the right
-        // side.
-        color = half4(half3(normal), 1);
     } else {
         color = env_texture.sample(tx_sampler, float3(ref));
     }

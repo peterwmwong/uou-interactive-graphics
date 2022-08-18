@@ -8,12 +8,13 @@ use metal_app::{
     metal_types::*,
     model_acceleration_structure::ModelAccelerationStructure,
     pipeline::*,
+    typed_buffer::TypedBuffer,
     *,
 };
 use shader_bindings::*;
 use std::{
     f32::consts::PI,
-    ops::Neg,
+    ops::{Deref, Neg},
     path::PathBuf,
     simd::{f32x2, f32x4, SimdFloat},
 };
@@ -34,6 +35,7 @@ struct Delegate {
     command_queue: CommandQueue,
     cubemap_texture: Texture,
     depth_texture: DepthTexture,
+    debug_ray: TypedBuffer<DebugRay>,
     device: Device,
     library: Library,
     main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)>,
@@ -202,6 +204,20 @@ impl RendererDelgate for Delegate {
             stencil_texture: DepthTexture::new("Stencil", STENCIL_TEXTURE_FORMAT),
             world_as,
             model,
+            debug_ray: TypedBuffer::from_data(
+                "DebugRay",
+                device.deref(),
+                &[DebugRay {
+                    screen_pos: float2 { xy: [0., 0.] },
+                    points: [
+                        f32x4::default().into(),
+                        f32x4::default().into(),
+                        f32x4::default().into(),
+                        f32x4::default().into(),
+                    ],
+                }],
+                MTLResourceOptions::StorageModeShared,
+            ),
             device,
             library,
         }
@@ -271,6 +287,7 @@ impl RendererDelgate for Delegate {
                         m_model_to_worlds: BindMany::buffer(
                             &self.world_as.model_to_world_transform_buffers,
                         ),
+                        dbg_ray: BindMany::buffer(&self.debug_ray),
                     },
                 );
                 draw_model(&p, &self.model);
@@ -340,6 +357,12 @@ impl RendererDelgate for Delegate {
         }
         if self.stencil_texture.on_event(event, &self.device) {
             self.needs_render = true;
+        }
+        if let UserEvent::MouseMoved { position } = event {
+            let position = position / f32x2::splat(1.0);
+            dbg!(position);
+            self.debug_ray.get_mut()[0].screen_pos = position.into();
+            self.needs_render = true
         }
     }
 

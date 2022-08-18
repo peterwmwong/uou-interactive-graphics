@@ -9,3 +9,8 @@
 #include "../../metal-shaders/shader_src/bindings/model-space.h"
 #include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
+
+struct DebugRay {
+    float4 points[4];
+    float2 screen_pos;
+};
