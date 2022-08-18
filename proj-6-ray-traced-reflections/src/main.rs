@@ -30,6 +30,8 @@ const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 struct Delegate {
     bg_depth_state: DepthStencilState,
     bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, Stencil)>,
+    dbg_depth_state: DepthStencilState,
+    dbg_render_pipeline: RenderPipeline<1, dbg_vertex, dbg_fragment, (Depth, NoStencil)>,
     camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
@@ -187,6 +189,21 @@ impl RendererDelgate for Delegate {
                 bg_fragment,
                 (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
             ),
+            dbg_depth_state: {
+                let ds = DepthStencilDescriptor::new();
+                ds.set_depth_write_enabled(false);
+                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                device.new_depth_stencil_state(&ds)
+            },
+            dbg_render_pipeline: RenderPipeline::new(
+                "Debug",
+                &device,
+                &library,
+                [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
+                dbg_vertex,
+                dbg_fragment,
+                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
+            ),
             main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
             m_model_to_world,
             command_queue,
@@ -196,7 +213,15 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
+            // depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
+            // TODO: TEMPORARY UNDO
+            // TODO: TEMPORARY UNDO
+            // TODO: TEMPORARY UNDO
+            depth_texture: DepthTexture::new_with_storage_mode(
+                "Depth",
+                DEFAULT_DEPTH_FORMAT,
+                MTLStorageMode::Private,
+            ),
             camera_space: ProjectedSpace::default(),
             model_space: ModelSpace::default(),
             needs_render: false,
@@ -215,6 +240,7 @@ impl RendererDelgate for Delegate {
                         f32x4::default().into(),
                         f32x4::default().into(),
                     ],
+                    enabled: true,
                 }],
                 MTLResourceOptions::StorageModeShared,
             ),
@@ -258,7 +284,7 @@ impl RendererDelgate for Delegate {
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
             )],
-            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
+            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::Store),
             (stenc_tx, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
             (
                 &self.model_depth_state,
@@ -329,6 +355,37 @@ impl RendererDelgate for Delegate {
                 // );
             },
         );
+        self.dbg_render_pipeline.new_pass(
+            "Debug Pass",
+            &command_buffer,
+            [(
+                &render_target,
+                (0., 0., 0., 0.),
+                MTLLoadAction::Load,
+                MTLStoreAction::Store,
+            )],
+            (
+                &depth_tx,
+                0.0,
+                MTLLoadAction::Load,
+                MTLStoreAction::DontCare,
+            ),
+            NoStencil,
+            &self.dbg_depth_state,
+            &[],
+            |p| {
+                p.draw_primitives_with_binds(
+                    dbg_vertex_binds {
+                        camera: Bind::Value(&self.camera_space),
+                        dbg_ray: Bind::buffer(&self.debug_ray),
+                    },
+                    Binds::SKIP,
+                    MTLPrimitiveType::LineStrip,
+                    0,
+                    4,
+                )
+            },
+        );
         command_buffer
     }
 
@@ -358,11 +415,17 @@ impl RendererDelgate for Delegate {
         if self.stencil_texture.on_event(event, &self.device) {
             self.needs_render = true;
         }
-        if let UserEvent::MouseMoved { position } = event {
-            let position = position / f32x2::splat(1.0);
-            dbg!(position);
-            self.debug_ray.get_mut()[0].screen_pos = position.into();
-            self.needs_render = true
+        let dbg_ray = &mut self.debug_ray.get_mut()[0];
+        match event {
+            UserEvent::MouseMoved { position } if dbg_ray.enabled => {
+                let position = position / f32x2::splat(1.0);
+                dbg_ray.screen_pos = position.into();
+                self.needs_render = true
+            }
+            UserEvent::KeyDown { key_code, .. } if key_code == UserEvent::KEY_CODE_SPACEBAR => {
+                dbg_ray.enabled = !dbg_ray.enabled;
+            }
+            _ => {}
         }
     }
 

@@ -13,4 +13,5 @@
 struct DebugRay {
     float4 points[4];
     float2 screen_pos;
+    bool enabled;
 };

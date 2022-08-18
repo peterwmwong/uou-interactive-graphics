@@ -58,6 +58,7 @@ impl UserEvent {
     pub const KEY_CODE_LEFT: c_ushort = 123;
     pub const KEY_CODE_RIGHT: c_ushort = 124;
     pub const KEY_CODE_UP: c_ushort = 126;
+    pub const KEY_CODE_SPACEBAR: c_ushort = 49;
 }
 
 pub fn remove_modifier_keys(event: UserEvent, modifier_keys_to_remove: ModifierKeys) -> UserEvent {

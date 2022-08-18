@@ -666,12 +666,6 @@ impl<
         depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
         stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
         depth_state: DS::DepthState<'b>,
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: This could be generated, like Bindings.
-        // - There should be a one-to-one relationship with bindings and resource usage
-        // - If Bind::Value is used, then resource usage can be "skipped" (similar concept/vernacular)
         resources: &[&dyn ResourceUsage],
         fun: PF,
     ) where

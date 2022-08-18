@@ -16,6 +16,21 @@ impl DepthTexture {
     }
 
     #[inline]
+    pub fn new_with_storage_mode(
+        label: &'static str,
+        format: MTLPixelFormat,
+        storage_mode: MTLStorageMode,
+    ) -> Self {
+        Self(TextureAndConfig {
+            label,
+            format,
+            texture: None,
+            storage_mode,
+            usage: MTLTextureUsage::RenderTarget,
+        })
+    }
+
+    #[inline]
     pub fn texture(&self) -> &TextureRef {
         self.0.texture()
     }

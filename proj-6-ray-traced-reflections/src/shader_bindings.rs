@@ -249,6 +249,7 @@ impl Default for ProjectedSpace {
 pub struct DebugRay {
     pub points: [float4; 4usize],
     pub screen_pos: float2,
+    pub enabled: bool,
 }
 #[test]
 fn bindgen_test_layout_DebugRay() {
@@ -296,6 +297,23 @@ fn bindgen_test_layout_DebugRay() {
         );
     }
     test_field_screen_pos();
+    fn test_field_enabled() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).enabled) as usize - ptr as usize
+            },
+            72usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(DebugRay),
+                "::",
+                stringify!(enabled)
+            )
+        );
+    }
+    test_field_enabled();
 }
 impl Default for DebugRay {
     fn default() -> Self {
@@ -425,3 +443,37 @@ impl metal_app::pipeline::function::Function for bg_fragment {
     type Binds<'c> = bg_fragment_binds<'c>;
 }
 impl PipelineFunction<FragmentFunctionType> for bg_fragment {}
+
+#[allow(non_camel_case_types)]
+pub struct dbg_vertex_binds<'c> {
+    pub camera: Bind<'c, ProjectedSpace>,
+    pub dbg_ray: Bind<'c, DebugRay>,
+}
+impl Binds for dbg_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        camera: Bind::Skip,
+        dbg_ray: Bind::Skip,
+    };
+
+    #[inline(always)]
+    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
+        self.camera.bind::<F>(encoder, 1);
+        self.dbg_ray.bind::<F>(encoder, 0);
+    }
+}
+
+#[allow(non_camel_case_types)]
+pub struct dbg_vertex;
+impl metal_app::pipeline::function::Function for dbg_vertex {
+    const FUNCTION_NAME: &'static str = "dbg_vertex";
+    type Binds<'c> = dbg_vertex_binds<'c>;
+}
+impl PipelineFunction<VertexFunctionType> for dbg_vertex {}
+
+#[allow(non_camel_case_types)]
+pub struct dbg_fragment;
+impl metal_app::pipeline::function::Function for dbg_fragment {
+    const FUNCTION_NAME: &'static str = "dbg_fragment";
+    type Binds<'c> = NoBinds;
+}
+impl PipelineFunction<FragmentFunctionType> for dbg_fragment {}
