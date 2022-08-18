@@ -96,6 +96,7 @@ fn init_and_attach_view<R: RendererDelgate + 'static>(
             accepts_first_responder as extern "C" fn(&Object, Sel) -> BOOL
         });
         for selector in [
+            sel!(mouseMoved:),
             sel!(mouseDown:),
             sel!(mouseDragged:),
             sel!(mouseUp:),
@@ -165,16 +166,12 @@ fn init_and_attach_view<R: RendererDelgate + 'static>(
                     let ns_event_type = unsafe { NSEvent::eventType(event) };
                     let modifier_keys =
                         parse_modifier_keys(unsafe { NSEvent::modifierFlags(event) });
-
                     let button = match ns_event_type {
                         NSLeftMouseDown | NSLeftMouseDragged | NSLeftMouseUp => Left,
-                        NSRightMouseDown | NSRightMouseDragged | NSRightMouseUp => Right,
-                        unknown_nseventtype @ _ => {
-                            dbg!(unknown_nseventtype);
-                            return;
-                        }
+                        _ => Right,
                     };
                     let user_event = match ns_event_type {
+                        NSMouseMoved => MouseMoved { position },
                         NSLeftMouseDown | NSRightMouseDown => {
                             unsafe { LAST_DRAG_POSITION = position };
                             MouseDown {

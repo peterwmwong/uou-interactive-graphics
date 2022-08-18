@@ -34,7 +34,7 @@ struct Draw {
 }
 pub struct ModelAccelerationStructure {
     geometry_heap: Heap,
-    pub model_to_world_transform_buffers: TypedBuffer<float4x3>,
+    pub model_to_world_transform_buffers: TypedBuffer<MTLPackedFloat4x3>,
     prim_as_desc: PrimitiveAccelerationStructureDescriptor,
     prim_as_heap: Heap,
     prim_as_rebuild_buffer: Buffer,
@@ -87,12 +87,13 @@ impl ModelAccelerationStructure {
         };
         geometry_heap.set_label("geometry_heap");
 
-        let model_to_world_transform_buffers: TypedBuffer<float4x3> = TypedBuffer::with_capacity(
-            "Triangle Transform Matrix",
-            device,
-            geometries.len(),
-            MTLResourceOptions::StorageModeShared,
-        );
+        let model_to_world_transform_buffers: TypedBuffer<MTLPackedFloat4x3> =
+            TypedBuffer::with_capacity(
+                "Triangle Transform Matrix",
+                device,
+                geometries.len(),
+                MTLResourceOptions::StorageModeShared,
+            );
         let model_to_world_transforms = model_to_world_transform_buffers.get_mut();
 
         // ========================================

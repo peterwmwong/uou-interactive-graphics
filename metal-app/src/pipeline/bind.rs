@@ -83,12 +83,17 @@ impl<'a, T: Sized + Copy + Clone> AnyBind<T> for BindMany<'a, T> {
 macro_rules! impl_bind_buffer_helpers {
     ($bind_ident:ident) => {
         impl<'a, T: Sized + Copy + Clone> $bind_ident<'a, T> {
-            #[inline]
+            #[inline(always)]
             pub fn buffer(buffer: &'a TypedBuffer<T>) -> Self {
-                Self::Buffer(BindBuffer::WithOffset(buffer, 0))
+                Self::buffer_and_offset(buffer, 0)
             }
 
-            #[inline]
+            #[inline(always)]
+            pub fn buffer_and_offset(buffer: &'a TypedBuffer<T>, offset: usize) -> Self {
+                Self::Buffer(BindBuffer::WithOffset(buffer, offset))
+            }
+
+            #[inline(always)]
             pub fn buffer_with_rolling_offset(
                 (buffer, element_offset): (&'a TypedBuffer<T>, usize),
             ) -> Self {
@@ -99,7 +104,7 @@ macro_rules! impl_bind_buffer_helpers {
                 }
             }
 
-            #[inline]
+            #[inline(always)]
             pub fn iterating_buffer_offset(
                 iteration: usize,
                 (buffer, element_offset): (&'a TypedBuffer<T>, usize),

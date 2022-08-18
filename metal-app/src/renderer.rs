@@ -24,6 +24,9 @@ bitflags::bitflags! {
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum UserEvent {
+    MouseMoved {
+        position: f32x2,
+    },
     MouseDown {
         button: MouseButton,
         modifier_keys: ModifierKeys,
