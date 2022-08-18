@@ -253,13 +253,13 @@ fn bindgen_test_layout_float3x3() {
 #[repr(align(16))]
 #[derive(Copy, Clone, PartialEq)]
 pub struct float4x3 {
-    pub columns: [[f32; 3usize]; 4usize],
+    pub columns: [[f32; 4usize]; 4usize],
 }
 #[test]
 fn bindgen_test_layout_float4x3() {
     assert_eq!(
         ::std::mem::size_of::<float4x3>(),
-        48usize,
+        64usize,
         concat!("Size of: ", stringify!(float4x3))
     );
     assert_eq!(
