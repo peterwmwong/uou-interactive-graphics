@@ -83,6 +83,33 @@ fn dot(lhs: f32x4, rhs: f32x4) -> f32 {
     (lhs * rhs).reduce_sum()
 }
 
+impl From<MTLPackedFloat4x3> for float4x3 {
+    #[inline]
+    fn from(MTLPackedFloat4x3 { columns: c }: MTLPackedFloat4x3) -> Self {
+        Self {
+            columns: [
+                [c[0].0, c[0].1, c[0].2],
+                [c[1].0, c[1].1, c[1].2],
+                [c[2].0, c[2].1, c[2].2],
+                [c[3].0, c[3].1, c[3].2],
+            ],
+        }
+    }
+}
+
+impl From<float4x3> for MTLPackedFloat4x3 {
+    fn from(float4x3 { columns: c }: float4x3) -> Self {
+        Self {
+            columns: [
+                MTLPackedFloat3(c[0][0], c[0][1], c[0][2]),
+                MTLPackedFloat3(c[1][0], c[1][1], c[1][2]),
+                MTLPackedFloat3(c[2][0], c[2][1], c[2][2]),
+                MTLPackedFloat3(c[3][0], c[3][1], c[3][2]),
+            ],
+        }
+    }
+}
+
 #[allow(non_camel_case_types)]
 pub type f32x4x4 = float4x4;
 
@@ -328,6 +355,34 @@ impl Sub<f32x4x4> for f32x4x4 {
             .zip(rhs.columns)
             .map(|(l, r)| (f32x4::from_array(l) - f32x4::from_array(r)).to_array());
         Self { columns }
+    }
+}
+
+impl From<f32x4x4> for float4x3 {
+    #[inline(always)]
+    fn from(f32x4x4 { columns: c }: f32x4x4) -> Self {
+        Self {
+            columns: [
+                [c[0][0], c[0][1], c[0][2]],
+                [c[1][0], c[1][1], c[1][2]],
+                [c[2][0], c[2][1], c[2][2]],
+                [c[3][0], c[3][1], c[3][2]],
+            ],
+        }
+    }
+}
+
+impl From<float4x3> for f32x4x4 {
+    #[inline(always)]
+    fn from(float4x3 { columns: c }: float4x3) -> Self {
+        Self {
+            columns: [
+                [c[0][0], c[0][1], c[0][2], 0.0],
+                [c[1][0], c[1][1], c[1][2], 0.0],
+                [c[2][0], c[2][1], c[2][2], 0.0],
+                [c[3][0], c[3][1], c[3][2], 0.0],
+            ],
+        }
     }
 }
 

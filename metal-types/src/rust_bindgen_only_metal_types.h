@@ -40,6 +40,10 @@ struct alignas(16) float3x3 {
     float columns[3][4];
 };
 
+struct alignas(16) float4x3 {
+    float columns[4][3];
+};
+
 struct alignas(16) float4x4 {
     float columns[4][4];
 };
