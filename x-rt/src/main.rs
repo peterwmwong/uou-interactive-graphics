@@ -101,8 +101,8 @@ impl RendererDelgate for Delegate {
                         accelerationStructure: self.model_accel_struct.bind(),
                         camera: Bind::Value(&self.camera_space),
                         camera_pos: Bind::Value(&self.camera_position),
-                        normal_to_world: Bind::Value(
-                            &self.model_accel_struct.get_model_to_world_matrix(0).into(),
+                        m_model_to_worlds: BindMany::buffer(
+                            &self.model_accel_struct.model_to_world_transform_buffers,
                         ),
                     },
                     MTLPrimitiveType::Triangle,

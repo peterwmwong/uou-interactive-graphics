@@ -24,7 +24,7 @@ half4 main_fragment(
              VertexOut                         in                    [[stage_in]],
              primitive_acceleration_structure  accelerationStructure [[buffer(0)]],
     constant ProjectedSpace                  & camera                [[buffer(1)]],
-    constant float3x3                        & normal_to_world       [[buffer(2)]],
+    constant MTLPackedFloat4x3               * m_model_to_worlds     [[buffer(4)]],
     constant float4                          & camera_pos            [[buffer(3)]]
 ) {
     const float4 pos_w       = camera.m_screen_to_world * float4(in.position.xyz, 1);
@@ -48,7 +48,9 @@ half4 main_fragment(
         const float3 n1     = float3(n[1]);
         const float3 n2     = float3(n[2]);
         const float3 normal = (n0 * b3.x) + (n1 * b3.y) + (n2 * b3.z);
-        return half4(half3(normalize(normal_to_world * normal)), 1);
+        constant MTLPackedFloat4x3 * m      = &(m_model_to_worlds[intersection.geometry_id]);
+        const    float3x3            n_to_w = float3x3((*m)[0], (*m)[1], (*m)[2]);
+        return half4(half3(normalize(n_to_w * normal)), 1);
     }
     return 0;
 }
