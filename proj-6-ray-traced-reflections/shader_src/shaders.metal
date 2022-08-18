@@ -24,18 +24,17 @@ main_vertex(         uint             vertex_id             [[vertex_id]],
 }
 
 fragment half4
-main_fragment(         VertexOut                 in           [[stage_in]],
-              constant ProjectedSpace          & camera       [[buffer(0)]],
-              constant float4                  & light_pos    [[buffer(1)]],
+main_fragment(         VertexOut                 in                [[stage_in]],
+              constant ProjectedSpace          & camera            [[buffer(0)]],
+              constant float4                  & light_pos         [[buffer(1)]],
               // The goal is to transform the environment. When rendering the mirrored
               // world, we need to transformed all the objects of the world, including
               // the environment (flip the environment texture). Instead of creating a
               // separate "mirrored" environment texture, we change the sampling
               // direction achieving the same result.
-              constant float3x3                & m_env        [[buffer(2)]],
-              constant float                   & darken       [[buffer(3)]],
-              primitive_acceleration_structure   accel_struct [[buffer(4)]],
-                       texturecube<half>         env_texture  [[texture(0)]])
+              constant float4x3                * m_model_to_worlds [[buffer(2)]],
+              primitive_acceleration_structure   accel_struct      [[buffer(3)]],
+                       texturecube<half>         env_texture       [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);
@@ -46,7 +45,7 @@ main_fragment(         VertexOut                 in           [[stage_in]],
     const float3 ref        = reflect(camera_dir, normal);
 
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    const half4 color       = env_texture.sample(tx_sampler, float3(ref));
+    half4 color;
 
     raytracing::ray r;
     r.origin       = pos;
@@ -61,17 +60,37 @@ main_fragment(         VertexOut                 in           [[stage_in]],
         // Assumption: Everything in the acceleration structure has the same (mirror) material.
         // intersection
 
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // 1. Continue figuring out the true normal with the barycentric coordinates (see x-rt).
-        // 2. Need to dig up the correct m_normal_to_world :/ (instance_id and pass all m_normal_to_world as an array?)
+        const float2   b2     = intersection.triangle_barycentric_coord;
+        const float3   b3     = float3(1.0 - (b2.x + b2.y), b2.x, b2.y);
+        const auto     n      = (const device packed_half3 *) intersection.primitive_data;
+        const float3   n0     = float3(n[0]);
+        const float3   n1     = float3(n[1]);
+        const float3   n2     = float3(n[2]);
+        const float4x3 m      = m_model_to_worlds[intersection.geometry_id];
+        const float3   normal = normalize(
+            float3x3(m[0].xyz, m[1].xyz, m[2].xyz) * ((n0 * b3.x) + (n1 * b3.y) + (n2 * b3.z))
+        );
 
-        // Find next hit
+        // Experiment 1: Generate new ray (reflect the reflection ray)
+        //
         // r.origin = r.origin + r.direction * intersection.distance;
-        const auto   n      = (const device packed_half3 *) intersection.primitive_data;
-        const float3 n0     = float3(n[0]);
-        return half4(half3(n0), 1);
+        // r.direction = reflect(r.direction, normal);
+        // auto intersection2 = intersector.intersect(r, accel_struct);
+        // if (intersection2.type != raytracing::intersection_type::none) {
+        //     return half4(0, 1, 0, 1);
+        // }
+        // color = env_texture.sample(tx_sampler, float3(reflect(r.direction, normal)));
+
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Looking at the reflection of the top lid of the teapot, the visualized normal looks
+        // wrong! It's blue all around (rotating the teapot along the y-axis). The normal being
+        // reflected should be red (positive x component) when seeing the reflection on the right
+        // side.
+        color = half4(half3(normal), 1);
+    } else {
+        color = env_texture.sample(tx_sampler, float3(ref));
     }
     return shade_phong_blinn(
         {

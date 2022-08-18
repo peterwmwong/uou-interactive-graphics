@@ -84,6 +84,11 @@ macro_rules! impl_bind_buffer_helpers {
     ($bind_ident:ident) => {
         impl<'a, T: Sized + Copy + Clone> $bind_ident<'a, T> {
             #[inline]
+            pub fn buffer(buffer: &'a TypedBuffer<T>) -> Self {
+                Self::Buffer(BindBuffer::WithOffset(buffer, 0))
+            }
+
+            #[inline]
             pub fn buffer_with_rolling_offset(
                 (buffer, element_offset): (&'a TypedBuffer<T>, usize),
             ) -> Self {

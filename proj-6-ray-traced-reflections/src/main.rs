@@ -266,10 +266,11 @@ impl RendererDelgate for Delegate {
                     main_fragment_binds {
                         camera: Bind::Value(&self.camera_space),
                         light_pos: Bind::Value(&LIGHT_POSITION.into()),
-                        m_env: Bind::Value(&f32x4x4::identity().into()),
-                        darken: Bind::Value(&0_f32),
                         accel_struct: self.world_as.bind(),
                         env_texture: BindTexture(&self.cubemap_texture),
+                        m_model_to_worlds: BindMany::buffer(
+                            &self.world_as.model_to_world_transform_buffers,
+                        ),
                     },
                 );
                 draw_model(&p, &self.model);
