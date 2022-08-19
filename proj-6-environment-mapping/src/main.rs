@@ -46,10 +46,10 @@ struct Delegate {
     mirror_model_space: ModelSpace,
     mirror_plane_depth_state: DepthStencilState,
     mirror_plane_model_space: ModelSpace,
-    mirror_plane_model: Model<Geometry, NoMaterial>,
+    mirror_plane_model: Model<GeometryNoTxCoords, NoMaterial>,
     model_depth_state: DepthStencilState,
     model_space: ModelSpace,
-    model: Model<Geometry, NoMaterial>,
+    model: Model<GeometryNoTxCoords, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
     stencil_texture: DepthTexture,
@@ -90,18 +90,10 @@ impl RendererDelgate for Delegate {
         let model_file_path = std::env::args().nth(1).expect(&format!(
             "Usage: {executable_name} [Path to Wavefront OBJ file]"
         ));
-        let encode_geometry_arg = |arg: &mut Geometry,
-                                   GeometryToEncode {
-                                       indices_buffer,
-                                       positions_buffer,
-                                       normals_buffer,
-                                       tx_coords_buffer,
-                                       ..
-                                   }| {
-            arg.indices = indices_buffer;
-            arg.positions = positions_buffer;
-            arg.normals = normals_buffer;
-            arg.tx_coords = tx_coords_buffer;
+        let encode_geometry_arg = |arg: &mut GeometryNoTxCoords, g: GeometryToEncode| {
+            arg.indices = g.indices_buffer;
+            arg.positions = g.positions_buffer;
+            arg.normals = g.normals_buffer;
         };
         let model = Model::from_file(
             PathBuf::from(model_file_path),
@@ -243,7 +235,7 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         let draw_model = |p: &RenderPass<1, main_vertex, main_fragment, (Depth, Stencil)>,
-                          model: &Model<Geometry, NoMaterial>| {
+                          model: &Model<GeometryNoTxCoords, NoMaterial>| {
             for draw in model.draws() {
                 p.debug_group(draw.name, || {
                     p.draw_primitives_with_binds(

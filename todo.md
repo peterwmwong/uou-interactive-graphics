@@ -15,6 +15,8 @@
 
 # metal-app
 
+- Geometry should optionally load/contain tx_coords
+    - Look at Model's MaterialKind (Material and NoMaterial), very similar in nature
 - Delete everything RenderPipeline replaced :)
 - UIRay
     - Orbiting drag doesn't quite feel right

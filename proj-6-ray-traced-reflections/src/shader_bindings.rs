@@ -12,35 +12,34 @@ use metal_app::{metal::*, metal_types::*, pipeline::*};
 
 #[repr(C)]
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
-pub struct Geometry {
+pub struct GeometryNoTxCoords {
     pub indices: ::std::os::raw::c_ulong,
     pub positions: ::std::os::raw::c_ulong,
     pub normals: ::std::os::raw::c_ulong,
-    pub tx_coords: ::std::os::raw::c_ulong,
 }
 #[test]
-fn bindgen_test_layout_Geometry() {
+fn bindgen_test_layout_GeometryNoTxCoords() {
     assert_eq!(
-        ::std::mem::size_of::<Geometry>(),
-        32usize,
-        concat!("Size of: ", stringify!(Geometry))
+        ::std::mem::size_of::<GeometryNoTxCoords>(),
+        24usize,
+        concat!("Size of: ", stringify!(GeometryNoTxCoords))
     );
     assert_eq!(
-        ::std::mem::align_of::<Geometry>(),
+        ::std::mem::align_of::<GeometryNoTxCoords>(),
         8usize,
-        concat!("Alignment of ", stringify!(Geometry))
+        concat!("Alignment of ", stringify!(GeometryNoTxCoords))
     );
     fn test_field_indices() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Geometry>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<GeometryNoTxCoords>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).indices) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
-                stringify!(Geometry),
+                stringify!(GeometryNoTxCoords),
                 "::",
                 stringify!(indices)
             )
@@ -50,14 +49,14 @@ fn bindgen_test_layout_Geometry() {
     fn test_field_positions() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Geometry>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<GeometryNoTxCoords>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).positions) as usize - ptr as usize
             },
             8usize,
             concat!(
                 "Offset of field: ",
-                stringify!(Geometry),
+                stringify!(GeometryNoTxCoords),
                 "::",
                 stringify!(positions)
             )
@@ -67,37 +66,20 @@ fn bindgen_test_layout_Geometry() {
     fn test_field_normals() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Geometry>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<GeometryNoTxCoords>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).normals) as usize - ptr as usize
             },
             16usize,
             concat!(
                 "Offset of field: ",
-                stringify!(Geometry),
+                stringify!(GeometryNoTxCoords),
                 "::",
                 stringify!(normals)
             )
         );
     }
     test_field_normals();
-    fn test_field_tx_coords() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Geometry>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).tx_coords) as usize - ptr as usize
-            },
-            24usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(Geometry),
-                "::",
-                stringify!(tx_coords)
-            )
-        );
-    }
-    test_field_tx_coords();
 }
 #[repr(C)]
 #[repr(align(16))]
@@ -349,7 +331,7 @@ impl Default for DebugPath {
 
 #[allow(non_camel_case_types)]
 pub struct main_vertex_binds<'c> {
-    pub geometry: Bind<'c, Geometry>,
+    pub geometry: Bind<'c, GeometryNoTxCoords>,
     pub camera: Bind<'c, ProjectedSpace>,
     pub model: Bind<'c, ModelSpace>,
 }

@@ -11,10 +11,10 @@ struct VertexOut
 };
 
 vertex VertexOut
-main_vertex(         uint             vertex_id             [[vertex_id]],
-            constant Geometry       & geometry              [[buffer(0)]],
-            constant ProjectedSpace & camera                [[buffer(1)]],
-            constant ModelSpace     & model                 [[buffer(2)]])
+main_vertex(         uint                 vertex_id [[vertex_id]],
+            constant GeometryNoTxCoords & geometry  [[buffer(0)]],
+            constant ProjectedSpace     & camera    [[buffer(1)]],
+            constant ModelSpace         & model     [[buffer(2)]])
 {
     const uint idx      = geometry.indices[vertex_id];
     const float4 pos    = model.m_model_to_projection * float4(geometry.positions[idx], 1.0);

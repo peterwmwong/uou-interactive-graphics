@@ -19,7 +19,7 @@ use std::{
     simd::{f32x2, f32x4, SimdFloat},
 };
 
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 8., PI / 4.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 8., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 
@@ -42,8 +42,8 @@ struct Delegate {
     model_depth_state: DepthStencilState,
     model_space: ModelSpace,
     mirror_plane_space: ModelSpace,
-    model: Model<Geometry, NoMaterial>,
-    mirror_plane_model: Model<Geometry, NoMaterial>,
+    model: Model<GeometryNoTxCoords, NoMaterial>,
+    mirror_plane_model: Model<GeometryNoTxCoords, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
     world_as: ModelAccelerationStructure,
@@ -72,22 +72,6 @@ fn create_main_render_pipeline(
     )
 }
 
-fn encode_geometry_arg(
-    arg: &mut Geometry,
-    GeometryToEncode {
-        indices_buffer,
-        positions_buffer,
-        normals_buffer,
-        tx_coords_buffer,
-        ..
-    }: GeometryToEncode,
-) {
-    arg.indices = indices_buffer;
-    arg.positions = positions_buffer;
-    arg.normals = normals_buffer;
-    arg.tx_coords = tx_coords_buffer;
-}
-
 impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
         let cubemap_texture = debug_time("proj6 - Load Environment Cube Texture", || {
@@ -105,6 +89,11 @@ impl RendererDelgate for Delegate {
         )));
         let mirror_plane_file_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../common-assets/plane/plane.obj");
+        let encode_geometry_arg = |arg: &mut GeometryNoTxCoords, g: GeometryToEncode| {
+            arg.indices = g.indices_buffer;
+            arg.positions = g.positions_buffer;
+            arg.normals = g.normals_buffer;
+        };
         let model = Model::from_file(&model_file_path, &device, encode_geometry_arg, NoMaterial);
         let mirror_plane_model = Model::from_file(
             &mirror_plane_file_path,
@@ -229,7 +218,7 @@ impl RendererDelgate for Delegate {
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
         let draw_model = |p: &RenderPass<1, main_vertex, main_fragment, (Depth, NoStencil)>,
-                          model: &Model<Geometry, NoMaterial>| {
+                          model: &Model<GeometryNoTxCoords, NoMaterial>| {
             for draw in model.draws() {
                 p.debug_group(draw.name, || {
                     p.draw_primitives_with_binds(

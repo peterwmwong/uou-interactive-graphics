@@ -30,7 +30,7 @@ struct Delegate {
     light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (Depth, NoStencil)>,
     light_world_position: float4,
     m_model_to_world: f32x4x4,
-    model: Model<Geometry, NoMaterial>,
+    model: Model<GeometryNoTxCoords, NoMaterial>,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
     model_space: ModelSpace,
     needs_render: bool,
@@ -68,18 +68,16 @@ impl RendererDelgate for Delegate {
         let model = Model::from_file(
             teapot_file,
             &device,
-            |arg: &mut Geometry,
+            |arg: &mut GeometryNoTxCoords,
              GeometryToEncode {
                  indices_buffer,
                  positions_buffer,
                  normals_buffer,
-                 tx_coords_buffer,
                  ..
              }| {
                 arg.indices = indices_buffer;
                 arg.positions = positions_buffer;
                 arg.normals = normals_buffer;
-                arg.tx_coords = tx_coords_buffer;
             },
             NoMaterial,
         );

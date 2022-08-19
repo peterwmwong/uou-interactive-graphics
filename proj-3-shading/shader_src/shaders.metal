@@ -10,9 +10,9 @@ struct VertexOut
 };
 
 vertex VertexOut
-main_vertex(         uint         vertex_id       [[vertex_id]],
-            constant Geometry   & geometry        [[buffer(0)]],
-            constant ModelSpace & model           [[buffer(1)]])
+main_vertex(         uint                 vertex_id [[vertex_id]],
+            constant GeometryNoTxCoords & geometry  [[buffer(0)]],
+            constant ModelSpace         & model     [[buffer(1)]])
 {
     const uint   idx      = geometry.indices[vertex_id];
     const float4 position = float4(geometry.positions[idx], 1.0);

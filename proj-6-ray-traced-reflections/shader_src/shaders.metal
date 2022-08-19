@@ -12,10 +12,10 @@ struct VertexOut
 };
 
 [[vertex]]
-VertexOut main_vertex(         uint             vertex_id             [[vertex_id]],
-                      constant Geometry       & geometry              [[buffer(0)]],
-                      constant ProjectedSpace & camera                [[buffer(1)]],
-                      constant ModelSpace     & model                 [[buffer(2)]])
+VertexOut main_vertex(         uint                 vertex_id [[vertex_id]],
+                      constant GeometryNoTxCoords & geometry  [[buffer(0)]],
+                      constant ProjectedSpace     & camera    [[buffer(1)]],
+                      constant ModelSpace         & model     [[buffer(2)]])
 {
     const uint   idx    = geometry.indices[vertex_id];
     const float4 pos    = model.m_model_to_projection * float4(geometry.positions[idx], 1.0);
@@ -67,9 +67,8 @@ half4 main_fragment(         VertexOut                 in                [[stage
     intersector<triangle_data> inter;
     inter.set_triangle_cull_mode(triangle_cull_mode::back);
     inter.assume_geometry_type(geometry_type::triangle);
-    intersection_result<triangle_data> intersection;
     for (uint bounce = 4; bounce > 0; bounce--) {
-        intersection = inter.intersect(ray(float3(r_origin), float3(r_direction)), accel_struct);
+        const auto intersection = inter.intersect(ray(float3(r_origin), float3(r_direction)), accel_struct);
         if (intersection.type != intersection_type::none) {
             // Assumption: Everything in the acceleration structure has the same (mirror) material.
             // intersection.
