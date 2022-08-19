@@ -26,9 +26,9 @@ VertexOut main_vertex(         uint                 vertex_id [[vertex_id]],
 inline half3 get_normal(intersection_result<triangle_data> intersection, constant MTLPackedFloat4x3 *m_model_to_worlds) {
     const auto    m      = &m_model_to_worlds[intersection.geometry_id];
     const half2   b2     = half2(intersection.triangle_barycentric_coord);
-    const half3   b3     = half3(1.0 - (b2.x + b2.y), b2.x, b2.y);
+    const half3   b      = half3(1.0 - (b2.x + b2.y), b2.x, b2.y);
     const auto    n      = (const device packed_half3 *) intersection.primitive_data;
-    const half3   normal = (n[0] * b3.x) + (n[1] * b3.y) + (n[2] * b3.z);
+    const half3   normal = (n[0] * b.x) + (n[1] * b.y) + (n[2] * b.z);
     return normalize(half3x3(half3((*m)[0]), half3((*m)[1]), half3((*m)[2])) * normal);
 }
 
@@ -51,7 +51,7 @@ half4 main_fragment(         VertexOut                 in                [[stage
     const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const half3  pos        = half3(pos_w.xyz / pos_w.w);
     const half3  camera_pos = half3(camera.position_world.xyz);
-    const half3  camera_dir = normalize(pos - camera_pos.xyz);
+    const half3  camera_dir = normalize(pos - camera_pos);
     const half3  normal     = half3(normalize(in.normal));
 
     // Are we debugging this screen position? (within a half pixel)
@@ -62,27 +62,27 @@ half4 main_fragment(         VertexOut                 in                [[stage
         dbg.add_point(pos);
     }
 
-    half3 r_origin    = pos;
-    half3 r_direction = reflect(camera_dir, normal);
+    half3 r_origin = pos;
+    half3 r_dir    = reflect(camera_dir, normal);
     intersector<triangle_data> inter;
     inter.set_triangle_cull_mode(triangle_cull_mode::back);
     inter.assume_geometry_type(geometry_type::triangle);
     for (uint bounce = 4; bounce > 0; bounce--) {
-        const auto intersection = inter.intersect(ray(float3(r_origin), float3(r_direction)), accel_struct);
+        const auto intersection = inter.intersect(ray(float3(r_origin), float3(r_dir)), accel_struct);
         if (intersection.type != intersection_type::none) {
             // Assumption: Everything in the acceleration structure has the same (mirror) material.
             // intersection.
-            r_origin    = r_origin + (r_direction * half(intersection.distance));
+            r_origin = r_origin + (r_dir * half(intersection.distance));
+            r_dir    = reflect(r_dir, get_normal(intersection, m_model_to_worlds));
             if (HasDebugPath) dbg.add_point(r_origin);
-            r_direction = reflect(r_direction, get_normal(intersection, m_model_to_worlds));
         } else {
             break;
         }
     }
-    if (HasDebugPath) dbg.add_relative_point(float3(r_direction));
+    if (HasDebugPath) dbg.add_relative_point(r_dir);
 
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    const half4 color = env_texture.sample(tx_sampler, float3(r_direction));
+    const half4 color = env_texture.sample(tx_sampler, float3(r_dir));
 
     // Render a single red pixel, so this pixel can easily be targetted for the shader debugger in
     // the GPU Frame Capture.
@@ -91,10 +91,10 @@ half4 main_fragment(         VertexOut                 in                [[stage
     }
     return shade_phong_blinn(
         {
-            .frag_pos     = half3(pos),
+            .frag_pos     = pos,
             .light_pos    = half3(light_pos.xyz),
-            .camera_pos   = half3(camera_pos),
-            .normal       = half3(normal),
+            .camera_pos   = camera_pos,
+            .normal       = normal,
             .has_ambient  = HasAmbient,
             .has_diffuse  = HasDiffuse,
             .has_specular = HasSpecular,
