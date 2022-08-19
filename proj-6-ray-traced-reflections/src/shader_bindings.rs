@@ -245,10 +245,9 @@ impl Default for ProjectedSpace {
 }
 pub const MAX_DEBUG_RAY_POINTS: ::std::os::raw::c_uint = 8;
 #[repr(C)]
-#[repr(align(16))]
 #[derive(Copy, Clone)]
 pub struct DebugRay {
-    pub points: [float4; 8usize],
+    pub points: [packed_float3; 8usize],
     pub screen_pos: float2,
     pub disabled: bool,
 }
@@ -256,12 +255,12 @@ pub struct DebugRay {
 fn bindgen_test_layout_DebugRay() {
     assert_eq!(
         ::std::mem::size_of::<DebugRay>(),
-        144usize,
+        112usize,
         concat!("Size of: ", stringify!(DebugRay))
     );
     assert_eq!(
         ::std::mem::align_of::<DebugRay>(),
-        16usize,
+        8usize,
         concat!("Alignment of ", stringify!(DebugRay))
     );
     fn test_field_points() {
@@ -288,7 +287,7 @@ fn bindgen_test_layout_DebugRay() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).screen_pos) as usize - ptr as usize
             },
-            128usize,
+            96usize,
             concat!(
                 "Offset of field: ",
                 stringify!(DebugRay),
@@ -305,7 +304,7 @@ fn bindgen_test_layout_DebugRay() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).disabled) as usize - ptr as usize
             },
-            136usize,
+            104usize,
             concat!(
                 "Offset of field: ",
                 stringify!(DebugRay),

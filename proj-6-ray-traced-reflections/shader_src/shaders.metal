@@ -88,9 +88,8 @@ half4 main_fragment(         VertexOut                 in                [[stage
     //     bounces internally?
     // - Look at the original `normal` does it look right?
     if (is_debug) {
-        dbg_ray->points[0]   = float4(camera_pos, 0.0);
-        dbg_ray->points[1]   = float4(pos, 1);
-        dbg_ray->points[1].w = length(dbg_ray->points[0].xyz - dbg_ray->points[1].xyz);
+        dbg_ray->points[0]   = camera_pos;
+        dbg_ray->points[1]   = pos;
         dbg_ray->points[2]   = dbg_ray->points[1];
         dbg_ray->points[3]   = dbg_ray->points[1];
         dbg_ray->points[4]   = dbg_ray->points[1];
@@ -100,10 +99,8 @@ half4 main_fragment(         VertexOut                 in                [[stage
         // intersection
         const float3 normal = get_normal(intersection, m_model_to_worlds);
         if (is_debug) {
-            dbg_ray->points[2]   = float4(r.origin + (r.direction * intersection.distance), 1);
-            dbg_ray->points[2].w = length(dbg_ray->points[1].xyz - dbg_ray->points[2].xyz);
-            dbg_ray->points[3]   = float4(dbg_ray->points[1].xyz + reflect(r.direction, normal), 1);
-            dbg_ray->points[3].w = length(dbg_ray->points[2].xyz - dbg_ray->points[3].xyz);
+            dbg_ray->points[2] = r.origin + (r.direction * intersection.distance);
+            dbg_ray->points[3] = dbg_ray->points[1] + reflect(r.direction, normal);
         }
 
         r.origin    = r.origin + (r.direction * intersection.distance);
@@ -111,11 +108,8 @@ half4 main_fragment(         VertexOut                 in                [[stage
         auto intersection2 = intersector.intersect(r, accel_struct);
         if (is_debug){
             if (intersection2.type != raytracing::intersection_type::none) {
-                dbg_ray->points[3]   = float4(r.origin + (r.direction * intersection2.distance), 1);
-                dbg_ray->points[3].w = length(dbg_ray->points[2].xyz - dbg_ray->points[3].xyz);
-                const float3 normal2 = get_normal(intersection2, m_model_to_worlds);
-                dbg_ray->points[4]   = float4(dbg_ray->points[3].xyz + reflect(r.direction, normal2), 1);
-                dbg_ray->points[4].w = length(dbg_ray->points[3].xyz - dbg_ray->points[4].xyz);
+                dbg_ray->points[3] = r.origin + (r.direction * intersection2.distance);
+                dbg_ray->points[4] = dbg_ray->points[3] + reflect(r.direction, get_normal(intersection2, m_model_to_worlds));
             } else {
                 dbg_ray->points[4] = dbg_ray->points[3];
             }
@@ -192,7 +186,7 @@ DbgVertexOut dbg_vertex(         uint             vertex_id [[vertex_id]],
                      constant ProjectedSpace & camera    [[buffer(1)]],
                      constant DebugRay       & dbg_ray   [[buffer(0)]]) {
     if (vertex_id >= 0 && vertex_id <= 4) {
-        return { .position = (camera.m_world_to_projection * float4(dbg_ray.points[vertex_id].xyz, 1)) };
+        return { .position = (camera.m_world_to_projection * float4(dbg_ray.points[vertex_id], 1)) };
     }
     return { .position = 0 };
 }

@@ -13,7 +13,7 @@
 DEF_CONSTANT constexpr unsigned int MAX_DEBUG_RAY_POINTS = 8;
 
 struct DebugRay {
-    float4 points[MAX_DEBUG_RAY_POINTS];
+    packed_float3 points[MAX_DEBUG_RAY_POINTS];
     float2 screen_pos;
     bool disabled;
 };
