@@ -10,7 +10,9 @@ struct DebugPathHelper {
     bool active                [[function_constant(HasDebugPath)]];
 
     inline void add_point(const float3 p);
+    inline void add_point(const half3 p);
     inline void add_relative_point(const float3 dir_from_previous);
+    inline void add_relative_point(const half3 dir_from_previous);
     template<typename T>
     inline void add_intersection(const raytracing::ray r, const T intersection);
 };
@@ -44,10 +46,21 @@ inline void DebugPathHelper::add_point(const float3 p) {
         }
     }
 }
+inline void DebugPathHelper::add_point(const half3 p) {
+    if (HasDebugPath) {
+        add_point(float3(p));
+    }
+}
 
 inline void DebugPathHelper::add_relative_point(const float3 dir_from_previous) {
     if (HasDebugPath) {
         add_point(dbg_ray->points[dbg_ray->num_points - 1] + dir_from_previous);
+    }
+}
+
+inline void DebugPathHelper::add_relative_point(const half3 dir_from_previous) {
+    if (HasDebugPath) {
+        add_relative_point(float3(dir_from_previous));
     }
 }
 

@@ -19,18 +19,13 @@ use std::{
     simd::{f32x2, f32x4, SimdFloat},
 };
 
-const BG_STENCIL_REF_VALUE: u32 = 0;
-const MODEL_STENCIL_REF_VALUE: u32 = 2;
-
-const STENCIL_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Stencil8;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 32., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 8., PI / 4.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 
 struct Delegate {
     bg_depth_state: DepthStencilState,
-    bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, Stencil)>,
-    dbg_depth_state: DepthStencilState,
+    bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, NoStencil)>,
     dbg_render_pipeline: RenderPipeline<1, dbg_vertex, dbg_fragment, (Depth, NoStencil)>,
     camera_space: ProjectedSpace,
     camera: Camera,
@@ -38,17 +33,19 @@ struct Delegate {
     cubemap_texture: Texture,
     depth_texture: DepthTexture,
     debug_path: TypedBuffer<DebugPath>,
-    debug_path_show: bool,
+    has_debug_path: bool,
     device: Device,
     library: Library,
-    main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)>,
+    main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
     m_model_to_world: f32x4x4,
+    m_mirror_plane_model_to_world: f32x4x4,
     model_depth_state: DepthStencilState,
     model_space: ModelSpace,
+    mirror_plane_space: ModelSpace,
     model: Model<Geometry, NoMaterial>,
+    mirror_plane_model: Model<Geometry, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
-    stencil_texture: DepthTexture,
     world_as: ModelAccelerationStructure,
 }
 
@@ -57,7 +54,7 @@ fn create_main_render_pipeline(
     library: &Library,
     mode: ShadingModeSelector,
     has_debug_path: bool,
-) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)> {
+) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)> {
     RenderPipeline::new(
         "Model",
         device,
@@ -71,7 +68,7 @@ fn create_main_render_pipeline(
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
             HasDebugPath: has_debug_path,
         },
-        (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
+        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     )
 }
 
@@ -140,8 +137,7 @@ impl RendererDelgate for Delegate {
 
         let command_queue = device.new_command_queue();
         let world_as = ModelAccelerationStructure::from_files(
-            // &[&model_file_path, &mirror_plane_file_path],
-            &[&model_file_path],
+            &[&model_file_path, &mirror_plane_file_path],
             &device,
             &command_queue,
             |_, i| {
@@ -154,33 +150,19 @@ impl RendererDelgate for Delegate {
         );
 
         let shading_mode = ShadingModeSelector::DEFAULT;
-        let debug_path_show = false;
+        let has_debug_path = false;
         let ds = DepthStencilDescriptor::new();
-        let s = StencilDescriptor::new();
+        ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
         let library = device
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         Self {
             bg_depth_state: {
                 ds.set_depth_write_enabled(false);
-                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                {
-                    s.set_stencil_compare_function(MTLCompareFunction::Equal);
-                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Keep);
-                    ds.set_front_face_stencil(Some(&s));
-                    ds.set_back_face_stencil(Some(&s));
-                }
                 device.new_depth_stencil_state(&ds)
             },
             model_depth_state: {
                 ds.set_depth_write_enabled(true);
-                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                {
-                    s.set_stencil_compare_function(MTLCompareFunction::Always);
-                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Replace);
-                    ds.set_front_face_stencil(Some(&s));
-                    ds.set_back_face_stencil(Some(&s));
-                }
                 device.new_depth_stencil_state(&ds)
             },
             cubemap_texture,
@@ -191,14 +173,8 @@ impl RendererDelgate for Delegate {
                 [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
                 bg_vertex,
                 bg_fragment,
-                (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
+                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
-            dbg_depth_state: {
-                let ds = DepthStencilDescriptor::new();
-                ds.set_depth_write_enabled(false);
-                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
-                device.new_depth_stencil_state(&ds)
-            },
             dbg_render_pipeline: RenderPipeline::new(
                 "Debug",
                 &device,
@@ -212,9 +188,10 @@ impl RendererDelgate for Delegate {
                 &device,
                 &library,
                 shading_mode,
-                debug_path_show,
+                has_debug_path,
             ),
             m_model_to_world,
+            m_mirror_plane_model_to_world,
             command_queue,
             camera: Camera::new_with_default_distance(
                 INITIAL_CAMERA_ROTATION,
@@ -222,23 +199,22 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            // depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
-            // TODO: TEMPORARY UNDO
-            // TODO: TEMPORARY UNDO
-            // TODO: TEMPORARY UNDO
-            depth_texture: DepthTexture::new_with_storage_mode(
-                "Depth",
-                DEFAULT_DEPTH_FORMAT,
-                MTLStorageMode::Private,
-            ),
+            depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             camera_space: ProjectedSpace::default(),
-            model_space: ModelSpace::default(),
+            model_space: ModelSpace {
+                m_model_to_projection: f32x4x4::identity().into(),
+                m_normal_to_world: m_model_to_world.into(),
+            },
+            mirror_plane_space: ModelSpace {
+                m_model_to_projection: f32x4x4::identity().into(),
+                m_normal_to_world: m_mirror_plane_model_to_world.into(),
+            },
             needs_render: false,
             shading_mode,
-            stencil_texture: DepthTexture::new("Stencil", STENCIL_TEXTURE_FORMAT),
             world_as,
             model,
-            debug_path_show,
+            mirror_plane_model,
+            has_debug_path,
             debug_path: TypedBuffer::from_data(
                 "DebugPath",
                 device.deref(),
@@ -252,7 +228,7 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn render(&mut self, render_target: &TextureRef) -> &CommandBufferRef {
-        let draw_model = |p: &RenderPass<1, main_vertex, main_fragment, (Depth, Stencil)>,
+        let draw_model = |p: &RenderPass<1, main_vertex, main_fragment, (Depth, NoStencil)>,
                           model: &Model<Geometry, NoMaterial>| {
             for draw in model.draws() {
                 p.debug_group(draw.name, || {
@@ -275,7 +251,6 @@ impl RendererDelgate for Delegate {
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
         let depth_tx = self.depth_texture.texture();
-        let stenc_tx = self.stencil_texture.texture();
         self.main_render_pipeline.new_pass(
             "Model",
             command_buffer,
@@ -285,13 +260,9 @@ impl RendererDelgate for Delegate {
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
             )],
-            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::Store),
-            (stenc_tx, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
-            (
-                &self.model_depth_state,
-                MODEL_STENCIL_REF_VALUE,
-                MODEL_STENCIL_REF_VALUE,
-            ),
+            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
+            NoStencil,
+            &self.model_depth_state,
             &[
                 &HeapUsage(
                     &self.model.heap,
@@ -318,77 +289,45 @@ impl RendererDelgate for Delegate {
                     },
                 );
                 draw_model(&p, &self.model);
-                // p.debug_group("Plane", || {
-                //     p.set_depth_stencil_state((
-                //         &self.mirror_plane_depth_state,
-                //         MIRROR_PLANE_STENCIL_REF_VALUE,
-                //         MIRROR_PLANE_STENCIL_REF_VALUE,
-                //     ));
-                //     p.bind(
-                //         main_vertex_binds {
-                //             model: Bind::Value(&self.mirror_plane_model_space),
-                //             ..main_vertex_binds::SKIP
-                //         },
-                //         main_fragment_binds::SKIP,
-                //     );
-                //     draw_model(&p, &self.mirror_plane_model);
-                // });
-                // p.into_subpass(
-                //     "BG",
-                //     &self.bg_render_pipeline,
-                //     Some((
-                //         &self.bg_depth_state,
-                //         BG_STENCIL_REF_VALUE,
-                //         BG_STENCIL_REF_VALUE,
-                //     )),
-                //     |p| {
-                //         p.draw_primitives_with_binds(
-                //             NoBinds,
-                //             bg_fragment_binds {
-                //                 camera: Bind::Value(&self.camera_space),
-                //                 ..bg_fragment_binds::SKIP
-                //             },
-                //             MTLPrimitiveType::Triangle,
-                //             0,
-                //             3,
-                //         )
-                //     },
-                // );
+                p.bind(
+                    main_vertex_binds {
+                        model: Bind::Value(&self.mirror_plane_space),
+                        ..main_vertex_binds::SKIP
+                    },
+                    main_fragment_binds::SKIP,
+                );
+                draw_model(&p, &self.mirror_plane_model);
+                p.into_subpass(
+                    "BG",
+                    &self.bg_render_pipeline,
+                    Some(&self.bg_depth_state),
+                    |p| {
+                        p.draw_primitives_with_binds(
+                            NoBinds,
+                            bg_fragment_binds::SKIP,
+                            MTLPrimitiveType::Triangle,
+                            0,
+                            3,
+                        );
+                        if self.has_debug_path {
+                            p.into_subpass("DebugPath", &self.dbg_render_pipeline, None, |p| {
+                                p.draw_primitives_with_binds(
+                                    dbg_vertex_binds {
+                                        // camera: Bind::Value(&self.camera_space),
+                                        dbg_path: Bind::buffer(&self.debug_path),
+                                        ..dbg_vertex_binds::SKIP
+                                    },
+                                    Binds::SKIP,
+                                    MTLPrimitiveType::LineStrip,
+                                    0,
+                                    DEBUG_PATH_MAX_NUM_POINTS as _,
+                                )
+                            });
+                        }
+                    },
+                );
             },
         );
-        if self.debug_path_show {
-            self.dbg_render_pipeline.new_pass(
-                "Debug Pass",
-                &command_buffer,
-                [(
-                    &render_target,
-                    (0., 0., 0., 0.),
-                    MTLLoadAction::Load,
-                    MTLStoreAction::Store,
-                )],
-                (
-                    &depth_tx,
-                    0.0,
-                    MTLLoadAction::Load,
-                    MTLStoreAction::DontCare,
-                ),
-                NoStencil,
-                &self.dbg_depth_state,
-                &[],
-                |p| {
-                    p.draw_primitives_with_binds(
-                        dbg_vertex_binds {
-                            camera: Bind::Value(&self.camera_space),
-                            dbg_path: Bind::buffer(&self.debug_path),
-                        },
-                        Binds::SKIP,
-                        MTLPrimitiveType::LineStrip,
-                        0,
-                        DEBUG_PATH_MAX_NUM_POINTS as _,
-                    )
-                },
-            );
-        }
         command_buffer
     }
 
@@ -400,11 +339,10 @@ impl RendererDelgate for Delegate {
                 m_screen_to_world: u.m_screen_to_world,
                 position_world: u.position_world.into(),
             };
-            self.model_space = ModelSpace {
-                m_model_to_projection: self.camera_space.m_world_to_projection
-                    * self.m_model_to_world,
-                m_normal_to_world: self.m_model_to_world.into(),
-            };
+            self.model_space.m_model_to_projection =
+                self.camera_space.m_world_to_projection * self.m_model_to_world;
+            self.mirror_plane_space.m_model_to_projection =
+                self.camera_space.m_world_to_projection * self.m_mirror_plane_model_to_world;
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {
@@ -412,14 +350,11 @@ impl RendererDelgate for Delegate {
                 &self.device,
                 &self.library,
                 self.shading_mode,
-                self.debug_path_show,
+                self.has_debug_path,
             );
             self.needs_render = true;
         }
         if self.depth_texture.on_event(event, &self.device) {
-            self.needs_render = true;
-        }
-        if self.stencil_texture.on_event(event, &self.device) {
             self.needs_render = true;
         }
         // TODO: START HERE
@@ -443,12 +378,12 @@ impl RendererDelgate for Delegate {
                 if modifier_keys.contains(ModifierKeys::SHIFT) {
                     debug_path.update_disabled = !debug_path.update_disabled;
                 } else if modifier_keys.is_empty() {
-                    self.debug_path_show = !self.debug_path_show;
+                    self.has_debug_path = !self.has_debug_path;
                     self.main_render_pipeline = create_main_render_pipeline(
                         &self.device,
                         &self.library,
                         self.shading_mode,
-                        self.debug_path_show,
+                        self.has_debug_path,
                     );
                     self.needs_render = true;
                 }

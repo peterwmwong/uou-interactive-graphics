@@ -466,19 +466,19 @@ impl PipelineFunction<FragmentFunctionType> for bg_fragment {}
 
 #[allow(non_camel_case_types)]
 pub struct dbg_vertex_binds<'c> {
-    pub camera: Bind<'c, ProjectedSpace>,
     pub dbg_path: Bind<'c, DebugPath>,
+    pub camera: Bind<'c, ProjectedSpace>,
 }
 impl Binds for dbg_vertex_binds<'_> {
     const SKIP: Self = Self {
-        camera: Bind::Skip,
         dbg_path: Bind::Skip,
+        camera: Bind::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
-        self.camera.bind::<F>(encoder, 1);
         self.dbg_path.bind::<F>(encoder, 0);
+        self.camera.bind::<F>(encoder, 1);
     }
 }
 

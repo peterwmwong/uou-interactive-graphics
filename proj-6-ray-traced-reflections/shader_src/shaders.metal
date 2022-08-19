@@ -3,7 +3,7 @@
 #include "./shader_bindings.h"
 
 using namespace metal;
-using raytracing::primitive_acceleration_structure;
+using namespace raytracing;
 
 struct VertexOut
 {
@@ -23,18 +23,13 @@ VertexOut main_vertex(         uint             vertex_id             [[vertex_i
     return { .position = pos, .normal = normal };
 }
 
-inline float3 get_normal(raytracing::intersection_result<raytracing::triangle_data> intersection, constant MTLPackedFloat4x3 *m_model_to_worlds) {
-    const float2   b2     = intersection.triangle_barycentric_coord;
-    const float3   b3     = float3(1.0 - (b2.x + b2.y), b2.x, b2.y);
-    const auto     n      = (const device packed_half3 *) intersection.primitive_data;
-    const float3   n0     = float3(n[0]);
-    const float3   n1     = float3(n[1]);
-    const float3   n2     = float3(n[2]);
-    constant MTLPackedFloat4x3 * m = &m_model_to_worlds[intersection.geometry_id];
-    return normalize(
-        float3x3((*m)[0], (*m)[1], (*m)[2])
-        * ((n0 * b3.x) + (n1 * b3.y) + (n2 * b3.z))
-    );
+inline half3 get_normal(intersection_result<triangle_data> intersection, constant MTLPackedFloat4x3 *m_model_to_worlds) {
+    const auto    m      = &m_model_to_worlds[intersection.geometry_id];
+    const half2   b2     = half2(intersection.triangle_barycentric_coord);
+    const half3   b3     = half3(1.0 - (b2.x + b2.y), b2.x, b2.y);
+    const auto    n      = (const device packed_half3 *) intersection.primitive_data;
+    const half3   normal = (n[0] * b3.x) + (n[1] * b3.y) + (n[2] * b3.z);
+    return normalize(half3x3(half3((*m)[0]), half3((*m)[1]), half3((*m)[2])) * normal);
 }
 
 [[early_fragment_tests]]
@@ -54,24 +49,10 @@ half4 main_fragment(         VertexOut                 in                [[stage
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);
-    const float3 pos        = pos_w.xyz / pos_w.w;
-    const float3 camera_pos = camera.position_world.xyz;
-    const float3 camera_dir = normalize(pos - camera_pos.xyz);
-    const float3 normal     = normalize(in.normal);
-    const float3 ref        = reflect(camera_dir, normal);
-
-    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
-    half4 color;
-
-    raytracing::ray r;
-    r.origin       = pos;
-    r.direction    = ref;
-    r.min_distance = 0.0;
-    r.max_distance = FLT_MAX;
-    raytracing::intersector<raytracing::triangle_data> intersector;
-    intersector.set_triangle_cull_mode(raytracing::triangle_cull_mode::back);
-    intersector.assume_geometry_type(raytracing::geometry_type::triangle);
-    auto intersection = intersector.intersect(r, accel_struct);
+    const half3  pos        = half3(pos_w.xyz / pos_w.w);
+    const half3  camera_pos = half3(camera.position_world.xyz);
+    const half3  camera_dir = normalize(pos - camera_pos.xyz);
+    const half3  normal     = half3(normalize(in.normal));
 
     // Are we debugging this screen position? (within a half pixel)
     DebugPathHelper dbg;
@@ -81,42 +62,28 @@ half4 main_fragment(         VertexOut                 in                [[stage
         dbg.add_point(pos);
     }
 
-    if (intersection.type != raytracing::intersection_type::none) {
-        // Assumption: Everything in the acceleration structure has the same (mirror) material.
-        // intersection.
-        const float3 normal = get_normal(intersection, m_model_to_worlds);
-        if (HasDebugPath) dbg.add_intersection(r, intersection);
-
-        r.origin    = r.origin + (r.direction * intersection.distance);
-        r.direction = reflect(r.direction, normal);
-        auto intersection2 = intersector.intersect(r, accel_struct);
-        if (HasDebugPath) {
-            if (intersection2.type != raytracing::intersection_type::none) {
-                dbg.add_intersection(r, intersection2);
-                dbg.add_relative_point(reflect(r.direction, get_normal(intersection2, m_model_to_worlds)));
-            } else {
-                dbg.add_relative_point(reflect(ref, normal));
-            }
-        }
-
-        if (intersection2.type != raytracing::intersection_type::none) {
-            color = half4(0, 0, 1, 1);
+    half3 r_origin    = pos;
+    half3 r_direction = reflect(camera_dir, normal);
+    intersector<triangle_data> inter;
+    inter.set_triangle_cull_mode(triangle_cull_mode::back);
+    inter.assume_geometry_type(geometry_type::triangle);
+    intersection_result<triangle_data> intersection;
+    for (uint bounce = 4; bounce > 0; bounce--) {
+        intersection = inter.intersect(ray(float3(r_origin), float3(r_direction)), accel_struct);
+        if (intersection.type != intersection_type::none) {
+            // Assumption: Everything in the acceleration structure has the same (mirror) material.
+            // intersection.
+            r_origin    = r_origin + (r_direction * half(intersection.distance));
+            if (HasDebugPath) dbg.add_point(r_origin);
+            r_direction = reflect(r_direction, get_normal(intersection, m_model_to_worlds));
         } else {
-            color = 0;
+            break;
         }
-
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // Generalize path tracing to N bounces (loop)
-        // - Currently we've hardcoded 2 intersections
-        // - Because it's hardcoded, the call to intersect() happens in multiple places and I wonder
-        //   if it increases # instructions/registers/spilled-bytes.
-        // - If it were in a loop, one call point less instructions/registers/spilled-bytes?
-    } else {
-        if (HasDebugPath) dbg.add_relative_point(ref);
-        color = env_texture.sample(tx_sampler, float3(ref));
     }
+    if (HasDebugPath) dbg.add_relative_point(float3(r_direction));
+
+    constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
+    const half4 color = env_texture.sample(tx_sampler, float3(r_direction));
 
     // Render a single red pixel, so this pixel can easily be targetted for the shader debugger in
     // the GPU Frame Capture.
@@ -167,8 +134,8 @@ half4 bg_fragment(         BGVertexOut         in          [[stage_in]],
 
 [[vertex]]
 float4 dbg_vertex(         uint             vertex_id [[vertex_id]],
-                        constant ProjectedSpace & camera    [[buffer(1)]],
-                        constant DebugPath      & dbg_path  [[buffer(0)]]) {
+                  constant DebugPath      & dbg_path  [[buffer(0)]],
+                  constant ProjectedSpace & camera    [[buffer(1)]]) {
     const uint vid = clamp(vertex_id, (uint) 0, (uint) (dbg_path.num_points - 1));
     return (camera.m_world_to_projection * float4(dbg_path.points[vid], 1));
 }
