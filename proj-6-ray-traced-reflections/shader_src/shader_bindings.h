@@ -10,8 +10,10 @@
 #include "../../metal-shaders/shader_src/bindings/projected-space.h"
 #include "../../metal-shaders/shader_src/bindings/shading-mode.h"
 
+DEF_CONSTANT constexpr unsigned int MAX_DEBUG_RAY_POINTS = 8;
+
 struct DebugRay {
-    float4 points[4];
+    float4 points[MAX_DEBUG_RAY_POINTS];
     float2 screen_pos;
-    bool enabled;
+    bool disabled;
 };

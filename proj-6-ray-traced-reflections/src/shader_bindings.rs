@@ -243,19 +243,20 @@ impl Default for ProjectedSpace {
         }
     }
 }
+pub const MAX_DEBUG_RAY_POINTS: ::std::os::raw::c_uint = 8;
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Copy, Clone)]
 pub struct DebugRay {
-    pub points: [float4; 4usize],
+    pub points: [float4; 8usize],
     pub screen_pos: float2,
-    pub enabled: bool,
+    pub disabled: bool,
 }
 #[test]
 fn bindgen_test_layout_DebugRay() {
     assert_eq!(
         ::std::mem::size_of::<DebugRay>(),
-        80usize,
+        144usize,
         concat!("Size of: ", stringify!(DebugRay))
     );
     assert_eq!(
@@ -287,7 +288,7 @@ fn bindgen_test_layout_DebugRay() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).screen_pos) as usize - ptr as usize
             },
-            64usize,
+            128usize,
             concat!(
                 "Offset of field: ",
                 stringify!(DebugRay),
@@ -297,23 +298,23 @@ fn bindgen_test_layout_DebugRay() {
         );
     }
     test_field_screen_pos();
-    fn test_field_enabled() {
+    fn test_field_disabled() {
         assert_eq!(
             unsafe {
                 let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).enabled) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).disabled) as usize - ptr as usize
             },
-            72usize,
+            136usize,
             concat!(
                 "Offset of field: ",
                 stringify!(DebugRay),
                 "::",
-                stringify!(enabled)
+                stringify!(disabled)
             )
         );
     }
-    test_field_enabled();
+    test_field_disabled();
 }
 impl Default for DebugRay {
     fn default() -> Self {

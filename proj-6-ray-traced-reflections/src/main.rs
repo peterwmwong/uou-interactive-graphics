@@ -232,16 +232,7 @@ impl RendererDelgate for Delegate {
             debug_ray: TypedBuffer::from_data(
                 "DebugRay",
                 device.deref(),
-                &[DebugRay {
-                    screen_pos: float2 { xy: [0., 0.] },
-                    points: [
-                        f32x4::default().into(),
-                        f32x4::default().into(),
-                        f32x4::default().into(),
-                        f32x4::default().into(),
-                    ],
-                    enabled: true,
-                }],
+                &[DebugRay::default()],
                 MTLResourceOptions::StorageModeShared,
             ),
             device,
@@ -382,7 +373,7 @@ impl RendererDelgate for Delegate {
                     Binds::SKIP,
                     MTLPrimitiveType::LineStrip,
                     0,
-                    4,
+                    5,
                 )
             },
         );
@@ -417,13 +408,13 @@ impl RendererDelgate for Delegate {
         }
         let dbg_ray = &mut self.debug_ray.get_mut()[0];
         match event {
-            UserEvent::MouseMoved { position } if dbg_ray.enabled => {
+            UserEvent::MouseMoved { position } if !dbg_ray.disabled => {
                 let position = position / f32x2::splat(1.0);
                 dbg_ray.screen_pos = position.into();
                 self.needs_render = true
             }
             UserEvent::KeyDown { key_code, .. } if key_code == UserEvent::KEY_CODE_SPACEBAR => {
-                dbg_ray.enabled = !dbg_ray.enabled;
+                dbg_ray.disabled = !dbg_ray.disabled;
             }
             _ => {}
         }

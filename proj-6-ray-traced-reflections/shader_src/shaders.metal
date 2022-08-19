@@ -11,11 +11,11 @@ struct VertexOut
     float3 normal;
 };
 
-vertex VertexOut
-main_vertex(         uint             vertex_id             [[vertex_id]],
-            constant Geometry       & geometry              [[buffer(0)]],
-            constant ProjectedSpace & camera                [[buffer(1)]],
-            constant ModelSpace     & model                 [[buffer(2)]])
+[[vertex]]
+VertexOut main_vertex(         uint             vertex_id             [[vertex_id]],
+                      constant Geometry       & geometry              [[buffer(0)]],
+                      constant ProjectedSpace & camera                [[buffer(1)]],
+                      constant ModelSpace     & model                 [[buffer(2)]])
 {
     const uint   idx    = geometry.indices[vertex_id];
     const float4 pos    = model.m_model_to_projection * float4(geometry.positions[idx], 1.0);
@@ -37,19 +37,20 @@ inline float3 get_normal(raytracing::intersection_result<raytracing::triangle_da
     );
 }
 
-fragment half4
-main_fragment(         VertexOut                 in                [[stage_in]],
-              constant ProjectedSpace          & camera            [[buffer(0)]],
-              constant float4                  & light_pos         [[buffer(1)]],
-              // The goal is to transform the environment. When rendering the mirrored
-              // world, we need to transformed all the objects of the world, including
-              // the environment (flip the environment texture). Instead of creating a
-              // separate "mirrored" environment texture, we change the sampling
-              // direction achieving the same result.
-              constant MTLPackedFloat4x3       * m_model_to_worlds [[buffer(2)]],
-              primitive_acceleration_structure   accel_struct      [[buffer(3)]],
-              device   DebugRay                * dbg_ray           [[buffer(4)]],
-                       texturecube<half>         env_texture       [[texture(0)]])
+[[early_fragment_tests]]
+[[fragment]]
+half4 main_fragment(         VertexOut                 in                [[stage_in]],
+                    constant ProjectedSpace          & camera            [[buffer(0)]],
+                    constant float4                  & light_pos         [[buffer(1)]],
+                    // The goal is to transform the environment. When rendering the mirrored
+                    // world, we need to transformed all the objects of the world, including
+                    // the environment (flip the environment texture). Instead of creating a
+                    // separate "mirrored" environment texture, we change the sampling
+                    // direction achieving the same result.
+                    constant MTLPackedFloat4x3       * m_model_to_worlds [[buffer(2)]],
+                    primitive_acceleration_structure   accel_struct      [[buffer(3)]],
+                    device   DebugRay                * dbg_ray           [[buffer(4)]],
+                             texturecube<half>         env_texture       [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);
@@ -65,26 +66,44 @@ main_fragment(         VertexOut                 in                [[stage_in]],
     raytracing::ray r;
     r.origin       = pos;
     r.direction    = ref;
-    r.min_distance = 0.001;
+    r.min_distance = 0.0;
     r.max_distance = FLT_MAX;
     raytracing::intersector<raytracing::triangle_data> intersector;
     intersector.set_triangle_cull_mode(raytracing::triangle_cull_mode::back);
     intersector.assume_geometry_type(raytracing::geometry_type::triangle);
-    raytracing::intersection_result<raytracing::triangle_data> intersection = intersector.intersect(r, accel_struct);
+    auto intersection = intersector.intersect(r, accel_struct);
 
     // Are we debugging this screen position? (within a half pixel)
     const float2 screen_pos       = in.position.xy;
     const float2 debug_screen_pos = dbg_ray->screen_pos;
     const float2 diff             = abs(debug_screen_pos - screen_pos);
-    const bool   is_debug         = dbg_ray->enabled && all(diff <= float2(0.5));
+    const bool   is_debug         = !dbg_ray->disabled && all(diff <= float2(0.5));
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // Try to figure out why the primary ray going into teapot spout punches through.
+    // - Xcode acceleration structure viewer seems alright (model is okay)
+    // - Is this "terminator" problem RT Gems II mentioned?
+    //   - Is the intersection happening "below" the geometry in the AS and then secondary/third ray
+    //     bounces internally?
+    // - Look at the original `normal` does it look right?
+    if (is_debug) {
+        dbg_ray->points[0]   = float4(camera_pos, 0.0);
+        dbg_ray->points[1]   = float4(pos, 1);
+        dbg_ray->points[1].w = length(dbg_ray->points[0].xyz - dbg_ray->points[1].xyz);
+        dbg_ray->points[2]   = dbg_ray->points[1];
+        dbg_ray->points[3]   = dbg_ray->points[1];
+        dbg_ray->points[4]   = dbg_ray->points[1];
+    }
     if (intersection.type != raytracing::intersection_type::none) {
         // Assumption: Everything in the acceleration structure has the same (mirror) material.
         // intersection
         const float3 normal = get_normal(intersection, m_model_to_worlds);
         if (is_debug) {
-            dbg_ray->points[0] = float4(pos, 1);
-            dbg_ray->points[1] = float4(r.origin + (r.direction * intersection.distance), 1);
-            dbg_ray->points[2] = float4(dbg_ray->points[1].xyz + reflect(r.direction, normal), 1);
+            dbg_ray->points[2]   = float4(r.origin + (r.direction * intersection.distance), 1);
+            dbg_ray->points[2].w = length(dbg_ray->points[1].xyz - dbg_ray->points[2].xyz);
+            dbg_ray->points[3]   = float4(dbg_ray->points[1].xyz + reflect(r.direction, normal), 1);
+            dbg_ray->points[3].w = length(dbg_ray->points[2].xyz - dbg_ray->points[3].xyz);
         }
 
         r.origin    = r.origin + (r.direction * intersection.distance);
@@ -92,11 +111,13 @@ main_fragment(         VertexOut                 in                [[stage_in]],
         auto intersection2 = intersector.intersect(r, accel_struct);
         if (is_debug){
             if (intersection2.type != raytracing::intersection_type::none) {
-                dbg_ray->points[2] = float4(r.origin + (r.direction * intersection2.distance), 1);
+                dbg_ray->points[3]   = float4(r.origin + (r.direction * intersection2.distance), 1);
+                dbg_ray->points[3].w = length(dbg_ray->points[2].xyz - dbg_ray->points[3].xyz);
                 const float3 normal2 = get_normal(intersection2, m_model_to_worlds);
-                dbg_ray->points[3] = float4(dbg_ray->points[2].xyz + reflect(r.direction, normal2), 1);
+                dbg_ray->points[4]   = float4(dbg_ray->points[3].xyz + reflect(r.direction, normal2), 1);
+                dbg_ray->points[4].w = length(dbg_ray->points[3].xyz - dbg_ray->points[4].xyz);
             } else {
-                dbg_ray->points[3] = dbg_ray->points[2];
+                dbg_ray->points[4] = dbg_ray->points[3];
             }
         }
 
@@ -139,8 +160,8 @@ struct BGVertexOut {
     float4 position [[position]];
 };
 
-vertex BGVertexOut
-bg_vertex(uint vertex_id [[vertex_id]])
+[[vertex]]
+BGVertexOut bg_vertex(uint vertex_id [[vertex_id]])
 {
     constexpr const float2 plane_triange_strip_vertices[3] = {
         {-1.h,  1.h}, // Top    Left
@@ -151,10 +172,10 @@ bg_vertex(uint vertex_id [[vertex_id]])
     return { .position = float4(position2d, 1, 1) };
 }
 
-fragment half4
-bg_fragment(         BGVertexOut         in          [[stage_in]],
-            constant ProjectedSpace    & camera      [[buffer(0)]],
-                     texturecube<half>   env_texture [[texture(0)]])
+[[fragment]]
+half4 bg_fragment(         BGVertexOut         in          [[stage_in]],
+                  constant ProjectedSpace    & camera      [[buffer(0)]],
+                           texturecube<half>   env_texture [[texture(0)]])
 {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
     const float4 pos   = camera.m_screen_to_world * float4(in.position.xy, 1, 1);
@@ -170,8 +191,8 @@ struct DbgVertexOut {
 DbgVertexOut dbg_vertex(         uint             vertex_id [[vertex_id]],
                      constant ProjectedSpace & camera    [[buffer(1)]],
                      constant DebugRay       & dbg_ray   [[buffer(0)]]) {
-    if (vertex_id >= 0 && vertex_id <= 3) {
-        return { .position = (camera.m_world_to_projection * dbg_ray.points[vertex_id]) };
+    if (vertex_id >= 0 && vertex_id <= 4) {
+        return { .position = (camera.m_world_to_projection * float4(dbg_ray.points[vertex_id].xyz, 1)) };
     }
     return { .position = 0 };
 }
