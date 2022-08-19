@@ -124,6 +124,16 @@
 
 # metal-build
 
+- Delete hash and bindings when shader compilation (step before bindings) or bindings fails
+    - Currently, the following sequence causes `shader_bindings.rs` not to be re-created
+        1. Successfully generate bindings
+        2. Update bindings `.h` with a bindings-only error
+            - Ex. Reference something only only defined in `#ifdef __METAL_VERSION__`
+        3. Bindings will be messed up (only preamble)
+        4. hash will be outdated, still the same hash after #1
+        5. Fix bindings `.h` by undo-ing changes of #2
+        6. Bindings don't get regenerated because the hash is the same #1!
+
 # metal-types
 
 # xcode-project

@@ -37,7 +37,8 @@ struct Delegate {
     command_queue: CommandQueue,
     cubemap_texture: Texture,
     depth_texture: DepthTexture,
-    debug_ray: TypedBuffer<DebugRay>,
+    debug_path: TypedBuffer<DebugPath>,
+    debug_path_show: bool,
     device: Device,
     library: Library,
     main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)>,
@@ -55,6 +56,7 @@ fn create_main_render_pipeline(
     device: &Device,
     library: &Library,
     mode: ShadingModeSelector,
+    has_debug_path: bool,
 ) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)> {
     RenderPipeline::new(
         "Model",
@@ -67,6 +69,7 @@ fn create_main_render_pipeline(
             HasDiffuse: mode.contains(ShadingModeSelector::HAS_DIFFUSE),
             OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
             HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
+            HasDebugPath: has_debug_path,
         },
         (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
     )
@@ -151,6 +154,7 @@ impl RendererDelgate for Delegate {
         );
 
         let shading_mode = ShadingModeSelector::DEFAULT;
+        let debug_path_show = false;
         let ds = DepthStencilDescriptor::new();
         let s = StencilDescriptor::new();
         let library = device
@@ -204,7 +208,12 @@ impl RendererDelgate for Delegate {
                 dbg_fragment,
                 (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
-            main_render_pipeline: create_main_render_pipeline(&device, &library, shading_mode),
+            main_render_pipeline: create_main_render_pipeline(
+                &device,
+                &library,
+                shading_mode,
+                debug_path_show,
+            ),
             m_model_to_world,
             command_queue,
             camera: Camera::new_with_default_distance(
@@ -229,10 +238,11 @@ impl RendererDelgate for Delegate {
             stencil_texture: DepthTexture::new("Stencil", STENCIL_TEXTURE_FORMAT),
             world_as,
             model,
-            debug_ray: TypedBuffer::from_data(
-                "DebugRay",
+            debug_path_show,
+            debug_path: TypedBuffer::from_data(
+                "DebugPath",
                 device.deref(),
-                &[DebugRay::default()],
+                &[DebugPath::default()],
                 MTLResourceOptions::StorageModeShared,
             ),
             device,
@@ -304,7 +314,7 @@ impl RendererDelgate for Delegate {
                         m_model_to_worlds: BindMany::buffer(
                             &self.world_as.model_to_world_transform_buffers,
                         ),
-                        dbg_ray: BindMany::buffer(&self.debug_ray),
+                        dbg_path: Bind::buffer(&self.debug_path),
                     },
                 );
                 draw_model(&p, &self.model);
@@ -346,37 +356,39 @@ impl RendererDelgate for Delegate {
                 // );
             },
         );
-        self.dbg_render_pipeline.new_pass(
-            "Debug Pass",
-            &command_buffer,
-            [(
-                &render_target,
-                (0., 0., 0., 0.),
-                MTLLoadAction::Load,
-                MTLStoreAction::Store,
-            )],
-            (
-                &depth_tx,
-                0.0,
-                MTLLoadAction::Load,
-                MTLStoreAction::DontCare,
-            ),
-            NoStencil,
-            &self.dbg_depth_state,
-            &[],
-            |p| {
-                p.draw_primitives_with_binds(
-                    dbg_vertex_binds {
-                        camera: Bind::Value(&self.camera_space),
-                        dbg_ray: Bind::buffer(&self.debug_ray),
-                    },
-                    Binds::SKIP,
-                    MTLPrimitiveType::LineStrip,
-                    0,
-                    5,
-                )
-            },
-        );
+        if self.debug_path_show {
+            self.dbg_render_pipeline.new_pass(
+                "Debug Pass",
+                &command_buffer,
+                [(
+                    &render_target,
+                    (0., 0., 0., 0.),
+                    MTLLoadAction::Load,
+                    MTLStoreAction::Store,
+                )],
+                (
+                    &depth_tx,
+                    0.0,
+                    MTLLoadAction::Load,
+                    MTLStoreAction::DontCare,
+                ),
+                NoStencil,
+                &self.dbg_depth_state,
+                &[],
+                |p| {
+                    p.draw_primitives_with_binds(
+                        dbg_vertex_binds {
+                            camera: Bind::Value(&self.camera_space),
+                            dbg_path: Bind::buffer(&self.debug_path),
+                        },
+                        Binds::SKIP,
+                        MTLPrimitiveType::LineStrip,
+                        0,
+                        DEBUG_PATH_MAX_NUM_POINTS as _,
+                    )
+                },
+            );
+        }
         command_buffer
     }
 
@@ -396,8 +408,12 @@ impl RendererDelgate for Delegate {
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {
-            self.main_render_pipeline =
-                create_main_render_pipeline(&self.device, &self.library, self.shading_mode);
+            self.main_render_pipeline = create_main_render_pipeline(
+                &self.device,
+                &self.library,
+                self.shading_mode,
+                self.debug_path_show,
+            );
             self.needs_render = true;
         }
         if self.depth_texture.on_event(event, &self.device) {
@@ -406,15 +422,36 @@ impl RendererDelgate for Delegate {
         if self.stencil_texture.on_event(event, &self.device) {
             self.needs_render = true;
         }
-        let dbg_ray = &mut self.debug_ray.get_mut()[0];
+        // TODO: START HERE
+        // TODO: START HERE
+        // TODO: START HERE
+        // Extract event handling and rendering into a component.
+        let debug_path = &mut self.debug_path.get_mut()[0];
         match event {
-            UserEvent::MouseMoved { position } if !dbg_ray.disabled => {
+            UserEvent::MouseDrag { position, .. } | UserEvent::MouseMoved { position }
+                if !debug_path.update_disabled =>
+            {
                 let position = position / f32x2::splat(1.0);
-                dbg_ray.screen_pos = position.into();
-                self.needs_render = true
+                debug_path.screen_pos = position.into();
+                self.needs_render = true;
             }
-            UserEvent::KeyDown { key_code, .. } if key_code == UserEvent::KEY_CODE_SPACEBAR => {
-                dbg_ray.disabled = !dbg_ray.disabled;
+            UserEvent::KeyDown {
+                key_code,
+                modifier_keys,
+                ..
+            } if key_code == UserEvent::KEY_CODE_P => {
+                if modifier_keys.contains(ModifierKeys::SHIFT) {
+                    debug_path.update_disabled = !debug_path.update_disabled;
+                } else if modifier_keys.is_empty() {
+                    self.debug_path_show = !self.debug_path_show;
+                    self.main_render_pipeline = create_main_render_pipeline(
+                        &self.device,
+                        &self.library,
+                        self.shading_mode,
+                        self.debug_path_show,
+                    );
+                    self.needs_render = true;
+                }
             }
             _ => {}
         }

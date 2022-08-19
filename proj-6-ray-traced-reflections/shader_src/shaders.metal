@@ -49,7 +49,7 @@ half4 main_fragment(         VertexOut                 in                [[stage
                     // direction achieving the same result.
                     constant MTLPackedFloat4x3       * m_model_to_worlds [[buffer(2)]],
                     primitive_acceleration_structure   accel_struct      [[buffer(3)]],
-                    device   DebugRay                * dbg_ray           [[buffer(4)]],
+                    device   DebugPath               & dbg_path          [[buffer(4)]],
                              texturecube<half>         env_texture       [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
@@ -74,44 +74,28 @@ half4 main_fragment(         VertexOut                 in                [[stage
     auto intersection = intersector.intersect(r, accel_struct);
 
     // Are we debugging this screen position? (within a half pixel)
-    const float2 screen_pos       = in.position.xy;
-    const float2 debug_screen_pos = dbg_ray->screen_pos;
-    const float2 diff             = abs(debug_screen_pos - screen_pos);
-    const bool   is_debug         = !dbg_ray->disabled && all(diff <= float2(0.5));
-    // TODO: START HERE
-    // TODO: START HERE
-    // TODO: START HERE
-    // Try to figure out why the primary ray going into teapot spout punches through.
-    // - Xcode acceleration structure viewer seems alright (model is okay)
-    // - Is this "terminator" problem RT Gems II mentioned?
-    //   - Is the intersection happening "below" the geometry in the AS and then secondary/third ray
-    //     bounces internally?
-    // - Look at the original `normal` does it look right?
-    if (is_debug) {
-        dbg_ray->points[0]   = camera_pos;
-        dbg_ray->points[1]   = pos;
-        dbg_ray->points[2]   = dbg_ray->points[1];
-        dbg_ray->points[3]   = dbg_ray->points[1];
-        dbg_ray->points[4]   = dbg_ray->points[1];
+    DebugPathHelper dbg;
+    if (HasDebugPath) {
+        dbg = dbg_path.activate_if_screen_pos(in.position.xy);
+        dbg.add_point(camera_pos);
+        dbg.add_point(pos);
     }
+
     if (intersection.type != raytracing::intersection_type::none) {
         // Assumption: Everything in the acceleration structure has the same (mirror) material.
-        // intersection
+        // intersection.
         const float3 normal = get_normal(intersection, m_model_to_worlds);
-        if (is_debug) {
-            dbg_ray->points[2] = r.origin + (r.direction * intersection.distance);
-            dbg_ray->points[3] = dbg_ray->points[1] + reflect(r.direction, normal);
-        }
+        if (HasDebugPath) dbg.add_intersection(r, intersection);
 
         r.origin    = r.origin + (r.direction * intersection.distance);
         r.direction = reflect(r.direction, normal);
         auto intersection2 = intersector.intersect(r, accel_struct);
-        if (is_debug){
+        if (HasDebugPath) {
             if (intersection2.type != raytracing::intersection_type::none) {
-                dbg_ray->points[3] = r.origin + (r.direction * intersection2.distance);
-                dbg_ray->points[4] = dbg_ray->points[3] + reflect(r.direction, get_normal(intersection2, m_model_to_worlds));
+                dbg.add_intersection(r, intersection2);
+                dbg.add_relative_point(reflect(r.direction, get_normal(intersection2, m_model_to_worlds)));
             } else {
-                dbg_ray->points[4] = dbg_ray->points[3];
+                dbg.add_relative_point(reflect(ref, normal));
             }
         }
 
@@ -124,15 +108,19 @@ half4 main_fragment(         VertexOut                 in                [[stage
         // TODO: START HERE
         // TODO: START HERE
         // TODO: START HERE
-        // 1. Update DebugRay to show the incoming camera ray
-        // 2. Verify w/DebugRay
-        // 3. Add a 2nd bounce ray instersection (if intersection exists)
-        // 4. Verify results with w/DebugRay
-        // 5. Use 2nd bounce ray intersection for shading
+        // Generalize path tracing to N bounces (loop)
+        // - Currently we've hardcoded 2 intersections
+        // - Because it's hardcoded, the call to intersect() happens in multiple places and I wonder
+        //   if it increases # instructions/registers/spilled-bytes.
+        // - If it were in a loop, one call point less instructions/registers/spilled-bytes?
     } else {
+        if (HasDebugPath) dbg.add_relative_point(ref);
         color = env_texture.sample(tx_sampler, float3(ref));
     }
-    if (is_debug) {
+
+    // Render a single red pixel, so this pixel can easily be targetted for the shader debugger in
+    // the GPU Frame Capture.
+    if (HasDebugPath && dbg.active) {
         return half4(1, 0, 0, 1);
     }
     return shade_phong_blinn(
@@ -177,18 +165,12 @@ half4 bg_fragment(         BGVertexOut         in          [[stage_in]],
     return color;
 }
 
-struct DbgVertexOut {
-    float4 position [[position]];
-};
-
 [[vertex]]
-DbgVertexOut dbg_vertex(         uint             vertex_id [[vertex_id]],
-                     constant ProjectedSpace & camera    [[buffer(1)]],
-                     constant DebugRay       & dbg_ray   [[buffer(0)]]) {
-    if (vertex_id >= 0 && vertex_id <= 4) {
-        return { .position = (camera.m_world_to_projection * float4(dbg_ray.points[vertex_id], 1)) };
-    }
-    return { .position = 0 };
+float4 dbg_vertex(         uint             vertex_id [[vertex_id]],
+                        constant ProjectedSpace & camera    [[buffer(1)]],
+                        constant DebugPath      & dbg_path  [[buffer(0)]]) {
+    const uint vid = clamp(vertex_id, (uint) 0, (uint) (dbg_path.num_points - 1));
+    return (camera.m_world_to_projection * float4(dbg_path.points[vid], 1));
 }
 
 [[fragment]]

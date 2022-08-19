@@ -243,37 +243,38 @@ impl Default for ProjectedSpace {
         }
     }
 }
-pub const MAX_DEBUG_RAY_POINTS: ::std::os::raw::c_uint = 8;
+pub const DEBUG_PATH_MAX_NUM_POINTS: ::std::os::raw::c_uint = 8;
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct DebugRay {
+pub struct DebugPath {
     pub points: [packed_float3; 8usize],
     pub screen_pos: float2,
-    pub disabled: bool,
+    pub update_disabled: bool,
+    pub num_points: ::std::os::raw::c_uchar,
 }
 #[test]
-fn bindgen_test_layout_DebugRay() {
+fn bindgen_test_layout_DebugPath() {
     assert_eq!(
-        ::std::mem::size_of::<DebugRay>(),
+        ::std::mem::size_of::<DebugPath>(),
         112usize,
-        concat!("Size of: ", stringify!(DebugRay))
+        concat!("Size of: ", stringify!(DebugPath))
     );
     assert_eq!(
-        ::std::mem::align_of::<DebugRay>(),
+        ::std::mem::align_of::<DebugPath>(),
         8usize,
-        concat!("Alignment of ", stringify!(DebugRay))
+        concat!("Alignment of ", stringify!(DebugPath))
     );
     fn test_field_points() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<DebugPath>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).points) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
-                stringify!(DebugRay),
+                stringify!(DebugPath),
                 "::",
                 stringify!(points)
             )
@@ -283,39 +284,56 @@ fn bindgen_test_layout_DebugRay() {
     fn test_field_screen_pos() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<DebugPath>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).screen_pos) as usize - ptr as usize
             },
             96usize,
             concat!(
                 "Offset of field: ",
-                stringify!(DebugRay),
+                stringify!(DebugPath),
                 "::",
                 stringify!(screen_pos)
             )
         );
     }
     test_field_screen_pos();
-    fn test_field_disabled() {
+    fn test_field_update_disabled() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<DebugRay>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<DebugPath>::uninit();
                 let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).disabled) as usize - ptr as usize
+                ::std::ptr::addr_of!((*ptr).update_disabled) as usize - ptr as usize
             },
             104usize,
             concat!(
                 "Offset of field: ",
-                stringify!(DebugRay),
+                stringify!(DebugPath),
                 "::",
-                stringify!(disabled)
+                stringify!(update_disabled)
             )
         );
     }
-    test_field_disabled();
+    test_field_update_disabled();
+    fn test_field_num_points() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<DebugPath>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).num_points) as usize - ptr as usize
+            },
+            105usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(DebugPath),
+                "::",
+                stringify!(num_points)
+            )
+        );
+    }
+    test_field_num_points();
 }
-impl Default for DebugRay {
+impl Default for DebugPath {
     fn default() -> Self {
         let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -364,7 +382,7 @@ pub struct main_fragment_binds<'c> {
     pub light_pos: Bind<'c, float4>,
     pub m_model_to_worlds: BindMany<'c, MTLPackedFloat4x3>,
     pub accel_struct: BindAccelerationStructure<'c>,
-    pub dbg_ray: BindMany<'c, DebugRay>,
+    pub dbg_path: Bind<'c, DebugPath>,
     pub env_texture: BindTexture<'c>,
 }
 impl Binds for main_fragment_binds<'_> {
@@ -373,7 +391,7 @@ impl Binds for main_fragment_binds<'_> {
         light_pos: Bind::Skip,
         m_model_to_worlds: BindMany::Skip,
         accel_struct: BindAccelerationStructure::Skip,
-        dbg_ray: BindMany::Skip,
+        dbg_path: Bind::Skip,
         env_texture: BindTexture::Skip,
     };
 
@@ -383,7 +401,7 @@ impl Binds for main_fragment_binds<'_> {
         self.light_pos.bind::<F>(encoder, 1);
         self.m_model_to_worlds.bind::<F>(encoder, 2);
         self.accel_struct.bind::<F>(encoder, 3);
-        self.dbg_ray.bind::<F>(encoder, 4);
+        self.dbg_path.bind::<F>(encoder, 4);
         self.env_texture.bind::<F>(encoder, 0);
     }
 }
@@ -394,6 +412,7 @@ pub struct main_fragment {
     pub HasDiffuse: bool,
     pub OnlyNormals: bool,
     pub HasSpecular: bool,
+    pub HasDebugPath: bool,
 }
 impl metal_app::pipeline::function::Function for main_fragment {
     const FUNCTION_NAME: &'static str = "main_fragment";
@@ -405,6 +424,7 @@ impl metal_app::pipeline::function::Function for main_fragment {
         fcv.set_constant_value_at_index((&self.HasDiffuse as *const _) as _, bool::MTL_DATA_TYPE, 1);
         fcv.set_constant_value_at_index((&self.OnlyNormals as *const _) as _, bool::MTL_DATA_TYPE, 2);
         fcv.set_constant_value_at_index((&self.HasSpecular as *const _) as _, bool::MTL_DATA_TYPE, 3);
+        fcv.set_constant_value_at_index((&self.HasDebugPath as *const _) as _, bool::MTL_DATA_TYPE, 4);
         Some(fcv)
     }
 }
@@ -447,18 +467,18 @@ impl PipelineFunction<FragmentFunctionType> for bg_fragment {}
 #[allow(non_camel_case_types)]
 pub struct dbg_vertex_binds<'c> {
     pub camera: Bind<'c, ProjectedSpace>,
-    pub dbg_ray: Bind<'c, DebugRay>,
+    pub dbg_path: Bind<'c, DebugPath>,
 }
 impl Binds for dbg_vertex_binds<'_> {
     const SKIP: Self = Self {
         camera: Bind::Skip,
-        dbg_ray: Bind::Skip,
+        dbg_path: Bind::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.camera.bind::<F>(encoder, 1);
-        self.dbg_ray.bind::<F>(encoder, 0);
+        self.dbg_path.bind::<F>(encoder, 0);
     }
 }
 
