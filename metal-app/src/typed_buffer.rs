@@ -44,6 +44,7 @@ pub struct TypedBufferSizer<T: Sized + Copy + Clone> {
 }
 
 impl<T: Sized + Copy + Clone> TypedBufferSizer<T> {
+    #[inline]
     pub fn new(num_of_elements: usize, options: MTLResourceOptions) -> Self {
         Self {
             num_of_elements,
@@ -52,6 +53,7 @@ impl<T: Sized + Copy + Clone> TypedBufferSizer<T> {
         }
     }
 
+    #[inline]
     pub fn heap_aligned_byte_size(&self, device: &DeviceRef) -> usize {
         #[inline(always)]
         pub const fn align_size(MTLSizeAndAlign { size, align }: MTLSizeAndAlign) -> usize {
@@ -63,6 +65,7 @@ impl<T: Sized + Copy + Clone> TypedBufferSizer<T> {
         ))
     }
 
+    #[inline]
     pub fn allocate<A: MetalBufferAllocator>(&self, label: &str, allocator: &A) -> TypedBuffer<T> {
         TypedBuffer::with_capacity(label, allocator, self.num_of_elements, self.options)
     }

@@ -607,7 +607,7 @@ pub struct MTLQuadTessellationFactorsHalf {
 
 impl MTLQuadTessellationFactorsHalf {
     pub fn new(v: u16) -> Self {
-        let v = ::half::f16::from_f32(v as _).to_bits();
+        let v = half::f16::from_f32(v as _).to_bits();
         Self {
             edgeTessellationFactor: [v; 4],
             insideTessellationFactor: [v; 2],

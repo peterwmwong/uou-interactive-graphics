@@ -62,6 +62,7 @@ impl UserEvent {
     pub const KEY_CODE_P: c_ushort = 35;
 }
 
+#[inline]
 pub fn remove_modifier_keys(event: UserEvent, modifier_keys_to_remove: ModifierKeys) -> UserEvent {
     match event {
         UserEvent::MouseDown {
@@ -179,13 +180,5 @@ impl<R: RendererDelgate> MetalRenderer<R> {
     #[inline]
     pub(crate) fn on_event(&mut self, event: UserEvent) {
         self.delegate.on_event(event);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(7, 7);
     }
 }

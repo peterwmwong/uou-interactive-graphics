@@ -4,9 +4,9 @@ use super::all_metal_types::{packed_half3, TriNormalsIndex};
 fn to_packed_half3(v: &[f32], i: usize) -> packed_half3 {
     packed_half3 {
         xyz: [
-            ::half::f16::from_f32(v[i]).to_bits(),
-            ::half::f16::from_f32(v[i + 1]).to_bits(),
-            ::half::f16::from_f32(v[i + 2]).to_bits(),
+            half::f16::from_f32(v[i]).to_bits(),
+            half::f16::from_f32(v[i + 1]).to_bits(),
+            half::f16::from_f32(v[i + 2]).to_bits(),
         ],
     }
 }
