@@ -2,7 +2,7 @@
 #include "./shader_bindings.h"
 
 using namespace metal;
-using raytracing::primitive_acceleration_structure;
+using namespace raytracing;
 
 struct VertexOut
 {
@@ -19,6 +19,11 @@ VertexOut main_vertex(
           : VertexOut { .position = float4(0) };
 }
 
+struct PrimitiveData {
+    packed_half3 normals[3];
+    ushort       m_model_to_worlds_i;
+};
+
 [[fragment]]
 half4 main_fragment(
              VertexOut                         in                    [[stage_in]],
@@ -29,28 +34,28 @@ half4 main_fragment(
 ) {
     const float4 pos_w       = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos         = pos_w.xyz / pos_w.w;
-    const float3 camera_pos_ = camera_pos.xyz;
+    const ray    r(camera_pos.xyz, normalize(pos - camera_pos.xyz));
 
-    raytracing::ray r;
-    r.origin       = float3(camera_pos_);
-    r.direction    = normalize(pos - camera_pos_);
-    r.min_distance = 0.001;
-    r.max_distance = FLT_MAX;
-
-    raytracing::intersector<raytracing::triangle_data> intersector;
-    intersector.assume_geometry_type(raytracing::geometry_type::triangle);
+    intersector<triangle_data> intersector;
+    intersector.set_triangle_cull_mode(raytracing::triangle_cull_mode::back);
+    intersector.assume_geometry_type(geometry_type::triangle);
     auto intersection = intersector.intersect(r, accelerationStructure);
-    if (intersection.type == raytracing::intersection_type::triangle) {
-        const float2 b2     = intersection.triangle_barycentric_coord;
-        const float3 b3     = float3(1.0 - (b2.x + b2.y), b2.x, b2.y);
-        const auto   n      = (const device packed_half3 *) intersection.primitive_data;
-        const float3 n0     = float3(n[0]);
-        const float3 n1     = float3(n[1]);
-        const float3 n2     = float3(n[2]);
-        const float3 normal = (n0 * b3.x) + (n1 * b3.y) + (n2 * b3.z);
-        constant MTLPackedFloat4x3 * m      = &(m_model_to_worlds[intersection.geometry_id]);
-        const    float3x3            n_to_w = float3x3((*m)[0], (*m)[1], (*m)[2]);
-        return half4(half3(normalize(n_to_w * normal)), 1);
+    if (intersection.type == intersection_type::triangle) {
+        const auto    p      = (const device PrimitiveData *) intersection.primitive_data;
+        const auto    m      = &(m_model_to_worlds[p->m_model_to_worlds_i]);
+        const half2   b2     = half2(intersection.triangle_barycentric_coord);
+        const half3   b      = half3(1.0 - (b2.x + b2.y), b2.x, b2.y);
+        const auto    n      = p->normals;
+        const half3   normal = (n[0] * b.x) + (n[1] * b.y) + (n[2] * b.z);
+        return half4(
+            // IMPORTANT: Converting to float before normalize may seem redundant, but for models
+            // like yoda, small half precision normals seems to cause normalize to go bonkers.
+            half3(normalize(float3(
+                half3x3(half3((*m)[0]), half3((*m)[1]), half3((*m)[2]))
+                * normal
+            ))),
+            1
+        );
     }
     return 0;
 }

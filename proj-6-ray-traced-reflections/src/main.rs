@@ -272,7 +272,7 @@ impl RendererDelgate for Delegate {
                         accel_struct: self.world_as.bind(),
                         env_texture: BindTexture(&self.cubemap_texture),
                         m_model_to_worlds: BindMany::buffer(
-                            &self.world_as.model_to_world_transform_buffers,
+                            &self.world_as.m_model_to_worlds_buffer,
                         ),
                         dbg_path: Bind::buffer(&self.debug_path),
                     },

@@ -62,6 +62,7 @@ impl RendererDelgate for Delegate {
                     let [cx, cy, cz, _] = center.neg().to_array();
                     let scale = 1. / size.reduce_max();
                     f32x4x4::scale(scale, scale, scale, 1.)
+                        * f32x4x4::y_rotate(PI)
                         * f32x4x4::x_rotate(PI / 2.)
                         * f32x4x4::translate(cx, cy, cz)
                 },
@@ -102,7 +103,7 @@ impl RendererDelgate for Delegate {
                         camera: Bind::Value(&self.camera_space),
                         camera_pos: Bind::Value(&self.camera_position),
                         m_model_to_worlds: BindMany::buffer(
-                            &self.model_accel_struct.model_to_world_transform_buffers,
+                            &self.model_accel_struct.m_model_to_worlds_buffer,
                         ),
                     },
                     MTLPrimitiveType::Triangle,
