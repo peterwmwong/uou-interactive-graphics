@@ -16,6 +16,14 @@ struct alignas(16) float4 {
     float xyzw[4];
 };
 
+struct alignas(4) half2 {
+    unsigned short xy[2];
+};
+
+struct alignas(8) half4 {
+    unsigned short xyzw[4];
+};
+
 struct alignas(4) ushort2 {
     unsigned short xy[2];
 };
@@ -27,11 +35,23 @@ struct alignas(4) packed_float2 {
 };
 
 struct alignas(4) packed_float3 {
-    float xyzw[3];
+    float xyz[3];
 };
 
 struct alignas(4) packed_float4 {
     float xyzw[4];
+};
+
+struct alignas(2) packed_half2 {
+    unsigned short xy[2];
+};
+
+struct alignas(2) packed_half3 {
+    unsigned short xyz[3];
+};
+
+struct alignas(2) packed_half4 {
+    unsigned short xyzw[4];
 };
 
 // Spec: 2.3 Matrix Data Types / Table 2.5. Size and alignment of matrix data types

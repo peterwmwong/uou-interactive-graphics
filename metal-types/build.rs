@@ -1,5 +1,12 @@
 use bindgen::{callbacks::ParseCallbacks, CargoCallbacks};
-use std::{env, fmt::Debug, fs, io::Write, path::Path};
+use std::{
+    env,
+    fmt::Debug,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+};
 
 const METAL_BUILD_MANIFEST_DIR: &'static str = env!("CARGO_MANIFEST_DIR");
 
@@ -35,21 +42,68 @@ impl ParseCallbacks for CollectItems {
     }
 }
 
+fn get_shader_deps(shader_path: &str) -> Vec<PathBuf> {
+    let Output { stdout, .. } = run_command(
+        Command::new("xcrun")
+            .args(&[
+                "-sdk",
+                "macosx",
+                "metal",
+                "-std=metal3.0",
+                shader_path,
+                "-MM",
+            ])
+            .env_clear(),
+    );
+    let mut deps = vec![];
+    for l in std::str::from_utf8(&stdout)
+        .expect("Failed to read dependencies output")
+        .lines()
+        .filter(|l| l.starts_with("  ") && !l.contains("include/metal/module.modulemap"))
+    {
+        let dep = l.trim_end_matches(" \\").trim_start_matches(' ');
+        let dep = PathBuf::from(dep).canonicalize().expect(&format!(
+            "Failed to canonicalize path to dependency {dep:?}"
+        ));
+        if !deps.contains(&dep) {
+            deps.push(dep);
+        }
+    }
+    deps
+}
+
 // Verifies `rust_bindgen_only_metal_types_bindings.rs`.
 pub fn main() {
     // TODO: Figure out a way to keep this in-sync with lib.rs
     let src_dir = Path::new(METAL_BUILD_MANIFEST_DIR).join("src");
-    let header = src_dir.join("rust_bindgen_only_metal_types.h");
+    let header = src_dir.join("all_metal_types.h");
+    let mut deps = get_shader_deps(&concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/all_metal_types.metal"
+    ));
+    deps.push(header.clone());
+    let deps_refs: Vec<&dyn AsRef<Path>> = deps.iter().map(|a| a as _).collect();
+
     build_hash::build_hash(
-        src_dir.join("rust_bindgen_only_metal_types_h_hash"),
-        &[&header],
+        src_dir.join("all_metal_types_h_hash"),
+        &deps_refs[..],
         || {
-            let mut rust_bindgen_only_metal_types_file = fs::File::options()
+            let mut all_metal_types_file = fs::File::options()
             .write(true)
             .truncate(true)
             .create(true)
-            .open(&src_dir.join("rust_bindgen_only_metal_types.rs"))
-            .expect("Could not create rust_bindgen_only_metal_types.rs containing Rust bindings for types in src/rust_bindgen_only_metal_types.h");
+            .open(&src_dir.join("all_metal_types.rs"))
+            .expect("Could not create all_metal_types.rs containing Rust bindings for types in src/all_metal_types.h");
+
+            all_metal_types_file
+                .write_all(
+                    r#"#![allow(non_snake_case)]
+"#
+                    .as_bytes(),
+                )
+                .expect(
+                    "Failed to generate tests verifying all generated Rust types implement Copy",
+                );
 
             bindgen::Builder::default()
                 .header(header.to_string_lossy())
@@ -65,19 +119,19 @@ pub fn main() {
                 .parse_callbacks(Box::new(CollectItems::new()))
                 .generate()
                 .expect("Unable to generate bindings")
-                .write(Box::new(&rust_bindgen_only_metal_types_file))
-                .expect("Failed to generate rust_bindgen_only_metal_types.rs");
+                .write(Box::new(&all_metal_types_file))
+                .expect("Failed to generate all_metal_types.rs");
             unsafe {
                 ITEMS.sort();
             }
 
-            // Generate tests to verify all Metal Types derive Copy/Clone.
-            let mut w =
-                |s: &str| {
-                    rust_bindgen_only_metal_types_file.write_all(s.as_bytes()).expect(
+            let mut w = |s: &str| {
+                all_metal_types_file.write_all(s.as_bytes()).expect(
                     "Failed to generate tests verifying all generated Rust types implement Copy",
                 );
-                };
+            };
+
+            // Generate tests to verify all Metal Types derive Copy/Clone.
             w("
 #[test]
 fn test_metal_types_derive_copy() {
@@ -93,7 +147,7 @@ fn test_metal_types_derive_copy() {
 }");
             std::fs::write(
     src_dir
-        .join("rust_bindgen_only_metal_types_list.rs"),
+        .join("all_metal_types_list.rs"),
     unsafe {
         let joined_items = ITEMS
             .iter()
@@ -113,4 +167,21 @@ pub const TYPES: [&'static str; {num_items}] = [
 .expect("Failed to write tmp.txt");
         },
     );
+}
+
+fn run_command(command: &mut Command) -> Output {
+    let out = command
+        .output()
+        .expect(&format!("Failed to run command {command:?}"));
+    if !out.status.success() {
+        panic!(
+            r#"
+    stdout: {}
+    stderr: {}
+    "#,
+            String::from_utf8(out.stdout).unwrap(),
+            String::from_utf8(out.stderr).unwrap()
+        );
+    }
+    out
 }

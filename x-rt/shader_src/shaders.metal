@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "./shader_bindings.h"
+#include "../../metal-types/src/tri_normals_index.h"
 
 using namespace metal;
 using namespace raytracing;
@@ -19,11 +20,6 @@ VertexOut main_vertex(
           : VertexOut { .position = float4(0) };
 }
 
-struct PrimitiveData {
-    packed_half3 normals[3];
-    ushort       m_model_to_worlds_i;
-};
-
 [[fragment]]
 half4 main_fragment(
              VertexOut                         in                    [[stage_in]],
@@ -41,8 +37,8 @@ half4 main_fragment(
     intersector.assume_geometry_type(geometry_type::triangle);
     auto intersection = intersector.intersect(r, accelerationStructure);
     if (intersection.type == intersection_type::triangle) {
-        const auto    p      = (const device PrimitiveData *) intersection.primitive_data;
-        const auto    m      = &(m_model_to_worlds[p->m_model_to_worlds_i]);
+        const auto    p      = (const device TriNormalsIndex *) intersection.primitive_data;
+        const auto    m      = &(m_model_to_worlds[p->index]);
         const half2   b2     = half2(intersection.triangle_barycentric_coord);
         const half3   b      = half3(1.0 - (b2.x + b2.y), b2.x, b2.y);
         const auto    n      = p->normals;

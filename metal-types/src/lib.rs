@@ -1,11 +1,13 @@
 #![feature(array_zip)]
 #![feature(portable_simd)]
-mod rust_bindgen_only_metal_types;
-mod rust_bindgen_only_metal_types_list;
+mod all_metal_types;
+mod all_metal_types_list;
+mod tri_normals_index;
 
+pub use all_metal_types::*;
+pub use all_metal_types_list::*;
 use metal::{MTLPackedFloat3, MTLPackedFloat4x3};
-pub use rust_bindgen_only_metal_types::*;
-pub use rust_bindgen_only_metal_types_list::*;
+pub use tri_normals_index::*;
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read Metal types.
@@ -605,7 +607,7 @@ pub struct MTLQuadTessellationFactorsHalf {
 
 impl MTLQuadTessellationFactorsHalf {
     pub fn new(v: u16) -> Self {
-        let v = half::f16::from_f32(v as _).to_bits();
+        let v = ::half::f16::from_f32(v as _).to_bits();
         Self {
             edgeTessellationFactor: [v; 4],
             insideTessellationFactor: [v; 2],

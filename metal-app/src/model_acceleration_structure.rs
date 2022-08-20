@@ -19,13 +19,6 @@ use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
 
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct PrimitiveData {
-    pub normals: [[u16; 3]; 3],
-    pub m_model_to_worlds_i: u16,
-}
-
 struct Draw {
     name: String,
     vertex_byte_offset: u32,
@@ -152,19 +145,22 @@ impl ModelAccelerationStructure {
                     // `geometry_buffers.normals`.
                     {
                         let num_vertices = draw.triangle_count * 3;
-                        let primitive_data_buffer: TypedBuffer<PrimitiveData> =
+                        let primitive_data_buffer: TypedBuffer<TriNormalsIndex> =
                             TypedBuffer::with_capacity(
                                 "Normal Primitive Data",
                                 device.deref(),
                                 draw.triangle_count as _,
                                 MTLResourceOptions::StorageModeShared,
                             );
-                        let h = |v: f32| half::f16::from_f32(v).to_bits();
                         // TODO: How "bad" (<0 or >1) are the incoming normals?
                         // - More UNorm-able normals should improve performance (use half precision
                         //   arithmetic) and correctness (less error)
                         // - How far can we push this... 8 bits?
                         let primitive_data = primitive_data_buffer.get_mut();
+                        // TODO: START HERE
+                        // TODO: START HERE
+                        // TODO: START HERE
+                        // Do this once at the top and calculate the indices `draw.normal_byte_offset` accordingly
                         let normals = unsafe {
                             std::slice::from_raw_parts_mut(
                                 geometry_buffers
@@ -186,15 +182,12 @@ impl ModelAccelerationStructure {
                             )
                         };
                         for i in 0..(draw.triangle_count as usize) {
-                            for v_i in 0..3 {
-                                let raw_i = (indices[i * 3 + v_i] * 3) as usize;
-                                primitive_data[i].m_model_to_worlds_i = m_model_to_world_i as _;
-                                primitive_data[i].normals[v_i] = [
-                                    h(normals[raw_i]),
-                                    h(normals[raw_i + 1]),
-                                    h(normals[raw_i + 2]),
-                                ];
-                            }
+                            primitive_data[i] = TriNormalsIndex::from_indexed_raw_normals(
+                                normals,
+                                indices,
+                                i,
+                                m_model_to_world_i as _,
+                            );
                         }
                         tri_as_desc.set_primitive_data_buffer(Some(&primitive_data_buffer.raw));
                         tri_as_desc.set_primitive_data_buffer_offset(0);
