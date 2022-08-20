@@ -157,17 +157,15 @@ impl ModelAccelerationStructure {
                         // - More UNorm-able normals should improve performance (use half precision
                         //   arithmetic) and correctness (less error)
                         // - How far can we push this... 8 bits?
+                        let raw_normals = &normals
+                            [(draw.normal_byte_offset as usize / std::mem::size_of::<f32>())..];
+                        let raw_indices = &indices
+                            [(draw.index_byte_offset as usize / std::mem::size_of::<u32>())..];
                         let primitive_data = primitive_data_buffer.get_mut();
-                        // TODO: START HERE
-                        // TODO: START HERE
-                        // TODO: START HERE
-                        // Do this once at the top and calculate the indices `draw.normal_byte_offset` accordingly
                         for i in 0..(draw.triangle_count as usize) {
                             primitive_data[i] = TriNormalsIndex::from_indexed_raw_normals(
-                                &normals[((draw.normal_byte_offset as usize)
-                                    / std::mem::size_of::<f32>())..],
-                                &indices[((draw.index_byte_offset as usize)
-                                    / std::mem::size_of::<u32>())..],
+                                raw_normals,
+                                raw_indices,
                                 i,
                                 m_model_to_world_i as _,
                             );
