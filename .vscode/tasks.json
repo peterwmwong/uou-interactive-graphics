@@ -242,6 +242,20 @@
             ],
             "args": [
                 "--bin",
+                "proj-6-ray-traced-reflections",
+                "--",
+                "${workspaceFolder}/common-assets/yoda/yoda.obj"
+            ],
+            "label": "Run proj-6-ray-traced-reflections yoda"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
                 "proj-7-shadow-mapping",
                 "--",
                 "${workspaceFolder}/common-assets/teapot/teapot.obj"
@@ -330,6 +344,20 @@
                 "${workspaceFolder}/proj-8-tesselation/assets/teapot_disp.png",
             ],
             "label": "Run proj-8-tesselation normal and disp"
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "args": [
+                "--bin",
+                "x-rt",
+                "--",
+                "${workspaceFolder}/common-assets/plane/plane.obj"
+            ],
+            "label": "Run x-rt plane"
         },
         {
             "type": "cargo",
