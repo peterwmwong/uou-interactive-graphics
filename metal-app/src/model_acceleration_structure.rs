@@ -122,6 +122,8 @@ impl ModelAccelerationStructure {
                 let m_model_to_world_i = i;
                 m_model_to_worlds[i] = init_m_model_to_world(&geometry.max_bounds, i).into();
 
+                let normals = geometry_buffers.normals.get();
+                let indices = geometry_buffers.indices.get();
                 tri_as_descs.extend(draws.into_iter().map(|draw| {
                     let tri_as_desc = AccelerationStructureTriangleGeometryDescriptor::descriptor();
                     tri_as_desc.set_vertex_format(MTLAttributeFormat::Float3);
@@ -144,7 +146,6 @@ impl ModelAccelerationStructure {
                     // Normals as primitive data. It is the non-indexed version of the
                     // `geometry_buffers.normals`.
                     {
-                        let num_vertices = draw.triangle_count * 3;
                         let primitive_data_buffer: TypedBuffer<TriNormalsIndex> =
                             TypedBuffer::with_capacity(
                                 "Normal Primitive Data",
@@ -161,30 +162,12 @@ impl ModelAccelerationStructure {
                         // TODO: START HERE
                         // TODO: START HERE
                         // Do this once at the top and calculate the indices `draw.normal_byte_offset` accordingly
-                        let normals = unsafe {
-                            std::slice::from_raw_parts_mut(
-                                geometry_buffers
-                                    .normals
-                                    .get_mut()
-                                    .as_mut_ptr()
-                                    .byte_add(draw.normal_byte_offset as _),
-                                num_vertices as _,
-                            )
-                        };
-                        let indices = unsafe {
-                            std::slice::from_raw_parts_mut(
-                                geometry_buffers
-                                    .indices
-                                    .get_mut()
-                                    .as_mut_ptr()
-                                    .byte_add(draw.index_byte_offset as _),
-                                num_vertices as _,
-                            )
-                        };
                         for i in 0..(draw.triangle_count as usize) {
                             primitive_data[i] = TriNormalsIndex::from_indexed_raw_normals(
-                                normals,
-                                indices,
+                                &normals[((draw.normal_byte_offset as usize)
+                                    / std::mem::size_of::<f32>())..],
+                                &indices[((draw.index_byte_offset as usize)
+                                    / std::mem::size_of::<u32>())..],
                                 i,
                                 m_model_to_world_i as _,
                             );
@@ -262,7 +245,7 @@ impl ModelAccelerationStructure {
     }
 
     pub fn get_model_to_world_matrix(&self, i: usize) -> f32x4x4 {
-        self.m_model_to_worlds_buffer.get_mut()[i].into()
+        self.m_model_to_worlds_buffer.get()[i].into()
     }
 
     pub fn update_model_to_world_matrix(

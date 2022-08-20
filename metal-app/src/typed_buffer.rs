@@ -112,4 +112,10 @@ impl<T: Sized + Copy + Clone> TypedBuffer<T> {
         let contents = self.raw.contents() as *mut T;
         unsafe { std::slice::from_raw_parts_mut(contents, self.len) }
     }
+
+    #[inline]
+    pub fn get(&self) -> &[T] {
+        let contents = self.raw.contents() as *const T;
+        unsafe { std::slice::from_raw_parts(contents, self.len) }
+    }
 }
