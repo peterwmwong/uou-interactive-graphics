@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "../../metal-shaders/shader_src/shading.h"
 #include "./shader_bindings.h"
+#include "../../metal-types/src/tri_normals_index.h"
 
 using namespace metal;
 using namespace raytracing;
@@ -21,15 +22,6 @@ VertexOut main_vertex(         uint                 vertex_id [[vertex_id]],
     const float4 pos    = model.m_model_to_projection * float4(geometry.positions[idx], 1.0);
     const float3 normal = model.m_normal_to_world     * float3(geometry.normals[idx]);
     return { .position = pos, .normal = normal };
-}
-
-inline half3 get_normal(intersection_result<triangle_data> intersection, constant MTLPackedFloat4x3 *m_model_to_worlds) {
-    const auto    m      = &m_model_to_worlds[intersection.geometry_id];
-    const half2   b2     = half2(intersection.triangle_barycentric_coord);
-    const half3   b      = half3(1.0 - (b2.x + b2.y), b2.x, b2.y);
-    const auto    n      = (const device packed_half3 *) intersection.primitive_data;
-    const half3   normal = (n[0] * b.x) + (n[1] * b.y) + (n[2] * b.z);
-    return normalize(half3x3(half3((*m)[0]), half3((*m)[1]), half3((*m)[2])) * normal);
 }
 
 [[early_fragment_tests]]
@@ -68,12 +60,13 @@ half4 main_fragment(         VertexOut                 in                [[stage
     inter.set_triangle_cull_mode(triangle_cull_mode::back);
     inter.assume_geometry_type(geometry_type::triangle);
     for (uint bounce = 4; bounce > 0; bounce--) {
-        const auto intersection = inter.intersect(ray(float3(r_origin), float3(r_dir)), accel_struct);
-        if (intersection.type != intersection_type::none) {
+        const auto hit = inter.intersect(ray(float3(r_origin), float3(r_dir)), accel_struct);
+        if (hit.type != intersection_type::none) {
             // Assumption: Everything in the acceleration structure has the same (mirror) material.
             // intersection.
-            r_origin = r_origin + (r_dir * half(intersection.distance));
-            r_dir    = reflect(r_dir, get_normal(intersection, m_model_to_worlds));
+            r_origin = r_origin + (r_dir * half(hit.distance));
+            const auto p = (device TriNormalsIndex *) hit.primitive_data;
+            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, m_model_to_worlds));
             if (HasDebugPath) dbg.add_point(r_origin);
         } else {
             break;
