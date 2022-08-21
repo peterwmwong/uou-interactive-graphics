@@ -97,10 +97,11 @@ Alternate implementation of Project 7 using Ray Tracing.
 
 - Basic Ray Tracing (Primary Ray) rendering a model's normals
 - Uses an Acceleration Structure with embedded normals for each triangle primitive
-- Learn the basics of using the Metal Ray Tracing APIs and XCode's Acceleration Structure tooling.
-- Develop [`metal-app/ModelAccelerationStructure`](./metal-app/src/model_acceleration_structure.rs)
-  API for loading a model's geometry into a Metal Acceleration Structure
-    - Used by [X-Project 6](./proj-6-ray-traced-reflections/) and [X-Project 7](./proj-7-ray-traced-shadows/)
+- Goals
+    - Learn the basics of using the Metal Ray Tracing APIs and XCode's Acceleration Structure tooling.
+    - Develop [`metal-app/ModelAccelerationStructure`](./metal-app/src/model_acceleration_structure.rs)
+    API for loading a model's geometry into a Metal Acceleration Structure
+        - Used by [X-Project 6](./proj-6-ray-traced-reflections/) and [X-Project 7](./proj-7-ray-traced-shadows/)
 
 ![X-RT Yoda](./x-rt/xrt-yoda.png)
 
@@ -113,7 +114,7 @@ I'm trying to learn new stuff on top of new stuff.
 - [Rust](https://www.rust-lang.org/)
 - [Apple Metal](https://developer.apple.com/metal/)
     - [metal-rs](https://github.com/gfx-rs/metal-rs) Crate for Rust/Metal bindings
-        - [Forked with some Metal 3 additions](https://github.com/gfx-rs/metal-rs/compare/master...peterwmwong:metal3)
+        - [Forked with some Metal 3 additions](https://github.com/gfx-rs/metal-rs/compare/master...peterwmwong:metal3-raytracing)
     - Metal 3 techniques used
         - [Bindless Argument buffers](https://developer.apple.com/videos/play/wwdc2022/10101/)
         - [Faster Resource Loading with MTLIO](https://developer.apple.com/videos/play/wwdc2022/10104/)
