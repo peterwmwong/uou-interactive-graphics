@@ -23,7 +23,6 @@ const MAX_DISPLACEMENT_SCALE: f32 = 1.;
 const MAX_TESSELATION_FACTOR: u16 = 64;
 
 struct Delegate {
-    camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
@@ -100,7 +99,6 @@ impl RendererDelgate for Delegate {
         let render_pipeline_state = create_pipeline(&device, &library, shading_mode);
         let mut image_buffer = vec![];
         Self {
-            camera_space: Default::default(),
             camera: Camera::new(
                 2.5,
                 INITIAL_CAMERA_ROTATION,
@@ -294,7 +292,7 @@ impl RendererDelgate for Delegate {
                 p.bind(
                     light_vertex_binds {
                         m_model_to_projection: Bind::Value(
-                            &(self.camera_space.m_world_to_projection
+                            &(self.camera.projected_space.m_world_to_projection
                                 * self.light_m_model_to_world),
                         ),
                         ..Binds::SKIP
@@ -324,7 +322,7 @@ impl RendererDelgate for Delegate {
                         p.draw_patches_with_bind(
                             main_vertex_binds {
                                 m_world_to_projection: Bind::Value(
-                                    &self.camera_space.m_world_to_projection,
+                                    &self.camera.projected_space.m_world_to_projection,
                                 ),
                                 displacement_scale: Bind::Value(&self.displacement_scale),
                                 disp_tx: if let Some(displacement_texture) =
@@ -336,7 +334,7 @@ impl RendererDelgate for Delegate {
                                 },
                             },
                             main_fragment_binds {
-                                camera: Bind::Value(&self.camera_space),
+                                camera: Bind::Value(&self.camera.projected_space),
                                 light: Bind::Value(&self.light_space),
                                 shade_tri: Bind::Value(&false),
                                 normal_tx: BindTexture(&self.normal_texture),
@@ -369,16 +367,14 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace::from(&u);
+        if self.camera.on_event(event) {
             self.needs_render = true;
         }
-        if let Some(update) = self.light.on_event(event) {
-            self.light_m_model_to_world = update.m_camera_to_world
+        if self.light.on_event(event) {
+            self.light_m_model_to_world = self.light.get_camera_to_world_transform()
                 * f32x4x4::y_rotate(PI)
                 * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
-            self.light_m_world_to_projection = update.m_world_to_projection;
-            self.light_space = ProjectedSpace::from(&update);
+            self.light_m_world_to_projection = self.light.projected_space.m_world_to_projection;
             //
             // IMPORTANT: Projecting to a Texture, NOT to the screen.
             // Used to **sample** Shadow Map Depth Texture during shading to produce shadows.
@@ -424,7 +420,10 @@ impl RendererDelgate for Delegate {
                     );
                 }
                 PROJECTION_TO_TEXTURE_COORDINATE_SPACE
-            } * update.m_world_to_projection;
+            } * self.light_m_world_to_projection;
+            self.light_space.m_screen_to_world = self.light.projected_space.m_screen_to_world;
+            self.light_space.position_world = self.light.projected_space.position_world.into();
+
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {

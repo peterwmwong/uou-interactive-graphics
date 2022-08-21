@@ -77,14 +77,12 @@ impl ModelInstance {
 }
 
 struct Delegate {
-    camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: DepthTexture,
     device: Device,
     library: Library,
-    light_position: float4,
     light: Camera,
     model_light: ModelInstance,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
@@ -142,7 +140,6 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            camera_space: Default::default(),
             depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
@@ -156,7 +153,6 @@ impl RendererDelgate for Delegate {
                 true,
                 1.,
             ),
-            light_position: float4 { xyzw: [0.; 4] },
             model: ModelInstance::new::<DEFAULT_AMBIENT_AMOUNT, _>(
                 "Model",
                 &device,
@@ -194,7 +190,7 @@ impl RendererDelgate for Delegate {
                 "Light",
                 &device,
                 assets_dir.join("light").join("light.obj"),
-                |_| f32x4x4::translate(0., 0., 0.),
+                |_| f32x4x4::identity(),
             ),
             model_plane: ModelInstance::new::<DEFAULT_AMBIENT_AMOUNT, _>(
                 "Plane",
@@ -241,8 +237,8 @@ impl RendererDelgate for Delegate {
                 p.bind(
                     main_vertex_binds::SKIP,
                     main_fragment_binds {
-                        camera: Bind::Value(&self.camera_space),
-                        light_pos: Bind::Value(&self.light_position),
+                        camera: Bind::Value(&self.camera.projected_space),
+                        light_pos: Bind::Value(&self.light.projected_space.position_world),
                         accel_struct: self.model_as.bind(),
                         ..Binds::SKIP
                     },
@@ -283,28 +279,22 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: u.position_world.into(),
-            };
+        if self.camera.on_event(event) {
             for m in [
                 &mut self.model,
                 &mut self.model_light,
                 &mut self.model_plane,
             ] {
-                m.on_camera_update(u.m_world_to_projection);
+                m.on_camera_update(self.camera.projected_space.m_world_to_projection);
             }
             self.needs_render = true;
         }
-        if let Some(update) = self.light.on_event(event) {
-            self.model_light.m_model_to_world = update.m_camera_to_world
+        if self.light.on_event(event) {
+            self.model_light.m_model_to_world = self.light.get_camera_to_world_transform()
                 * f32x4x4::y_rotate(PI)
                 * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
             self.model_light
-                .on_camera_update(self.camera_space.m_world_to_projection);
-            self.light_position = update.position_world.into();
+                .on_camera_update(self.camera.projected_space.m_world_to_projection);
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {

@@ -16,7 +16,7 @@ use std::{
     f32::consts::PI,
     ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4, SimdFloat},
+    simd::{f32x2, SimdFloat},
 };
 
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
@@ -25,8 +25,6 @@ const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 
 struct Delegate {
     camera: Camera,
-    camera_space: ProjectedSpace,
-    camera_position: float4,
     command_queue: CommandQueue,
     device: Device,
     model_accel_struct: ModelAccelerationStructure,
@@ -52,8 +50,6 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            camera_space: ProjectedSpace::default(),
-            camera_position: f32x4::default().into(),
             model_accel_struct: ModelAccelerationStructure::from_file(
                 model_file,
                 &device,
@@ -100,8 +96,7 @@ impl RendererDelgate for Delegate {
                     NoBinds,
                     main_fragment_binds {
                         accelerationStructure: self.model_accel_struct.bind(),
-                        camera: Bind::Value(&self.camera_space),
-                        camera_pos: Bind::Value(&self.camera_position),
+                        camera: Bind::Value(&self.camera.projected_space),
                         m_model_to_worlds: BindMany::buffer(
                             &self.model_accel_struct.m_model_to_worlds_buffer,
                         ),
@@ -116,13 +111,7 @@ impl RendererDelgate for Delegate {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_position = u.position_world.into();
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: self.camera_position,
-            };
+        if self.camera.on_event(event) {
             self.needs_render = true;
         }
 

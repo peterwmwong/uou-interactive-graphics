@@ -1,7 +1,7 @@
 #pragma once
 
-// TODO: Use a more compact format for storing normals
-// See https://aras-p.info/texts/CompactNormalStorage.html#method04spheremap
+// TODO: Use a more compact format for storing normals (Octohedron)
+// See https://aras-p.info/texts/CompactNormalStorage.html
 struct TriNormalsIndex {
     packed_half3   normals[3];
     unsigned short index;

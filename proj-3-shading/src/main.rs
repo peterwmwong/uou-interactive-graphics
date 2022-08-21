@@ -9,7 +9,7 @@ use std::ops::Neg;
 use std::{
     f32::consts::PI,
     path::PathBuf,
-    simd::{f32x2, f32x4, SimdFloat},
+    simd::{f32x2, SimdFloat},
 };
 
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
@@ -20,7 +20,6 @@ const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
 struct Delegate {
     camera: Camera,
-    camera_space: ProjectedSpace,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: DepthTexture,
@@ -28,7 +27,6 @@ struct Delegate {
     library: Library,
     light: Camera,
     light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (Depth, NoStencil)>,
-    light_world_position: float4,
     m_model_to_world: f32x4x4,
     model: Model<GeometryNoTxCoords, NoMaterial>,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
@@ -104,11 +102,6 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            camera_space: ProjectedSpace {
-                m_world_to_projection: f32x4x4::identity(),
-                m_screen_to_world: f32x4x4::identity(),
-                position_world: f32x4::default().into(),
-            },
             command_queue: device.new_command_queue(),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
@@ -133,7 +126,6 @@ impl RendererDelgate for Delegate {
                 light_fragment,
                 (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
             ),
-            light_world_position: f32x4::default().into(),
             m_model_to_world,
             model,
             model_pipeline: create_model_pipeline(&device, &library, shading_mode),
@@ -179,8 +171,8 @@ impl RendererDelgate for Delegate {
                         ..Binds::SKIP
                     },
                     main_fragment_binds {
-                        camera: Bind::Value(&self.camera_space),
-                        light_pos: Bind::Value(&self.light_world_position),
+                        camera: Bind::Value(&self.camera.projected_space),
+                        light_pos: Bind::Value(&self.light.projected_space.position_world),
                     },
                 );
                 for draw in self.model.draws() {
@@ -198,8 +190,8 @@ impl RendererDelgate for Delegate {
                 p.into_subpass("Light", &self.light_pipeline, None, |p| {
                     p.draw_primitives_with_binds(
                         light_vertex_binds {
-                            camera: Bind::Value(&self.camera_space),
-                            light_pos: Bind::Value(&self.light_world_position),
+                            camera: Bind::Value(&self.camera.projected_space),
+                            light_pos: Bind::Value(&self.light.projected_space.position_world),
                         },
                         NoBinds,
                         MTLPrimitiveType::Point,
@@ -213,18 +205,12 @@ impl RendererDelgate for Delegate {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: u.position_world.into(),
-            };
+        if self.camera.on_event(event) {
             self.model_space.m_model_to_projection =
-                self.camera_space.m_world_to_projection * self.m_model_to_world;
+                self.camera.projected_space.m_world_to_projection * self.m_model_to_world;
             self.needs_render = true;
         }
-        if let Some(update) = self.light.on_event(event) {
-            self.light_world_position = update.position_world.into();
+        if self.light.on_event(event) {
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {

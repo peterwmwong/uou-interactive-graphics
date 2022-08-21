@@ -1,5 +1,5 @@
 use crate::{ModifierKeys, MouseButton, UserEvent};
-use metal_types::{f32x4x4, ProjectedSpace};
+use metal_types::{f32x4x4, float4, ProjectedSpace};
 use std::{
     ops::Neg,
     simd::{f32x2, f32x4},
@@ -20,21 +20,12 @@ pub struct CameraUpdate {
     pub m_world_to_projection: f32x4x4,
 }
 
-impl From<&CameraUpdate> for ProjectedSpace {
-    fn from(update: &CameraUpdate) -> Self {
-        ProjectedSpace {
-            m_world_to_projection: update.m_world_to_projection,
-            m_screen_to_world: update.m_screen_to_world,
-            position_world: update.position_world.into(),
-        }
-    }
-}
-
 pub struct Camera<const DRAG_SCALE: usize = 250> {
     pub distance_from_origin: f32,
     pub invert_drag: bool,
     pub min_distance: f32,
     pub on_mouse_drag_modifier_keys: ModifierKeys,
+    pub projected_space: ProjectedSpace,
     pub rotation_xy: f32x2,
     pub screen_size: f32x2,
 }
@@ -52,6 +43,11 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
             distance_from_origin: init_distance,
             rotation_xy: init_rotation,
             on_mouse_drag_modifier_keys,
+            projected_space: ProjectedSpace {
+                m_world_to_projection: f32x4x4::identity(),
+                m_screen_to_world: f32x4x4::identity(),
+                position_world: float4 { xyzw: [0.; 4] },
+            },
             invert_drag,
             min_distance,
             screen_size: f32x2::from_array([1.; 2]),
@@ -75,7 +71,7 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
     }
 
     #[inline]
-    pub fn on_event(&mut self, event: UserEvent) -> Option<CameraUpdate> {
+    pub fn on_event(&mut self, event: UserEvent) -> bool {
         match event {
             UserEvent::MouseDrag {
                 button,
@@ -110,22 +106,33 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
                                 .max(self.min_distance);
                         }
                     }
-                    return self.create_update();
+                    self.update();
+                    return true;
                 }
             }
             UserEvent::WindowFocusedOrResized { size, .. } => {
                 self.screen_size = size;
-                return self.create_update();
+                self.update();
+                return true;
             }
             _ => {}
         }
-        None
+        false
     }
 
-    fn create_update(&self) -> Option<CameraUpdate> {
+    #[inline]
+    pub fn get_world_to_camera_transform(&self) -> f32x4x4 {
         let &[rotx, roty] = self.rotation_xy.neg().as_array();
-        let m_world_to_camera =
-            f32x4x4::translate(0., 0., self.distance_from_origin) * f32x4x4::rotate(rotx, roty, 0.);
+        f32x4x4::translate(0., 0., self.distance_from_origin) * f32x4x4::rotate(rotx, roty, 0.)
+    }
+
+    #[inline]
+    pub fn get_camera_to_world_transform(&self) -> f32x4x4 {
+        self.get_world_to_camera_transform().inverse()
+    }
+
+    fn update(&mut self) {
+        let m_world_to_camera = self.get_world_to_camera_transform();
         let m_camera_to_world = m_world_to_camera.inverse();
         let position_world = m_camera_to_world * f32x4::from_array([0., 0., 0., 1.]);
 
@@ -138,12 +145,11 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
             f32x4x4::scale_translate(scale_xy[0], -scale_xy[1], 1., -1., 1., 0.);
         let m_screen_to_world = m_world_to_projection.inverse() * m_screen_to_projection;
 
-        Some(CameraUpdate {
-            position_world,
-            m_camera_to_world,
+        self.projected_space = ProjectedSpace {
+            position_world: position_world.into(),
             m_screen_to_world,
             m_world_to_projection,
-        })
+        };
     }
 }
 

@@ -29,7 +29,6 @@ const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 struct Delegate {
     bg_depth_state: DepthStencilState,
     bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, Stencil)>,
-    camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
@@ -217,7 +216,6 @@ impl RendererDelgate for Delegate {
                 0.,
             ),
             depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
-            camera_space: ProjectedSpace::default(),
             mirror_camera_space: ProjectedSpace::default(),
             mirror_model_space: ModelSpace::default(),
             mirror_plane_model_space: ModelSpace::default(),
@@ -287,12 +285,12 @@ impl RendererDelgate for Delegate {
             |p| {
                 p.bind(
                     main_vertex_binds {
-                        camera: Bind::Value(&self.camera_space),
+                        camera: Bind::Value(&self.camera.projected_space),
                         model: Bind::Value(&self.model_space),
                         ..main_vertex_binds::SKIP
                     },
                     main_fragment_binds {
-                        camera: Bind::Value(&self.camera_space),
+                        camera: Bind::Value(&self.camera.projected_space),
                         light_pos: Bind::Value(&LIGHT_POSITION.into()),
                         m_env: Bind::Value(&f32x4x4::identity().into()),
                         darken: Bind::Value(&0_f32),
@@ -349,7 +347,7 @@ impl RendererDelgate for Delegate {
                         p.draw_primitives_with_binds(
                             NoBinds,
                             bg_fragment_binds {
-                                camera: Bind::Value(&self.camera_space),
+                                camera: Bind::Value(&self.camera.projected_space),
                                 ..bg_fragment_binds::SKIP
                             },
                             MTLPrimitiveType::Triangle,
@@ -365,14 +363,9 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: u.position_world.into(),
-            };
+        if self.camera.on_event(event) {
             self.mirror_camera_space = ProjectedSpace {
-                m_world_to_projection: self.camera_space.m_world_to_projection
+                m_world_to_projection: self.camera.projected_space.m_world_to_projection
                     * self.m_world_to_mirror_world,
                 // TODO: I'm not sure this is right, shouldn't it be m_mirror_world_to_world, not m_world_to_mirror_world
                 //                                                     aaaaaaaaaaaa    bbbbb        bbbbb    aaaaaaaaaaaa
@@ -385,17 +378,16 @@ impl RendererDelgate for Delegate {
                 //          VS.
                 //          screen -> projection -> mirror world -> world
                 m_screen_to_world: self.m_world_to_mirror_world
-                    * self.camera_space.m_screen_to_world,
-                position_world: self.camera_space.position_world,
+                    * self.camera.projected_space.m_screen_to_world,
+                position_world: self.camera.projected_space.position_world,
             };
-
             self.model_space = ModelSpace {
-                m_model_to_projection: self.camera_space.m_world_to_projection
+                m_model_to_projection: self.camera.projected_space.m_world_to_projection
                     * self.m_model_to_world,
                 m_normal_to_world: self.m_model_to_world.into(),
             };
             self.mirror_plane_model_space = ModelSpace {
-                m_model_to_projection: self.camera_space.m_world_to_projection
+                m_model_to_projection: self.camera.projected_space.m_world_to_projection
                     * self.m_mirror_plane_model_to_world,
                 m_normal_to_world: self.m_mirror_plane_model_to_world.into(),
             };

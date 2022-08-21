@@ -25,12 +25,11 @@ half4 main_fragment(
              VertexOut                         in                    [[stage_in]],
              primitive_acceleration_structure  accelerationStructure [[buffer(0)]],
     constant ProjectedSpace                  & camera                [[buffer(1)]],
-    constant MTLPackedFloat4x3               * m_model_to_worlds     [[buffer(4)]],
-    constant float4                          & camera_pos            [[buffer(3)]]
+    constant MTLPackedFloat4x3               * m_model_to_worlds     [[buffer(2)]]
 ) {
     const float4 pos_w = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos   = pos_w.xyz / pos_w.w;
-    const ray    r(camera_pos.xyz, normalize(pos - camera_pos.xyz));
+    const ray    r(camera.position_world.xyz, normalize(pos - camera.position_world.xyz));
 
     intersector<triangle_data> inter;
     inter.set_triangle_cull_mode(triangle_cull_mode::back);

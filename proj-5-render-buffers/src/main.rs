@@ -185,8 +185,9 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
     fn on_event(&mut self, event: UserEvent) {
         use UserEvent::*;
 
-        if let Some(u) = self.camera.on_event(event) {
-            self.m_model_to_projection = u.m_world_to_projection * self.m_model_to_world;
+        if self.camera.on_event(event) {
+            self.m_model_to_projection =
+                self.camera.projected_space.m_world_to_projection * self.m_model_to_world;
             self.needs_render = true;
         }
 

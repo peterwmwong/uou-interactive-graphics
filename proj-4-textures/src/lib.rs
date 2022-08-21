@@ -3,7 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{Camera, CameraUpdate, DepthTexture, ShadingModeSelector},
+    components::{Camera, DepthTexture, ShadingModeSelector},
     metal::*,
     metal_types::*,
     pipeline::*,
@@ -14,7 +14,7 @@ use std::{
     f32::consts::PI,
     ops::Neg,
     path::PathBuf,
-    simd::{f32x2, f32x4, SimdFloat},
+    simd::{f32x2, SimdFloat},
 };
 
 const DEFAULT_AMBIENT_AMOUNT: f32 = 0.15;
@@ -25,7 +25,6 @@ const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 const LIGHT_DISTANCE: f32 = 0.5;
 
 pub struct Delegate<const RENDER_LIGHT: bool> {
-    camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
@@ -33,7 +32,6 @@ pub struct Delegate<const RENDER_LIGHT: bool> {
     device: Device,
     library: Library,
     light_pipeline: RenderPipeline<1, light_vertex, light_fragment, (Depth, NoStencil)>,
-    light_position: float4,
     light: Camera,
     m_model_to_world: f32x4x4,
     model_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
@@ -135,11 +133,6 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 false,
                 0.,
             ),
-            camera_space: ProjectedSpace {
-                m_world_to_projection: f32x4x4::identity().into(),
-                m_screen_to_world: f32x4x4::identity().into(),
-                position_world: f32x4::default().into(),
-            },
             command_queue: device.new_command_queue(),
             depth_state: {
                 let desc = DepthStencilDescriptor::new();
@@ -148,7 +141,6 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                 device.new_depth_stencil_state(&desc)
             },
             depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
-            light_position: f32x4::default().into(),
             light: Camera::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
@@ -215,8 +207,8 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                     },
                     main_fragment_binds {
                         material: Bind::Skip,
-                        camera: Bind::Value(&self.camera_space),
-                        light_pos: Bind::Value(&self.light_position),
+                        camera: Bind::Value(&self.camera.projected_space),
+                        light_pos: Bind::Value(&self.light.projected_space.position_world),
                     },
                 );
                 for draw in self.model.draws() {
@@ -243,8 +235,8 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                     p.into_subpass("Light", &self.light_pipeline, None, |p| {
                         p.draw_primitives_with_binds(
                             light_vertex_binds {
-                                camera: Bind::Value(&self.camera_space),
-                                light_pos: Bind::Value(&self.light_position),
+                                camera: Bind::Value(&self.camera.projected_space),
+                                light_pos: Bind::Value(&self.light.projected_space.position_world),
                             },
                             NoBinds,
                             MTLPrimitiveType::Point,
@@ -259,18 +251,12 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
     }
 
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: u.position_world.into(),
-            };
+        if self.camera.on_event(event) {
             self.model_space.m_model_to_projection =
-                self.camera_space.m_world_to_projection * self.m_model_to_world;
+                self.camera.projected_space.m_world_to_projection * self.m_model_to_world;
             self.needs_render = true;
         }
-        if let Some(CameraUpdate { position_world, .. }) = self.light.on_event(event) {
-            self.light_position = position_world.into();
+        if self.light.on_event(event) {
             self.needs_render = true;
         };
         if self.shading_mode.on_event(event) {

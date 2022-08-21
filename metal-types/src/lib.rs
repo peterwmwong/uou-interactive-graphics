@@ -290,7 +290,7 @@ impl f32x4x4 {
 
     #[inline]
     pub const fn identity() -> Self {
-        Self::scale(1., 1., 1., 1.)
+        Self::translate(0., 0., 0.)
     }
 
     #[inline]

@@ -27,7 +27,6 @@ struct Delegate {
     bg_depth_state: DepthStencilState,
     bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, NoStencil)>,
     dbg_render_pipeline: RenderPipeline<1, dbg_vertex, dbg_fragment, (Depth, NoStencil)>,
-    camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
@@ -189,7 +188,6 @@ impl RendererDelgate for Delegate {
                 0.,
             ),
             depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
-            camera_space: ProjectedSpace::default(),
             model_space: ModelSpace {
                 m_model_to_projection: f32x4x4::identity().into(),
                 m_normal_to_world: m_model_to_world.into(),
@@ -262,12 +260,12 @@ impl RendererDelgate for Delegate {
             |p| {
                 p.bind(
                     main_vertex_binds {
-                        camera: Bind::Value(&self.camera_space),
+                        camera: Bind::Value(&self.camera.projected_space),
                         model: Bind::Value(&self.model_space),
                         ..main_vertex_binds::SKIP
                     },
                     main_fragment_binds {
-                        camera: Bind::Value(&self.camera_space),
+                        camera: Bind::Value(&self.camera.projected_space),
                         light_pos: Bind::Value(&LIGHT_POSITION.into()),
                         accel_struct: self.world_as.bind(),
                         env_texture: BindTexture(&self.cubemap_texture),
@@ -302,11 +300,10 @@ impl RendererDelgate for Delegate {
                             p.into_subpass("DebugPath", &self.dbg_render_pipeline, None, |p| {
                                 p.draw_primitives_with_binds(
                                     dbg_vertex_binds {
-                                        // camera: Bind::Value(&self.camera_space),
                                         dbg_path: Bind::buffer(&self.debug_path),
                                         ..dbg_vertex_binds::SKIP
                                     },
-                                    Binds::SKIP,
+                                    NoBinds,
                                     MTLPrimitiveType::LineStrip,
                                     0,
                                     DEBUG_PATH_MAX_NUM_POINTS as _,
@@ -322,16 +319,12 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: u.position_world.into(),
-            };
+        if self.camera.on_event(event) {
             self.model_space.m_model_to_projection =
-                self.camera_space.m_world_to_projection * self.m_model_to_world;
+                self.camera.projected_space.m_world_to_projection * self.m_model_to_world;
             self.mirror_plane_space.m_model_to_projection =
-                self.camera_space.m_world_to_projection * self.m_mirror_plane_model_to_world;
+                self.camera.projected_space.m_world_to_projection
+                    * self.m_mirror_plane_model_to_world;
             self.needs_render = true;
         }
         if self.shading_mode.on_event(event) {

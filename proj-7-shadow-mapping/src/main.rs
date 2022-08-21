@@ -77,14 +77,12 @@ impl ModelInstance {
 }
 
 struct Delegate {
-    camera_space: ProjectedSpace,
     camera: Camera,
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_texture: DepthTexture,
     device: Device,
     library: Library,
-    light_m_world_to_projection: f32x4x4,
     light_space: ProjectedSpace,
     light: Camera,
     model_light: ModelInstance,
@@ -144,7 +142,6 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
-            camera_space: Default::default(),
             command_queue: device.new_command_queue(),
             depth_texture: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             depth_state: {
@@ -159,7 +156,6 @@ impl RendererDelgate for Delegate {
                 true,
                 1.,
             ),
-            light_m_world_to_projection: f32x4x4::identity(),
             light_space: Default::default(),
             model: ModelInstance::new::<DEFAULT_AMBIENT_AMOUNT, _>(
                 "Model",
@@ -288,7 +284,7 @@ impl RendererDelgate for Delegate {
                 p.bind(
                     main_vertex_binds::SKIP,
                     main_fragment_binds {
-                        camera: Bind::Value(&self.camera_space),
+                        camera: Bind::Value(&self.camera.projected_space),
                         light: Bind::Value(&self.light_space),
                         shadow_tx: BindTexture(shadow_tx),
                         ..Binds::SKIP
@@ -330,30 +326,24 @@ impl RendererDelgate for Delegate {
 
     #[inline]
     fn on_event(&mut self, event: UserEvent) {
-        if let Some(u) = self.camera.on_event(event) {
-            self.camera_space = ProjectedSpace {
-                m_world_to_projection: u.m_world_to_projection,
-                m_screen_to_world: u.m_screen_to_world,
-                position_world: u.position_world.into(),
-            };
+        if self.camera.on_event(event) {
             for m in [
                 &mut self.model,
                 &mut self.model_light,
                 &mut self.model_plane,
             ] {
-                m.on_camera_update(u.m_world_to_projection);
+                m.on_camera_update(self.camera.projected_space.m_world_to_projection);
             }
             self.needs_render = true;
         }
-        if let Some(update) = self.light.on_event(event) {
-            self.model_light.m_model_to_world = update.m_camera_to_world
+        if self.light.on_event(event) {
+            self.model_light.m_model_to_world = self.light.get_camera_to_world_transform()
                 * f32x4x4::y_rotate(PI)
                 * f32x4x4::scale(0.1, 0.1, 0.1, 1.0);
             self.model_light
-                .on_camera_update(self.camera_space.m_world_to_projection);
-            self.light_m_world_to_projection = update.m_world_to_projection;
+                .on_camera_update(self.camera.projected_space.m_world_to_projection);
             self.model_shadow_space = ModelSpace {
-                m_model_to_projection: (self.light_m_world_to_projection
+                m_model_to_projection: (self.light.projected_space.m_world_to_projection
                     * self.model.m_model_to_world),
                 m_normal_to_world: self.model.m_model_to_world.into(),
             };
@@ -401,9 +391,9 @@ impl RendererDelgate for Delegate {
                         );
                     }
                     PROJECTION_TO_TEXTURE_COORDINATE_SPACE
-                } * update.m_world_to_projection,
-                m_screen_to_world: update.m_screen_to_world,
-                position_world: update.position_world.into(),
+                } * self.light.projected_space.m_world_to_projection,
+                m_screen_to_world: self.light.projected_space.m_screen_to_world,
+                position_world: self.light.projected_space.position_world.into(),
             };
             self.needs_render = true;
             self.needs_render_shadow_map = true;
