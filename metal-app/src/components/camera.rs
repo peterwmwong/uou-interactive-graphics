@@ -1,10 +1,12 @@
-use super::ui_ray::UIRay;
-use crate::{ModifierKeys, UserEvent};
+use crate::{ModifierKeys, MouseButton, UserEvent};
 use metal_types::{f32x4x4, ProjectedSpace};
 use std::{
     ops::Neg,
     simd::{f32x2, f32x4},
 };
+
+pub const ROTATE_MOUSE_BUTTON: MouseButton = MouseButton::Left;
+pub const DISTANCE_MOUSE_BUTTON: MouseButton = MouseButton::Right;
 
 const INITIAL_CAMERA_DISTANCE: f32 = 1.0;
 const N: f32 = 0.1;
@@ -29,7 +31,11 @@ impl From<&CameraUpdate> for ProjectedSpace {
 }
 
 pub struct Camera<const DRAG_SCALE: usize = 250> {
-    pub ray: UIRay<DRAG_SCALE>,
+    pub distance_from_origin: f32,
+    pub invert_drag: bool,
+    pub min_distance: f32,
+    pub on_mouse_drag_modifier_keys: ModifierKeys,
+    pub rotation_xy: f32x2,
     pub screen_size: f32x2,
 }
 
@@ -43,13 +49,11 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
         min_distance: f32,
     ) -> Self {
         Self {
-            ray: UIRay::<DRAG_SCALE> {
-                distance_from_origin: init_distance,
-                rotation_xy: init_rotation,
-                on_mouse_drag_modifier_keys,
-                invert_drag,
-                min_distance,
-            },
+            distance_from_origin: init_distance,
+            rotation_xy: init_rotation,
+            on_mouse_drag_modifier_keys,
+            invert_drag,
+            min_distance,
             screen_size: f32x2::from_array([1.; 2]),
         }
     }
@@ -72,25 +76,56 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
 
     #[inline]
     pub fn on_event(&mut self, event: UserEvent) -> Option<CameraUpdate> {
-        let ray_update = self.ray.on_event(event);
-        let screen_update = match event {
+        match event {
+            UserEvent::MouseDrag {
+                button,
+                modifier_keys,
+                drag_amount,
+                ..
+            } => {
+                let is_empty = self.on_mouse_drag_modifier_keys.is_empty();
+                let drag_amount = if self.invert_drag {
+                    -drag_amount
+                } else {
+                    drag_amount
+                };
+                if (is_empty && modifier_keys.is_empty())
+                    || (!is_empty && modifier_keys.contains(self.on_mouse_drag_modifier_keys))
+                {
+                    match button {
+                        ROTATE_MOUSE_BUTTON => {
+                            self.rotation_xy = self.rotation_xy + {
+                                let adjacent = f32x2::splat(self.distance_from_origin);
+                                let opposite = drag_amount / f32x2::splat((DRAG_SCALE * 2) as _);
+                                let &[x, y] = (opposite / adjacent).as_array();
+                                f32x2::from_array([
+                                    y.atan(), // Rotation on x-axis
+                                    x.atan(), // Rotation on y-axis
+                                ])
+                            }
+                        }
+                        DISTANCE_MOUSE_BUTTON => {
+                            self.distance_from_origin = (self.distance_from_origin
+                                - drag_amount[1] / (DRAG_SCALE as f32))
+                                .max(self.min_distance);
+                        }
+                    }
+                    return self.create_update();
+                }
+            }
             UserEvent::WindowFocusedOrResized { size, .. } => {
                 self.screen_size = size;
-                true
+                return self.create_update();
             }
-            _ => false,
-        };
-        if ray_update || screen_update {
-            Some(self.create_update())
-        } else {
-            None
+            _ => {}
         }
+        None
     }
 
-    fn create_update(&self) -> CameraUpdate {
-        let &[rotx, roty] = self.ray.rotation_xy.neg().as_array();
-        let m_world_to_camera = f32x4x4::translate(0., 0., self.ray.distance_from_origin)
-            * f32x4x4::rotate(rotx, roty, 0.);
+    fn create_update(&self) -> Option<CameraUpdate> {
+        let &[rotx, roty] = self.rotation_xy.neg().as_array();
+        let m_world_to_camera =
+            f32x4x4::translate(0., 0., self.distance_from_origin) * f32x4x4::rotate(rotx, roty, 0.);
         let m_camera_to_world = m_world_to_camera.inverse();
         let position_world = m_camera_to_world * f32x4::from_array([0., 0., 0., 1.]);
 
@@ -103,12 +138,12 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
             f32x4x4::scale_translate(scale_xy[0], -scale_xy[1], 1., -1., 1., 0.);
         let m_screen_to_world = m_world_to_projection.inverse() * m_screen_to_projection;
 
-        CameraUpdate {
+        Some(CameraUpdate {
             position_world,
             m_camera_to_world,
             m_screen_to_world,
             m_world_to_projection,
-        }
+        })
     }
 }
 

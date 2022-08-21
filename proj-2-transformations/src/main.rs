@@ -123,8 +123,8 @@ impl RendererDelgate for Delegate {
 
     fn on_event(&mut self, event: UserEvent) {
         if self.camera.on_event(event).is_some() {
-            self.vertex_input.camera_distance = self.camera.ray.distance_from_origin;
-            self.vertex_input.camera_rotation = self.camera.ray.rotation_xy.into();
+            self.vertex_input.camera_distance = self.camera.distance_from_origin;
+            self.vertex_input.camera_rotation = self.camera.rotation_xy.into();
             self.vertex_input.screen_size = self.camera.screen_size.into();
             self.needs_render = true;
         }
