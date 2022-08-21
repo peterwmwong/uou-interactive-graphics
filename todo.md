@@ -1,3 +1,44 @@
+# X-Projects (Extra Projects)
+
+Projects not part of the official CS 5610/6610 coursework, but inspired by topics covered in the
+lectures.
+
+**TODO: Thoroughly look back at lectures before lecture 25 (Volume Rendering) and find techniques worth of an X-Project**
+
+## Lecture 15 (Lights & Shadows)
+
+- Virtual Shadow Maps (VSM)
+    1. What are VSMs?
+    2. How does it relate to texture streaming and spare textures?
+        - https://developer.apple.com/videos/play/tech-talks/10876/?time=620
+        - Are these implementation details for VSMs?
+    3. Given answering/understanding #1/#2, implement VSMs
+        - [Apple Metal's tech talk](https://developer.apple.com/videos/play/tech-talks/10876/?time=620)
+          has a highl-level overall of the "Sparse Tiled Shadow Maps" technique
+
+## Lecture 24 (Refractions, Transparency, Blending, & Alpha Testing)
+
+- Refractions (https://youtu.be/LTzhxLEgldA?t=179)
+    1. Find a glass model used by a paper or tutorial so our rendering can be easily
+      compared/verified for "correctness"
+    2. Render some model and apply front/back refractions with an environment map
+        - Use Chris Wyman (2015) Front/Back Technique: https://youtu.be/LTzhxLEgldA?t=706
+    3. Additional #1: Render another model behind glass model
+- Refractions Ray Traced
+- Order Independent Transparency
+    1. Re-implement/understand Apple Metal's Sample code for Order Independent Transparency
+        - https://developer.apple.com/documentation/metal/metal_sample_code_library/implementing_order-independent_transparency_with_image_blocks
+    2. Additional #1: Look at Moment Based Order Independent Transparency
+- Alpha Testing (https://youtu.be/LTzhxLEgldA?t=3064)
+    - https://bgolus.medium.com/anti-aliased-alpha-test-the-esoteric-alpha-to-coverage-8b177335ae4f
+    1. Find some foliage texture (bush, tree leaves, grass?) used by a paper tutorial so our
+       rendering can be easily compared/verified for "correctness".
+        - Try a simple single branch/leaf? (see ~/Downloads/Bush_Mediteranean)
+    2. Render w and w/o alphaToCoverage and compare quality
+        - https://developer.apple.com/documentation/metal/mtlrenderpipelinedescriptor/1514624-alphatocoverageenabled
+    3. Additional #1: Apply Alpha Distribution
+        - http://www.cemyuksel.com/research/alphadistribution/
+
 # asset-compiler
 
 - Model asset
