@@ -29,7 +29,7 @@ struct Delegate {
     dbg_render_pipeline: RenderPipeline<1, dbg_vertex, dbg_fragment, (Depth, NoStencil)>,
     camera: Camera,
     command_queue: CommandQueue,
-    cubemap_texture: Texture,
+    env_texture: Texture,
     depth_texture: DepthTexture,
     debug_path: TypedBuffer<DebugPath>,
     has_debug_path: bool,
@@ -45,7 +45,7 @@ struct Delegate {
     mirror_plane_model: Model<GeometryNoTxCoords, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
-    world_as: ModelAccelerationStructure,
+    accel_struct: ModelAccelerationStructure,
 }
 
 fn create_main_render_pipeline(
@@ -73,7 +73,7 @@ fn create_main_render_pipeline(
 
 impl RendererDelgate for Delegate {
     fn new(device: Device) -> Self {
-        let cubemap_texture = debug_time("proj6 - Load Environment Cube Texture", || {
+        let env_texture = debug_time("proj6 - Load Environment Cube Texture", || {
             asset_compiler::cube_texture::load_cube_texture_asset_dir(
                 &device,
                 &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -124,7 +124,7 @@ impl RendererDelgate for Delegate {
             f32x4x4::translate(0., mirror_plane_y_world, 0.) * f32x4x4::scale(0.9, 0.9, 0.9, 1.);
 
         let command_queue = device.new_command_queue();
-        let world_as = ModelAccelerationStructure::from_files(
+        let accel_struct = ModelAccelerationStructure::from_files(
             &[&model_file_path, &mirror_plane_file_path],
             &device,
             &command_queue,
@@ -153,7 +153,7 @@ impl RendererDelgate for Delegate {
                 ds.set_depth_write_enabled(true);
                 device.new_depth_stencil_state(&ds)
             },
-            cubemap_texture,
+            env_texture,
             bg_render_pipeline: RenderPipeline::new(
                 "BG",
                 &device,
@@ -198,7 +198,7 @@ impl RendererDelgate for Delegate {
             },
             needs_render: false,
             shading_mode,
-            world_as,
+            accel_struct,
             model,
             mirror_plane_model,
             has_debug_path,
@@ -237,7 +237,6 @@ impl RendererDelgate for Delegate {
             .command_queue
             .new_command_buffer_with_unretained_references();
         command_buffer.set_label("Renderer Command Buffer");
-        let depth_tx = self.depth_texture.texture();
         self.main_render_pipeline.new_pass(
             "Model",
             command_buffer,
@@ -247,7 +246,12 @@ impl RendererDelgate for Delegate {
                 MTLLoadAction::Clear,
                 MTLStoreAction::Store,
             )],
-            (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
+            (
+                self.depth_texture.texture(),
+                1.,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
             NoStencil,
             &self.model_depth_state,
             &[
@@ -255,7 +259,7 @@ impl RendererDelgate for Delegate {
                     &self.model.heap,
                     MTLRenderStages::Vertex | MTLRenderStages::Fragment,
                 ),
-                &self.world_as.resource(),
+                &self.accel_struct.resource(),
             ],
             |p| {
                 p.bind(
@@ -267,10 +271,10 @@ impl RendererDelgate for Delegate {
                     main_fragment_binds {
                         camera: Bind::Value(&self.camera.projected_space),
                         light_pos: Bind::Value(&LIGHT_POSITION.into()),
-                        accel_struct: self.world_as.bind(),
-                        env_texture: BindTexture(&self.cubemap_texture),
+                        accel_struct: self.accel_struct.bind(),
+                        env_texture: BindTexture(&self.env_texture),
                         m_model_to_worlds: BindMany::buffer(
-                            &self.world_as.m_model_to_worlds_buffer,
+                            &self.accel_struct.m_model_to_worlds_buffer,
                         ),
                         dbg_path: Bind::buffer(&self.debug_path),
                     },
@@ -289,13 +293,7 @@ impl RendererDelgate for Delegate {
                     &self.bg_render_pipeline,
                     Some(&self.bg_depth_state),
                     |p| {
-                        p.draw_primitives_with_binds(
-                            NoBinds,
-                            bg_fragment_binds::SKIP,
-                            MTLPrimitiveType::Triangle,
-                            0,
-                            3,
-                        );
+                        p.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
                         if self.has_debug_path {
                             p.into_subpass("DebugPath", &self.dbg_render_pipeline, None, |p| {
                                 p.draw_primitives_with_binds(
