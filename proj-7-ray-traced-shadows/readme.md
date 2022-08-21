@@ -1,8 +1,8 @@
-# Project 7: Ray Traced Shadows
+# X-Project 7: Ray Traced Shadows
 
 An alternative method of rendering shadows using Ray Tracing (instead of shadow maps).
 
-![Project 7 Ray Traced Yoda](./p7-rt-yoda.gif)
+![X-Project 7 Ray Traced Yoda](./p7-rt-yoda.gif)
 
 # Usage
 

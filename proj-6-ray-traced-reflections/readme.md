@@ -1,14 +1,14 @@
-# Project 6: Ray Traced Reflections
+# X-Project 6: Ray Traced Reflections/Environment Mapping
 
 An alternative method of rendering reflections and environment mapping using Ray Tracing.
 
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=6
 
-![Project 6 Teapot Ray Traced](./p6-rt-teapot.gif)
+![X-Project 6 Teapot Ray Traced](./p6-rt-teapot.gif)
 
 Laser pointer for assessing reflections!
 
-![Project 6 Teapot Laser Pointer](./p6-rt-teapot-laser-pointer.gif)
+![X-Project 6 Teapot Laser Pointer](./p6-rt-teapot-laser-pointer.gif)
 
 # Usage
 
