@@ -56,12 +56,33 @@ This repository contains my attempt to complete the projects associated with the
 ![Project 6 Teapot](./proj-6-environment-mapping/p6-teapot.gif)
 
 
+# [X-Project 6: Ray Traced Reflections/Environment Mapping](./proj-6-ray-traced-reflections/)
+
+Alternate implementation of Project 6 using Ray Tracing.
+
+- Render model and plane using multi-bounce (4) ray tracing
+    - **Unlike original Project 6, the model reflects on itself!**
+- Render laser pointer to visualize ray tracing
+
+![X-Project 6 Ray Traced Teapot](./proj-6-ray-traced-reflections/p6-rt-teapot-laser-pointer.gif)
+
+
 # [Project 7: Shadow Mapping](./proj-7-shadow-mapping/)
 
 - Render shadows of a model onto itself and a plane below it
 - Use a Shadow Map (Depth texture)
 
 ![Project 7 Yoda](./proj-7-shadow-mapping/p7-yoda.gif)
+
+
+# [X-Project 7: Ray Traced Shadows](./proj-7-ray-traced-shadows/)
+
+Alternate implementation of Project 7 using Ray Tracing.
+
+- Render shadows of a model onto itself and a plane below it
+- Use a Ray Tracing
+
+![X-Project 7 Yoda](./proj-7-ray-traced-shadows/p7-rt-yoda.gif)
 
 
 # [Project 8: Tesselation](./proj-8-tesselation/)
@@ -71,6 +92,17 @@ This repository contains my attempt to complete the projects associated with the
 
 ![Project 8](./proj-8-tesselation/p8.gif)
 
+
+# [X-Project: Ray Tracing](./x-rt/)
+
+- Basic Ray Tracing (Primary Ray) rendering a model's normals
+- Uses an Acceleration Structure with embedded normals for each triangle primitive
+- Learn the basics of using the Metal Ray Tracing APIs and XCode's Acceleration Structure tooling.
+- Develop [`metal-app/ModelAccelerationStructure`](./metal-app/src/model_acceleration_structure.rs)
+  API for loading a model's geometry into a Metal Acceleration Structure
+    - Used by [X-Project 6](./proj-6-ray-traced-reflections/) and [X-Project 7](./proj-7-ray-traced-shadows/)
+
+![X-RT Yoda](./x-rt/xrt-yoda.png)
 
 # Implementation
 
@@ -93,36 +125,12 @@ I'm trying to learn new stuff on top of new stuff.
 
 # Common Project Architecture
 
-> TODO: Document `metal-types`/`metal-build` crates and how C++ structures are shared between Metal and Rust
+> TODO: Document `metal-types`/`metal-build` crates and how data structures are shared between Metal and Rust
 
 > TODO: Document how `metal-build` provides `build.rs` support for each project to precompile shaders
 
-> TODO: Document `metal-app`
+> TODO: Document `metal-app`, especially [RenderPipeline](./metal-app/src/pipeline/render_pipeline.rs) and Binds for simplifying and removing/reducing errors when setting up simple to complex (ex. depth/stencil, multiple sub-passes, many binds) render pipelines.
 
-# Performance Workflows
+# Performance
 
-Beyond meeting the project requirements, I want a better understanding of how I would squeeze every single cycle of performance in this new world.
-
-## GPU Frame Capture and Profiling
-
-> TODO: Document motivation and usage of `xcode-project` and `open-xcode` VScode tasks
-
-## Memory Leak/Profiling
-
-> TODO: Document motivation and usage of XCode Instruments Memory Leaks Template from `xcode-project`
-
-## CPU Profiling
-
-> TODO: Document motivation and usage of XCode Instruments Metal Template from `xcode-project`
-
-## CPU Assembly Diffing
-
-> TODO: Document motivation and usage of `scripts/asm-gen.sh`, `scripts/asm-diff.sh` and associated VSCode tasks
-
-## Metal Shader AIR Assembly Diffing
-
-> TODO: Document motivation and usage of VSCode tasks `compile-and-emit-shader-asm` and `diff-shader-asm`
-
-## TODO: Build Performance
-
-> TODO: Review https://nnethercote.github.io/perf-book/compile-times.html
+See [performance.md](./performance.md) for more in-depth documentation on workflows and tooling for assessing performance.

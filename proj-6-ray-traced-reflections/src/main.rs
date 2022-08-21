@@ -386,5 +386,5 @@ impl RendererDelgate for Delegate {
 }
 
 fn main() {
-    launch_application::<Delegate>("Project 6 - Environment Mapping");
+    launch_application::<Delegate>("Project 6 - Ray Traced Reflections");
 }

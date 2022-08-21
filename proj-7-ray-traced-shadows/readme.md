@@ -2,7 +2,7 @@
 
 An alternative method of rendering shadows using Ray Tracing (instead of shadow maps).
 
-![Project 7 Yoda](./p7-yoda.gif)
+![Project 7 Ray Traced Yoda](./p7-rt-yoda.gif)
 
 # Usage
 

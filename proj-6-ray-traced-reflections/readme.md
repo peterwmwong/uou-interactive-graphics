@@ -1,15 +1,19 @@
 # Project 6: Ray Traced Reflections
 
-An alternative method of rendering reflections using Ray Tracing.
+An alternative method of rendering reflections and environment mapping using Ray Tracing.
 
 https://graphics.cs.utah.edu/courses/cs6610/spring2022/?prj=6
 
-![Project 6 Teapot](./p6-teapot.gif)
+![Project 6 Teapot Ray Traced](./p6-rt-teapot.gif)
+
+Laser pointer for assessing reflections!
+
+![Project 6 Teapot Laser Pointer](./p6-rt-teapot-laser-pointer.gif)
 
 # Usage
 
 ```sh
-cargo run --bin proj-6-environment-mapping [OPTIONAL: Path to Wavefront OBJ file]
+cargo run --bin proj-6-ray-traced-reflections [OPTIONAL: Path to Wavefront OBJ file]
 ```
 
 ## Examples
@@ -19,19 +23,13 @@ cargo run --bin proj-6-environment-mapping [OPTIONAL: Path to Wavefront OBJ file
 ### Teapot model
 
 ```sh
-cargo run --bin proj-6-environment-mapping common-assets/teapot/teapot.obj
+cargo run --bin proj-6-ray-traced-reflections common-assets/teapot/teapot.obj
 ```
 
 ### Yoda model
 
 ```sh
-cargo run --bin proj-6-environment-mapping common-assets/yoda/yoda.obj
-```
-
-### Sphere model
-
-```sh
-cargo run --bin proj-6-environment-mapping proj-6-environment-mapping/assets/sphere.obj
+cargo run --bin proj-6-ray-traced-reflections common-assets/yoda/yoda.obj
 ```
 
 # Controls
@@ -41,10 +39,12 @@ cargo run --bin proj-6-environment-mapping proj-6-environment-mapping/assets/sph
 | Right button drag              | Camera zoom in/out                           |
 | Left button drag               | Camera orbits                                |
 
-| Key | Action                                 |
-|-----|----------------------------------------|
-|  0  | Ambient + Diffuse + Specular (default) |
-|  1  | Normals                                |
-|  2  | Ambient                                |
-|  3  | Ambient + Diffuse                      |
-|  4  | Specular                               |
+| Key         | Action                                 |
+|-------------|----------------------------------------|
+|  0          | Ambient + Diffuse + Specular (default) |
+|  1          | Normals                                |
+|  2          | Ambient                                |
+|  3          | Ambient + Diffuse                      |
+|  4          | Specular                               |
+|  P          | Toggle rendering laser pointer         |
+|  Shift + P  | Toggle freeze laser pointer            |
