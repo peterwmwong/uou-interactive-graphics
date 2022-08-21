@@ -1,5 +1,5 @@
 #include <metal_stdlib>
-#include "./shader_bindings.h"
+#include "../../metal-types/src/projected-space.h"
 #include "../../metal-types/src/tri_normals_index.h"
 
 using namespace metal;

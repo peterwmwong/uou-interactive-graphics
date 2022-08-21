@@ -1,7 +1,6 @@
+use crate::UserEvent;
 use bitflags::bitflags;
 use metal::{FunctionConstantValues, MTLDataType};
-
-use crate::UserEvent;
 
 bitflags! {
     pub struct ShadingModeSelector: usize {
@@ -64,5 +63,22 @@ impl ShadingModeSelector {
             _ => return false,
         }
         return true;
+    }
+
+    #[inline]
+    pub const fn has_ambient(&self) -> bool {
+        self.contains(ShadingModeSelector::HAS_AMBIENT)
+    }
+    #[inline]
+    pub const fn has_diffuse(&self) -> bool {
+        self.contains(ShadingModeSelector::HAS_DIFFUSE)
+    }
+    #[inline]
+    pub const fn only_normals(&self) -> bool {
+        self.contains(ShadingModeSelector::ONLY_NORMALS)
+    }
+    #[inline]
+    pub const fn has_specular(&self) -> bool {
+        self.contains(ShadingModeSelector::HAS_SPECULAR)
     }
 }

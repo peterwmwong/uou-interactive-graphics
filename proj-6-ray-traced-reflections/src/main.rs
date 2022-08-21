@@ -52,7 +52,7 @@ struct Delegate {
 fn create_main_render_pipeline(
     device: &Device,
     library: &Library,
-    mode: ShadingModeSelector,
+    shading_mode: ShadingModeSelector,
     has_debug_path: bool,
 ) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)> {
     RenderPipeline::new(
@@ -62,10 +62,10 @@ fn create_main_render_pipeline(
         [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
-            HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
-            HasDiffuse: mode.contains(ShadingModeSelector::HAS_DIFFUSE),
-            OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
-            HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
+            HasAmbient: shading_mode.has_ambient(),
+            HasDiffuse: shading_mode.has_diffuse(),
+            OnlyNormals: shading_mode.only_normals(),
+            HasSpecular: shading_mode.has_specular(),
             HasDebugPath: has_debug_path,
         },
         (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),

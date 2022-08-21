@@ -1,6 +1,11 @@
 #include <metal_stdlib>
 #include "../../metal-shaders/shader_src/shading.h"
-#include "./shader_bindings.h"
+#include "../../metal-types/src/debug-path.h"
+#include "../../metal-types/src/geometry-no-tx-coords.h"
+#include "../../metal-types/src/macros.h"
+#include "../../metal-types/src/model-space.h"
+#include "../../metal-types/src/projected-space.h"
+#include "../../metal-types/src/shading-mode.h"
 #include "../../metal-types/src/tri_normals_index.h"
 
 using namespace metal;

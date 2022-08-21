@@ -1,7 +1,7 @@
 #pragma once
 
 #include <metal_stdlib>
-#include "./bindings/material.h"
+#include "../../metal-types/src/material.h"
 
 using namespace metal;
 

@@ -1,5 +1,5 @@
 #include "./shading.h"
-#include "./bindings/shading-mode.h"
+#include "../../metal-types/src/shading-mode.h"
 
 [[fragment]]
 half4 test_shade_phong_blinn_with_constant_material() {

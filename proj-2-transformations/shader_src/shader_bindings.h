@@ -4,11 +4,11 @@
 //
 // These are used to generate Rust types in the `build.rs` build script.
 
-#include "../../metal-shaders/shader_src/bindings/macros.h"
+#include "../../metal-types/src/macros.h"
 
 DEF_CONSTANT constexpr float INITIAL_CAMERA_DISTANCE = 50.0;
 
-struct Geometry {
+struct GeometryPositions {
     ARG_CONSTANT_PTR(uint)          indices;
     ARG_CONSTANT_PTR(packed_float3) positions;
 };

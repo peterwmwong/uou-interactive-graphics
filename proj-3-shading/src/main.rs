@@ -49,10 +49,10 @@ fn create_model_pipeline(
         [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
-            HasAmbient: shading_mode.contains(ShadingModeSelector::HAS_AMBIENT),
-            HasDiffuse: shading_mode.contains(ShadingModeSelector::HAS_DIFFUSE),
-            OnlyNormals: shading_mode.contains(ShadingModeSelector::ONLY_NORMALS),
-            HasSpecular: shading_mode.contains(ShadingModeSelector::HAS_SPECULAR),
+            HasAmbient: shading_mode.has_ambient(),
+            HasDiffuse: shading_mode.has_diffuse(),
+            OnlyNormals: shading_mode.only_normals(),
+            HasSpecular: shading_mode.has_specular(),
         },
         (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     )

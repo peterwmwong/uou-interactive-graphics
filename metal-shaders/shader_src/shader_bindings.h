@@ -1,8 +1,7 @@
 #pragma once
 
-#include "./bindings/geometry.h"
-#include "./bindings/macros.h"
-#include "./bindings/material.h"
-#include "./bindings/model-space.h"
-#include "./bindings/projected-space.h"
-#include "./bindings/shading-mode.h"
+#include "../../metal-types/src/geometry.h"
+#include "../../metal-types/src/material.h"
+#include "../../metal-types/src/model-space.h"
+#include "../../metal-types/src/projected-space.h"
+#include "../../metal-types/src/shading-mode.h"

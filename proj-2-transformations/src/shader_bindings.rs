@@ -13,33 +13,33 @@ use metal_app::{metal::*, metal_types::*, pipeline::*};
 pub const INITIAL_CAMERA_DISTANCE: f32 = 50.0;
 #[repr(C)]
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
-pub struct Geometry {
+pub struct GeometryPositions {
     pub indices: ::std::os::raw::c_ulong,
     pub positions: ::std::os::raw::c_ulong,
 }
 #[test]
-fn bindgen_test_layout_Geometry() {
+fn bindgen_test_layout_GeometryPositions() {
     assert_eq!(
-        ::std::mem::size_of::<Geometry>(),
+        ::std::mem::size_of::<GeometryPositions>(),
         16usize,
-        concat!("Size of: ", stringify!(Geometry))
+        concat!("Size of: ", stringify!(GeometryPositions))
     );
     assert_eq!(
-        ::std::mem::align_of::<Geometry>(),
+        ::std::mem::align_of::<GeometryPositions>(),
         8usize,
-        concat!("Alignment of ", stringify!(Geometry))
+        concat!("Alignment of ", stringify!(GeometryPositions))
     );
     fn test_field_indices() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Geometry>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<GeometryPositions>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).indices) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
-                stringify!(Geometry),
+                stringify!(GeometryPositions),
                 "::",
                 stringify!(indices)
             )
@@ -49,14 +49,14 @@ fn bindgen_test_layout_Geometry() {
     fn test_field_positions() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<Geometry>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<GeometryPositions>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).positions) as usize - ptr as usize
             },
             8usize,
             concat!(
                 "Offset of field: ",
-                stringify!(Geometry),
+                stringify!(GeometryPositions),
                 "::",
                 stringify!(positions)
             )
@@ -207,7 +207,7 @@ impl Default for VertexInput {
 #[allow(non_camel_case_types)]
 pub struct main_vertex_binds<'c> {
     pub r#in: Bind<'c, VertexInput>,
-    pub geometry: Bind<'c, Geometry>,
+    pub geometry: Bind<'c, GeometryPositions>,
 }
 impl Binds for main_vertex_binds<'_> {
     const SKIP: Self = Self {

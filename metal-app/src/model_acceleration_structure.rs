@@ -2,7 +2,6 @@ use crate::{
     debug_time,
     geometry::*,
     metal::*,
-    metal_types::*,
     pipeline::{BindAccelerationStructure, HeapUsage, ResourceUsage},
     typed_buffer::TypedBuffer,
 };
@@ -15,6 +14,7 @@ pub enum AccelerationStructureUpdateStrategy {
     // Refit,
     Rebuild,
 }
+use metal_types::{f32x4x4, TriNormalsIndex};
 use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;

@@ -3,7 +3,7 @@
 mod shader_bindings;
 
 use metal_app::{
-    components::{Camera, CameraUpdate, DepthTexture, ShadingModeSelector, ShadowMapTexture},
+    components::{Camera, DepthTexture, ShadingModeSelector, ShadowMapTexture},
     metal::*,
     metal_types::*,
     pipeline::*,
@@ -21,16 +21,6 @@ const INITIAL_TESSELATION_FACTOR: u16 = 32;
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const MAX_DISPLACEMENT_SCALE: f32 = 1.;
 const MAX_TESSELATION_FACTOR: u16 = 64;
-
-impl From<&CameraUpdate> for ProjectedSpace {
-    fn from(update: &CameraUpdate) -> Self {
-        ProjectedSpace {
-            m_world_to_projection: update.m_world_to_projection,
-            m_screen_to_world: update.m_screen_to_world,
-            position_world: update.position_world.into(),
-        }
-    }
-}
 
 struct Delegate {
     camera_space: ProjectedSpace,
@@ -63,7 +53,7 @@ struct Delegate {
 fn create_pipeline(
     device: &Device,
     library: &Library,
-    mode: ShadingModeSelector,
+    shading_mode: ShadingModeSelector,
 ) -> TesselationRenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)> {
     return TesselationRenderPipeline::new(
         "Plane",
@@ -72,10 +62,10 @@ fn create_pipeline(
         [(DEFAULT_COLOR_FORMAT, BlendMode::NoBlend)],
         main_vertex,
         main_fragment {
-            HasAmbient: mode.contains(ShadingModeSelector::HAS_AMBIENT),
-            HasDiffuse: mode.contains(ShadingModeSelector::HAS_DIFFUSE),
-            OnlyNormals: mode.contains(ShadingModeSelector::ONLY_NORMALS),
-            HasSpecular: mode.contains(ShadingModeSelector::HAS_SPECULAR),
+            HasAmbient: shading_mode.has_ambient(),
+            HasDiffuse: shading_mode.has_diffuse(),
+            OnlyNormals: shading_mode.only_normals(),
+            HasSpecular: shading_mode.has_specular(),
         },
         (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     );

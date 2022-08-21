@@ -1,7 +1,6 @@
-use metal_types::f32x4x4;
-
 use super::ui_ray::UIRay;
 use crate::{ModifierKeys, UserEvent};
+use metal_types::{f32x4x4, ProjectedSpace};
 use std::{
     ops::Neg,
     simd::{f32x2, f32x4},
@@ -17,6 +16,16 @@ pub struct CameraUpdate {
     pub m_screen_to_world: f32x4x4,
     pub m_camera_to_world: f32x4x4,
     pub m_world_to_projection: f32x4x4,
+}
+
+impl From<&CameraUpdate> for ProjectedSpace {
+    fn from(update: &CameraUpdate) -> Self {
+        ProjectedSpace {
+            m_world_to_projection: update.m_world_to_projection,
+            m_screen_to_world: update.m_screen_to_world,
+            position_world: update.position_world.into(),
+        }
+    }
 }
 
 pub struct Camera<const DRAG_SCALE: usize = 250> {

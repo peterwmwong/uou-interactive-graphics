@@ -57,9 +57,9 @@ struct VertexOut
 // the Vertex Shader as a buffer (see subsequent projects). It is done in the Vertex Shader for this
 // project as a personal excercise to become more familar with the Metal Shading Language.
 vertex VertexOut
-main_vertex(         uint            vertex_id        [[vertex_id]],
-            constant VertexInput   & in               [[buffer(0)]],
-            constant Geometry      & geometry         [[buffer(1)]])
+main_vertex(         uint                vertex_id [[vertex_id]],
+            constant VertexInput       & in        [[buffer(0)]],
+            constant GeometryPositions & geometry  [[buffer(1)]])
 {
     const float4 model_position = float4(geometry.positions[geometry.indices[vertex_id]], 1.0); // Make homogenous coordinate
     const float4 mins           = in.mins;

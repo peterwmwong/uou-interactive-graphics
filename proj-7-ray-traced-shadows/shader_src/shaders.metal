@@ -1,6 +1,10 @@
 #include <metal_stdlib>
 #include "../../metal-shaders/shader_src/shading.h"
-#include "./shader_bindings.h"
+#include "../../metal-types/src/geometry.h"
+#include "../../metal-types/src/material.h"
+#include "../../metal-types/src/model-space.h"
+#include "../../metal-types/src/projected-space.h"
+#include "../../metal-types/src/shading-mode.h"
 
 using namespace metal;
 using raytracing::primitive_acceleration_structure;

@@ -15,7 +15,7 @@ struct Delegate {
     camera: Camera<4>,
     command_queue: CommandQueue,
     device: Device,
-    model: Model<Geometry, NoMaterial>,
+    model: Model<GeometryPositions, NoMaterial>,
     needs_render: bool,
     render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (NoDepth, NoStencil)>,
     vertex_input: VertexInput,
@@ -30,7 +30,7 @@ impl RendererDelgate for Delegate {
                 .join("teapot")
                 .join("teapot.obj"),
             &device,
-            |arg: &mut Geometry, geo| {
+            |arg: &mut GeometryPositions, geo| {
                 arg.indices = geo.indices_buffer;
                 arg.positions = geo.positions_buffer;
             },

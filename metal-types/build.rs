@@ -25,12 +25,17 @@ impl CollectItems {
     }
 }
 
+// TODO: Find a better way to filter out constants
+pub fn is_constant_name(s: &str) -> bool {
+    s.chars().all(|c| c.is_ascii_uppercase() || c == '_')
+}
+
 impl ParseCallbacks for CollectItems {
     fn include_file(&self, filename: &str) {
         self.cargo_callbacks.include_file(filename);
     }
     fn item_name(&self, item_name: &str) -> Option<String> {
-        if item_name != "root" {
+        if item_name != "root" && !is_constant_name(item_name) {
             unsafe {
                 let item_name = item_name.to_owned();
                 if !ITEMS.contains(&item_name) {
@@ -112,9 +117,10 @@ pub fn main() {
                 .default_enum_style(bindgen::EnumVariation::Rust {
                     non_exhaustive: false,
                 })
-                .derive_eq(true)
                 .derive_copy(true)
                 .derive_debug(false)
+                .derive_default(true)
+                .derive_eq(true)
                 .no_debug("*")
                 .parse_callbacks(Box::new(CollectItems::new()))
                 .generate()

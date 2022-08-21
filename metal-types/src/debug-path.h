@@ -1,3 +1,7 @@
+#pragma once
+
+#include "./macros.h"
+
 DEF_CONSTANT constexpr unsigned int DEBUG_PATH_MAX_NUM_POINTS = 8;
 
 #ifdef __METAL_VERSION__
