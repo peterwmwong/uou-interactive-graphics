@@ -94,7 +94,7 @@ impl RendererDelgate for Delegate {
             )],
             NoDepth,
             NoStencil,
-            NoDepthState,
+            NoDepthStencilState,
             &[],
             |p| {
                 p.bind(

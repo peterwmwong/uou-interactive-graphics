@@ -59,7 +59,7 @@ impl RendererDelgate for CheckerboardDelegate {
             )],
             NoDepth,
             NoStencil,
-            NoDepthState,
+            NoDepthStencilState,
             &[],
             |p| p.draw_primitives(MTLPrimitiveType::TriangleStrip, 0, 4),
         );
@@ -161,7 +161,7 @@ impl<R: RendererDelgate> RendererDelgate for Delegate<R> {
             )],
             NoDepth,
             NoStencil,
-            NoDepthState,
+            NoDepthStencilState,
             &[],
             |p| {
                 p.draw_primitives_with_binds(

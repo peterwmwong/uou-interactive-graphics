@@ -76,7 +76,7 @@ impl<
     //    - I'd hate to add another param to RenderPipeline, especially if most cases it will be unused.
 
     #[inline]
-    pub fn set_depth_stencil_state(&self, ds: DS::DepthState<'_>) {
+    pub fn set_depth_stencil_state(&self, ds: DS::DepthStencilState<'_>) {
         ds.setup_render_pass(&self.encoder)
     }
 
@@ -155,7 +155,7 @@ impl<
         depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
         stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
         tesselation_factor_buffer: &TypedBuffer<MTLQuadTessellationFactorsHalf>,
-        depth_state: DS::DepthState<'b>,
+        depth_state: DS::DepthStencilState<'b>,
         resources: &[&dyn ResourceUsage],
         fun: PF,
     ) where

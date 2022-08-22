@@ -89,7 +89,7 @@ impl RendererDelgate for Delegate {
             [(render_target, (0., 0., 0., 1.), Clear, Store)],
             NoDepth,
             NoStencil,
-            NoDepthState,
+            NoDepthStencilState,
             &[&self.model_accel_struct.resource()],
             |p| {
                 p.draw_primitives_with_binds(

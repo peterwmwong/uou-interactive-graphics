@@ -127,18 +127,18 @@ impl StencilKind for NoStencil {
     fn setup_render_pass<'a>(_desc: Self::RenderPassDesc<'a>, _pass: &RenderPassDescriptorRef) {}
 }
 
-pub trait DepthState {
+pub trait DepthStencilStateKind {
     fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef);
 }
 
-impl DepthState for &DepthStencilStateRef {
+impl DepthStencilStateKind for &DepthStencilStateRef {
     #[inline]
     fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef) {
         encoder.set_depth_stencil_state(self)
     }
 }
 
-impl DepthState for (&'_ DepthStencilStateRef, u32, u32) {
+impl DepthStencilStateKind for (&'_ DepthStencilStateRef, u32, u32) {
     #[inline]
     fn setup_render_pass<'a>(&self, encoder: &'a RenderCommandEncoderRef) {
         encoder.set_depth_stencil_state(self.0);
@@ -146,8 +146,8 @@ impl DepthState for (&'_ DepthStencilStateRef, u32, u32) {
     }
 }
 
-pub struct NoDepthState;
-impl DepthState for NoDepthState {
+pub struct NoDepthStencilState;
+impl DepthStencilStateKind for NoDepthStencilState {
     #[inline]
     fn setup_render_pass<'a>(&self, _: &'a RenderCommandEncoderRef) {}
 }
@@ -155,7 +155,7 @@ impl DepthState for NoDepthState {
 pub trait DepthStencilKind {
     type DepthKind: DepthKind;
     type StencilKind: StencilKind;
-    type DepthState<'a>: DepthState;
+    type DepthStencilState<'a>: DepthStencilStateKind;
 
     #[inline]
     fn setup_pipeline(&self, pipeline_descriptor: &RenderPipelineDescriptorRef) {
@@ -179,7 +179,7 @@ pub trait DepthStencilKind {
 impl DepthStencilKind for (Depth, Stencil) {
     type DepthKind = Depth;
     type StencilKind = Stencil;
-    type DepthState<'a> = (&'a DepthStencilStateRef, u32, u32);
+    type DepthStencilState<'a> = (&'a DepthStencilStateRef, u32, u32);
 
     #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
@@ -195,7 +195,7 @@ impl DepthStencilKind for (Depth, Stencil) {
 impl DepthStencilKind for (Depth, NoStencil) {
     type DepthKind = Depth;
     type StencilKind = NoStencil;
-    type DepthState<'a> = &'a DepthStencilStateRef;
+    type DepthStencilState<'a> = &'a DepthStencilStateRef;
 
     #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
@@ -211,7 +211,7 @@ impl DepthStencilKind for (Depth, NoStencil) {
 impl DepthStencilKind for (NoDepth, Stencil) {
     type DepthKind = NoDepth;
     type StencilKind = Stencil;
-    type DepthState<'a> = (&'a DepthStencilStateRef, u32, u32);
+    type DepthStencilState<'a> = (&'a DepthStencilStateRef, u32, u32);
 
     #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
@@ -227,7 +227,7 @@ impl DepthStencilKind for (NoDepth, Stencil) {
 impl DepthStencilKind for (NoDepth, NoStencil) {
     type DepthKind = NoDepth;
     type StencilKind = NoStencil;
-    type DepthState<'a> = NoDepthState;
+    type DepthStencilState<'a> = NoDepthStencilState;
 
     #[inline]
     fn depth_kind(&self) -> &Self::DepthKind {
@@ -508,7 +508,7 @@ impl<
         self,
         debug_group: &str,
         subpass_pipeline: &'b RenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
-        new_depth_state: Option<DS::DepthState<'b>>,
+        new_depth_state: Option<DS::DepthStencilState<'b>>,
         fun: PF,
     ) {
         let encoder = self.encoder;
@@ -536,7 +536,7 @@ impl<
         self,
         debug_group: &str,
         subpass_pipeline: &'b TesselationRenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
-        new_depth_state: Option<DS::DepthState<'b>>,
+        new_depth_state: Option<DS::DepthStencilState<'b>>,
         new_tesselation_factors_buffer: Option<&'b TypedBuffer<MTLQuadTessellationFactorsHalf>>,
         fun: PF,
     ) {
@@ -559,7 +559,7 @@ impl<
     }
 
     #[inline]
-    pub fn set_depth_stencil_state(&self, ds: DS::DepthState<'_>) {
+    pub fn set_depth_stencil_state(&self, ds: DS::DepthStencilState<'_>) {
         ds.setup_render_pass(&self.encoder)
     }
 }
@@ -665,7 +665,7 @@ impl<
         color_attachments: [ColorRenderPassDesc; NUM_COLOR_ATTACHMENTS],
         depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
         stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
-        depth_state: DS::DepthState<'b>,
+        depth_stencil_state: DS::DepthStencilState<'b>,
         resources: &[&dyn ResourceUsage],
         fun: PF,
     ) where
@@ -687,7 +687,7 @@ impl<
             r.use_resource(encoder)
         }
         encoder.set_render_pipeline_state(&self.pipeline);
-        depth_state.setup_render_pass(encoder);
+        depth_stencil_state.setup_render_pass(encoder);
         fun(RenderPass {
             encoder,
             _vertex: PhantomData,
