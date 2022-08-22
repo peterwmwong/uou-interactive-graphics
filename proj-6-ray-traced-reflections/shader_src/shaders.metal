@@ -71,7 +71,7 @@ half4 main_fragment(         VertexOut                 in                [[stage
             // intersection.
             r_origin = r_origin + (r_dir * half(hit.distance));
             const auto p = (device TriNormalsIndex *) hit.primitive_data;
-            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, m_model_to_worlds));
+            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[hit.geometry_id]));
             if (HasDebugPath) dbg.add_point(r_origin);
         } else {
             break;

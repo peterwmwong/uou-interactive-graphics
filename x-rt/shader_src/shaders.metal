@@ -37,11 +37,7 @@ half4 main_fragment(
     auto hit = inter.intersect(r, accelerationStructure);
     if (hit.type == intersection_type::triangle) {
         const auto p = (device TriNormalsIndex *) hit.primitive_data;
-        // TODO: START HERE
-        // TODO: START HERE
-        // TODO: START HERE
-        // m_model_to_worlds needs to be an array indexed by geometry (draw call / obj mesh index).
-        return half4(p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[0]), 1);
+        return half4(p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[hit.geometry_id]), 1);
     }
     return 0;
 }
