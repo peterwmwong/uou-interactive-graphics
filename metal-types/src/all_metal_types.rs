@@ -978,16 +978,15 @@ fn bindgen_test_layout_ProjectedSpace() {
     test_field_position_world();
 }
 #[repr(C)]
-#[derive(Default, Copy, Clone, PartialEq)]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub struct TriNormalsIndex {
-    pub normals: [packed_float3; 3usize],
-    pub index: ::std::os::raw::c_ushort,
+    pub normals: [::std::os::raw::c_uint; 2usize],
 }
 #[test]
 fn bindgen_test_layout_TriNormalsIndex() {
     assert_eq!(
         ::std::mem::size_of::<TriNormalsIndex>(),
-        40usize,
+        8usize,
         concat!("Size of: ", stringify!(TriNormalsIndex))
     );
     assert_eq!(
@@ -1012,23 +1011,6 @@ fn bindgen_test_layout_TriNormalsIndex() {
         );
     }
     test_field_normals();
-    fn test_field_index() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<TriNormalsIndex>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).index) as usize - ptr as usize
-            },
-            36usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(TriNormalsIndex),
-                "::",
-                stringify!(index)
-            )
-        );
-    }
-    test_field_index();
 }
 
 #[test]

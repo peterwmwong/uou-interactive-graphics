@@ -57,7 +57,7 @@
       </MacroExpansion>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "$(SRCROOT)/../common-assets/sphere.obj"
+            argument = "$(SRCROOT)/../common-assets/yoda/yoda.obj"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

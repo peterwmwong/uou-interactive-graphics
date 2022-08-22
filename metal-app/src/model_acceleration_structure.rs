@@ -167,7 +167,6 @@ impl ModelAccelerationStructure {
                                 raw_normals,
                                 raw_indices,
                                 i,
-                                m_model_to_world_i as _,
                             );
                         }
                         tri_as_desc.set_primitive_data_buffer(Some(&primitive_data_buffer.raw));
