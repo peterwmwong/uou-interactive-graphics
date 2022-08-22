@@ -1,34 +1,37 @@
 #pragma once
 
 #ifdef __METAL_VERSION__
-inline half3 decode(float2 f) {
-    // float2 f = float2(f_half);
 
-    // f = f * 2.0 - 1.0;
-    f = f * 2.0 - 1.0;
-
-    // https://twitter.com/Stubbesaurus/status/937994790553227264
-    // float3 n = float3( f.x, f.y, 1.0 - abs( f.x ) - abs( f.y ) );
-    float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
-
-    // float t = saturate( -n.z );
-    float t = saturate(-n.z);
-
-    // n.xy += n.xy >= 0.0 ? -t : t;
-    n.xy += any(n.xy >= 0.0) ? -t : t;
-
-    // return normalize( n );
-    return half3(normalize(n));
+// http://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html
+inline half3 decode(float3 n)
+{
+    float3 o;
+    o.x = n.x - n.y;
+    o.y = n.x + n.y - 1.0;
+    o.z = fma(n.z, 2.0, -1.0) * (1.0 - abs(o.x) - abs(o.y));
+    return half3(normalize(o));
 }
 
+// TODO: Can we vectorize this be decode 3 normals at once?
+// Idea: Instead of encoding 3 encoded normals as ([xy], [xy], [xy])... but ([xxx], [yyy])
+// inline half3x3 decode_2(float3 xs, float3 ys, float3 zs)
+// {
+//     const float3 nx = xs - ys;
+//     const float3 ny = xs + ys - 1.0;
+//     const float3 nz = (zs * 2.0 - 1.0) * (1.0 - abs(nx) - abs(ny));
+//     return half3x3(
+//         half3(normalize(float3(nx.x, ny.x, nz.x))),
+//         half3(normalize(float3(nx.y, ny.y, nz.y))),
+//         half3(normalize(float3(nx.z, ny.z, nz.z)))
+//     );
+// }
 #endif // __METAL_VERSION__
 
 // TODO: Use a more compact format for storing normals (Octohedron
 // See https://aras-p.info/texts/CompactNormalStorage.html
 struct TriNormalsIndex {
-    packed_float2  normals[3];
+    packed_float3  normals[3];
     unsigned short index;
-    unsigned short _padding;
 
     #ifdef __METAL_VERSION__
     inline half3 normal(const float2 barycentric_coord, const constant MTLPackedFloat4x3 *transforms) const device {
@@ -46,4 +49,3 @@ struct TriNormalsIndex {
     }
     #endif // __METAL_VERSION__
 };
-
