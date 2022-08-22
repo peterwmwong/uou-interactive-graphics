@@ -8,7 +8,7 @@ inline half3 decode(float3 n)
     float3 o;
     o.x = n.x - n.y;
     o.y = n.x + n.y - 1.0;
-    o.z = fma(n.z, 2.0, -1.0) * (1.0 - abs(o.x) - abs(o.y));
+    o.z = (n.z * 2.0 - 1.0) * (1.0 - abs(o.x) - abs(o.y));
     return half3(normalize(o));
 }
 
@@ -31,6 +31,16 @@ inline half3 decode(float3 n)
 // See https://aras-p.info/texts/CompactNormalStorage.html
 struct TriNormalsIndex {
     packed_float3  normals[3];
+
+    // 3 Normals packed/encoded into 2 32-bit (10 10 10 2)
+    //          | X            | Y             | Z-sign
+    // ---------|--------------|---------------|-------------------
+    // normal 0 | normals[0].x | normals[0].y  | normals[0].w
+    // normal 1 | normals[1].x | normals[1].y  | normals[1].w&1
+    // normal 2 | normals[0].z | normals[1].z  | (normals[1].w>>1)&1
+    // unsigned int   normals[2];
+
+    // unsigned int normals[3];
     unsigned short index;
 
     #ifdef __METAL_VERSION__

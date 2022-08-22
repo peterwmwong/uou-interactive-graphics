@@ -47,29 +47,6 @@ fn encode(v: &[f32], i: usize) -> packed_float3 {
     }
 }
 
-#[inline]
-fn decode(n: packed_float3) -> [f32; 3] {
-    let n = f32x4::from_array([n.xyz[0], n.xyz[1], n.xyz[2], 0.0]);
-    // float3 OutN;
-    let mut out_n = f32x4::splat(0.);
-
-    // OutN.x = (n.x - n.y);
-    out_n[0] = n[0] - n[1];
-
-    // OutN.y = (n.x + n.y) - 1.0;
-    out_n[1] = (n[0] + n[1]) - 1.0;
-
-    // OutN.z = n.z * 2.0 - 1.0;
-    // OutN.z = OutN.z * ( 1.0 - abs(OutN.x) - abs(OutN.y));
-    out_n[2] = (n[2] * 2.0 - 1.0) * (1.0 - out_n[0].abs() - out_n[1].abs());
-
-    // OutN = normalize( OutN );
-    out_n = out_n / f32x4::splat((out_n * out_n).reduce_sum().sqrt());
-
-    // return OutN;
-    [out_n[0], out_n[1], out_n[2]]
-}
-
 impl TriNormalsIndex {
     #[inline]
     pub fn from_indexed_raw_normals(
@@ -92,17 +69,84 @@ impl TriNormalsIndex {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::packed_half3;
+    use metal::*;
 
-    fn t(input: [f32; 3]) {
-        let e = encode(&input, 0);
-        let d = decode(e);
-        assert_eq!(input, d);
-    }
+    const COS_PI_4: f32 = 0.7071067811865476;
+    const SIN_PI_4: f32 = 0.7071067811865475;
 
-    // TODO: Add tests that uses a Metal Compute Pipeline to verify the shader `decode()`.
+    const TEST_COMPUTE_SRC: &'static str = concat!(
+        r#"
+#include <metal_stdlib>
+using namespace metal;
+"#,
+        include_str!("./tri_normals_index.h"),
+        r#"
+[[kernel]]
+void test(
+    constant packed_float3 & input  [[buffer(0)]],
+    device   packed_half3  * output [[buffer(1)]]
+) {
+    *output = decode(input);
+}
+"#
+    );
 
     #[test]
-    pub fn test() {
+    pub fn encode_rs_decode_metal() {
+        let device = Device::system_default().expect("Failed to access Metal Device");
+        let output_buf = device.new_buffer(
+            std::mem::size_of::<packed_half3>() as _,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let lib = device
+            .new_library_with_source(TEST_COMPUTE_SRC, &CompileOptions::new())
+            .expect("Failed to compile test compute kernel source");
+        let cmd_queue = device.new_command_queue();
+        let test_fn = lib
+            .get_function("test", None)
+            .expect("Failed to get kernel function");
+        let pipeline = device
+            .new_compute_pipeline_state_with_function(&test_fn)
+            .expect("Failed to get kernel function");
+
+        let t = |input: [f32; 3]| {
+            let cmd_buf = cmd_queue.new_command_buffer();
+            let e = cmd_buf.new_compute_command_encoder();
+            e.set_compute_pipeline_state(&pipeline);
+            e.set_bytes(
+                0,
+                std::mem::size_of::<packed_float3>() as _,
+                (&encode(&input, 0) as *const packed_float3) as *const _,
+            );
+            e.set_buffer(1, Some(&output_buf), 0);
+            e.dispatch_threads(
+                MTLSize {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+                MTLSize {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+            );
+            e.end_encoding();
+            cmd_buf.commit();
+            cmd_buf.wait_until_completed();
+            let actual = unsafe { &*(output_buf.contents() as *const packed_half3) };
+            let diffs = [
+                (input[0] - half::f16::from_bits(actual.xyz[0]).to_f32()).abs(),
+                (input[1] - half::f16::from_bits(actual.xyz[1]).to_f32()).abs(),
+                (input[2] - half::f16::from_bits(actual.xyz[2]).to_f32()).abs(),
+            ];
+            const TOLERANCE: f32 = 0.0001;
+            assert!(diffs[0] < TOLERANCE);
+            assert!(diffs[1] < TOLERANCE);
+            assert!(diffs[2] < TOLERANCE);
+        };
+
         t([1., 0., 0.]);
         t([0., 1., 0.]);
         t([0., 0., 1.]);
@@ -111,19 +155,19 @@ mod test {
         t([0., -1., 0.]);
         t([0., 0., -1.]);
 
-        t([0.7071067811865476, 0.7071067811865475, 0.]);
-        t([-0.7071067811865476, 0.7071067811865475, 0.]);
-        t([0.7071067811865476, -0.7071067811865475, 0.]);
-        t([-0.7071067811865476, -0.7071067811865475, 0.]);
+        t([COS_PI_4, SIN_PI_4, 0.]);
+        t([-COS_PI_4, SIN_PI_4, 0.]);
+        t([COS_PI_4, -SIN_PI_4, 0.]);
+        t([-COS_PI_4, -SIN_PI_4, 0.]);
 
-        t([0.7071067811865476, 0., 0.7071067811865475]);
-        t([-0.7071067811865476, 0., 0.7071067811865475]);
-        t([0.7071067811865476, 0., -0.7071067811865475]);
-        t([-0.7071067811865476, 0., -0.7071067811865475]);
+        t([COS_PI_4, 0., SIN_PI_4]);
+        t([-COS_PI_4, 0., SIN_PI_4]);
+        t([COS_PI_4, 0., -SIN_PI_4]);
+        t([-COS_PI_4, 0., -SIN_PI_4]);
 
-        t([0., 0.7071067811865476, 0.7071067811865475]);
-        t([0., -0.7071067811865476, 0.7071067811865475]);
-        t([0., 0.7071067811865476, -0.7071067811865475]);
-        t([0., -0.7071067811865476, -0.7071067811865475]);
+        t([0., COS_PI_4, SIN_PI_4]);
+        t([0., -COS_PI_4, SIN_PI_4]);
+        t([0., COS_PI_4, -SIN_PI_4]);
+        t([0., -COS_PI_4, -SIN_PI_4]);
     }
 }
