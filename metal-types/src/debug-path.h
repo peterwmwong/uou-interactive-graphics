@@ -31,7 +31,7 @@ struct DebugPath {
 #ifdef __METAL_VERSION__
     inline DebugPathHelper activate_if_screen_pos(const float2 pos) device {
         if (HasDebugPath) {
-            const bool active = !update_disabled && all(abs(screen_pos - pos) <= float2(0.5));
+            const bool active = !update_disabled && all(abs(screen_pos - pos) < float2(0.5));
             if (active) num_points = 0;
             return DebugPathHelper { .dbg_ray = this, .active = active };
         } else {
