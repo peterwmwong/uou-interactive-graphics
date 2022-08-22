@@ -355,9 +355,9 @@
                 "--bin",
                 "x-rt",
                 "--",
-                "${workspaceFolder}/common-assets/plane/plane.obj"
+                "${workspaceFolder}/common-assets/sphere.obj"
             ],
-            "label": "Run x-rt plane"
+            "label": "Run x-rt sphere"
         },
         {
             "type": "cargo",
