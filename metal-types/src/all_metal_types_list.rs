@@ -10,7 +10,7 @@ pub const TYPES: [&'static str; 21] = [
 	"Material",
 	"ModelSpace",
 	"ProjectedSpace",
-	"TriNormalsIndex",
+	"TriNormals",
 	"float2",
 	"float3x3",
 	"float4",

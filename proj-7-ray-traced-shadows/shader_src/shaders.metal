@@ -47,11 +47,7 @@ main_fragment(         VertexOut                 in           [[stage_in]],
     // whether the fragment shadowed or not.
     bool is_shadow = false;
     if (dot(normal, to_light) >= 0.0) {
-        raytracing::ray r;
-        r.origin       = pos.xyz;
-        r.direction    = to_light;
-        r.min_distance = 0.001;
-        r.max_distance = FLT_MAX;
+        raytracing::ray r(pos.xyz, to_light);
         raytracing::intersector<> intersector;
         // TODO: Figure out what there's a tiny little teapot shadow right behind the light when the
         // light is positioned right above the ground... weird.

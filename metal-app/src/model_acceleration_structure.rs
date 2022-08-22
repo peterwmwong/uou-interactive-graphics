@@ -14,7 +14,7 @@ pub enum AccelerationStructureUpdateStrategy {
     // Refit,
     Rebuild,
 }
-use metal_types::{f32x4x4, TriNormalsIndex};
+use metal_types::{f32x4x4, TriNormals};
 use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
@@ -82,13 +82,16 @@ impl ModelAccelerationStructure {
             };
             geometry_heap.set_label("geometry_heap");
 
+            let total_num_draws = geometries.iter().fold(0, |acc, g| acc + g.draws.len());
             let m_model_to_worlds_buffer: TypedBuffer<MTLPackedFloat4x3> =
                 TypedBuffer::with_capacity(
                     "Triangle Transform Matrix",
                     device,
-                    geometries.len(),
+                    total_num_draws,
                     MTLResourceOptions::StorageModeShared,
                 );
+
+            let mut m_model_to_world_i = 0;
             let m_model_to_worlds = m_model_to_worlds_buffer.get_mut();
 
             // ========================================
@@ -119,12 +122,16 @@ impl ModelAccelerationStructure {
                         });
                     },
                 );
-                let m_model_to_world_i = i;
-                m_model_to_worlds[i] = init_m_model_to_world(&geometry.max_bounds, i).into();
+                let m_model_to_world_i_for_first_draw = m_model_to_world_i;
+                let m_model_to_world: MTLPackedFloat4x3 =
+                    init_m_model_to_world(&geometry.max_bounds, i).into();
 
                 let normals = geometry_buffers.normals.get();
                 let indices = geometry_buffers.indices.get();
                 tri_as_descs.extend(draws.into_iter().map(|draw| {
+                    m_model_to_worlds[m_model_to_world_i] = m_model_to_world;
+                    m_model_to_world_i += 1;
+
                     let tri_as_desc = AccelerationStructureTriangleGeometryDescriptor::descriptor();
                     tri_as_desc.set_vertex_format(MTLAttributeFormat::Float3);
                     tri_as_desc.set_vertex_buffer(Some(&geometry_buffers.positions.raw));
@@ -139,14 +146,15 @@ impl ModelAccelerationStructure {
                     tri_as_desc
                         .set_transformation_matrix_buffer(Some(&m_model_to_worlds_buffer.raw));
                     tri_as_desc.set_transformation_matrix_buffer_offset(
-                        (m_model_to_worlds_buffer.element_size() * i) as _,
+                        (m_model_to_worlds_buffer.element_size()
+                            * m_model_to_world_i_for_first_draw) as _,
                     );
 
                     // TODO: Extract out, make it optional the caller can add whatever primitive data
                     // Normals as primitive data. It is the non-indexed version of the
                     // `geometry_buffers.normals`.
                     {
-                        let primitive_data_buffer: TypedBuffer<TriNormalsIndex> =
+                        let primitive_data_buffer: TypedBuffer<TriNormals> =
                             TypedBuffer::with_capacity(
                                 "Normal Primitive Data",
                                 device.deref(),
@@ -163,12 +171,8 @@ impl ModelAccelerationStructure {
                             [(draw.index_byte_offset as usize / std::mem::size_of::<u32>())..];
                         let primitive_data = primitive_data_buffer.get_mut();
                         for i in 0..(draw.triangle_count as usize) {
-                            primitive_data[i] = TriNormalsIndex::from_indexed_raw_normals(
-                                raw_normals,
-                                raw_indices,
-                                i,
-                                m_model_to_world_i as _,
-                            );
+                            primitive_data[i] =
+                                TriNormals::from_indexed_raw_normals(raw_normals, raw_indices, i);
                         }
                         tri_as_desc.set_primitive_data_buffer(Some(&primitive_data_buffer.raw));
                         tri_as_desc.set_primitive_data_buffer_offset(0);

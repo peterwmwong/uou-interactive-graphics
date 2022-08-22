@@ -53,7 +53,7 @@ half4 main_fragment(         VertexOut                 in                [[stage
 
     // Are we debugging this screen position? (within a half pixel)
     DebugPathHelper dbg;
-    if (HasDebugPath) {
+    if (UpdateDebugPath) {
         dbg = dbg_path.activate_if_screen_pos(in.position.xy);
         dbg.add_point(camera_pos);
         dbg.add_point(pos);
@@ -70,21 +70,21 @@ half4 main_fragment(         VertexOut                 in                [[stage
             // Assumption: Everything in the acceleration structure has the same (mirror) material.
             // intersection.
             r_origin = r_origin + (r_dir * half(hit.distance));
-            const auto p = (device TriNormalsIndex *) hit.primitive_data;
-            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, m_model_to_worlds));
-            if (HasDebugPath) dbg.add_point(r_origin);
+            const auto p = (device TriNormals *) hit.primitive_data;
+            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[hit.geometry_id]));
+            if (UpdateDebugPath) dbg.add_point(r_origin);
         } else {
             break;
         }
     }
-    if (HasDebugPath) dbg.add_relative_point(r_dir);
+    if (UpdateDebugPath) dbg.add_relative_point(r_dir);
 
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
     const half4 color = env_texture.sample(tx_sampler, float3(r_dir));
 
     // Render a single red pixel, so this pixel can easily be targetted for the shader debugger in
     // the GPU Frame Capture.
-    if (HasDebugPath && dbg.active) {
+    if (UpdateDebugPath && dbg.active) {
         return half4(1, 0, 0, 1);
     }
     return shade_phong_blinn(

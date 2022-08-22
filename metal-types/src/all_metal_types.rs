@@ -500,7 +500,6 @@ pub const DEBUG_PATH_MAX_NUM_POINTS: ::std::os::raw::c_uint = 8;
 pub struct DebugPath {
     pub points: [packed_float3; 8usize],
     pub screen_pos: float2,
-    pub update_disabled: bool,
     pub num_points: ::std::os::raw::c_uchar,
 }
 #[test]
@@ -549,23 +548,6 @@ fn bindgen_test_layout_DebugPath() {
         );
     }
     test_field_screen_pos();
-    fn test_field_update_disabled() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<DebugPath>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).update_disabled) as usize - ptr as usize
-            },
-            104usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(DebugPath),
-                "::",
-                stringify!(update_disabled)
-            )
-        );
-    }
-    test_field_update_disabled();
     fn test_field_num_points() {
         assert_eq!(
             unsafe {
@@ -573,7 +555,7 @@ fn bindgen_test_layout_DebugPath() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).num_points) as usize - ptr as usize
             },
-            105usize,
+            104usize,
             concat!(
                 "Offset of field: ",
                 stringify!(DebugPath),
@@ -979,56 +961,38 @@ fn bindgen_test_layout_ProjectedSpace() {
 }
 #[repr(C)]
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
-pub struct TriNormalsIndex {
-    pub normals: [packed_half3; 3usize],
-    pub index: ::std::os::raw::c_ushort,
+pub struct TriNormals {
+    pub normals: [::std::os::raw::c_uint; 2usize],
 }
 #[test]
-fn bindgen_test_layout_TriNormalsIndex() {
+fn bindgen_test_layout_TriNormals() {
     assert_eq!(
-        ::std::mem::size_of::<TriNormalsIndex>(),
-        20usize,
-        concat!("Size of: ", stringify!(TriNormalsIndex))
+        ::std::mem::size_of::<TriNormals>(),
+        8usize,
+        concat!("Size of: ", stringify!(TriNormals))
     );
     assert_eq!(
-        ::std::mem::align_of::<TriNormalsIndex>(),
-        2usize,
-        concat!("Alignment of ", stringify!(TriNormalsIndex))
+        ::std::mem::align_of::<TriNormals>(),
+        4usize,
+        concat!("Alignment of ", stringify!(TriNormals))
     );
     fn test_field_normals() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<TriNormalsIndex>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<TriNormals>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).normals) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
-                stringify!(TriNormalsIndex),
+                stringify!(TriNormals),
                 "::",
                 stringify!(normals)
             )
         );
     }
     test_field_normals();
-    fn test_field_index() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<TriNormalsIndex>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).index) as usize - ptr as usize
-            },
-            18usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(TriNormalsIndex),
-                "::",
-                stringify!(index)
-            )
-        );
-    }
-    test_field_index();
 }
 
 #[test]
@@ -1041,7 +1005,7 @@ fn test_metal_types_derive_copy() {
     HasCopyClone(PhantomData::<Material>);
     HasCopyClone(PhantomData::<ModelSpace>);
     HasCopyClone(PhantomData::<ProjectedSpace>);
-    HasCopyClone(PhantomData::<TriNormalsIndex>);
+    HasCopyClone(PhantomData::<TriNormals>);
     HasCopyClone(PhantomData::<float2>);
     HasCopyClone(PhantomData::<float3x3>);
     HasCopyClone(PhantomData::<float4>);
