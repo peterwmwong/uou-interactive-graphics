@@ -978,21 +978,22 @@ fn bindgen_test_layout_ProjectedSpace() {
     test_field_position_world();
 }
 #[repr(C)]
-#[derive(Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, PartialEq)]
 pub struct TriNormalsIndex {
-    pub normals: [packed_half3; 3usize],
+    pub normals: [packed_float2; 3usize],
     pub index: ::std::os::raw::c_ushort,
+    pub _padding: ::std::os::raw::c_ushort,
 }
 #[test]
 fn bindgen_test_layout_TriNormalsIndex() {
     assert_eq!(
         ::std::mem::size_of::<TriNormalsIndex>(),
-        20usize,
+        28usize,
         concat!("Size of: ", stringify!(TriNormalsIndex))
     );
     assert_eq!(
         ::std::mem::align_of::<TriNormalsIndex>(),
-        2usize,
+        4usize,
         concat!("Alignment of ", stringify!(TriNormalsIndex))
     );
     fn test_field_normals() {
@@ -1019,7 +1020,7 @@ fn bindgen_test_layout_TriNormalsIndex() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).index) as usize - ptr as usize
             },
-            18usize,
+            24usize,
             concat!(
                 "Offset of field: ",
                 stringify!(TriNormalsIndex),
@@ -1029,6 +1030,23 @@ fn bindgen_test_layout_TriNormalsIndex() {
         );
     }
     test_field_index();
+    fn test_field__padding() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<TriNormalsIndex>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr)._padding) as usize - ptr as usize
+            },
+            26usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(TriNormalsIndex),
+                "::",
+                stringify!(_padding)
+            )
+        );
+    }
+    test_field__padding();
 }
 
 #[test]
