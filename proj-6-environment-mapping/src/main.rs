@@ -27,12 +27,15 @@ const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 
 struct Delegate {
-    bg_depth_state: DepthStencilState,
     bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, Stencil)>,
     camera: Camera,
     command_queue: CommandQueue,
     cubemap_texture: Texture,
     depth_texture: DepthTexture,
+    depth_keep_stencil_keep_allow_equal: DepthStencilState,
+    depth_keep_stencil_write_allow_all: DepthStencilState,
+    depth_write_stencil_keep_allow_equal: DepthStencilState,
+    depth_write_stencil_write_allow_all: DepthStencilState,
     device: Device,
     library: Library,
     main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, Stencil)>,
@@ -41,12 +44,9 @@ struct Delegate {
     m_world_to_mirror_world: f32x4x4,
     mirror_camera_space: ProjectedSpace,
     mirror_light_position: f32x4,
-    mirror_model_depth_state: DepthStencilState,
     mirror_model_space: ModelSpace,
-    mirror_plane_depth_state: DepthStencilState,
     mirror_plane_model_space: ModelSpace,
     mirror_plane_model: Model<GeometryNoTxCoords, NoMaterial>,
-    model_depth_state: DepthStencilState,
     model_space: ModelSpace,
     model: Model<GeometryNoTxCoords, NoMaterial>,
     needs_render: bool,
@@ -149,7 +149,7 @@ impl RendererDelgate for Delegate {
             .new_library_with_data(LIBRARY_BYTES)
             .expect("Failed to import shader metal lib.");
         Self {
-            bg_depth_state: {
+            depth_keep_stencil_keep_allow_equal: {
                 ds.set_depth_write_enabled(false);
                 ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 {
@@ -160,7 +160,7 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
-            mirror_model_depth_state: {
+            depth_write_stencil_keep_allow_equal: {
                 ds.set_depth_write_enabled(true);
                 ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 {
@@ -171,7 +171,7 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
-            mirror_plane_depth_state: {
+            depth_keep_stencil_write_allow_all: {
                 ds.set_depth_write_enabled(false);
                 ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 {
@@ -182,7 +182,7 @@ impl RendererDelgate for Delegate {
                 }
                 device.new_depth_stencil_state(&ds)
             },
-            model_depth_state: {
+            depth_write_stencil_write_allow_all: {
                 ds.set_depth_write_enabled(true);
                 ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
                 {
@@ -266,9 +266,14 @@ impl RendererDelgate for Delegate {
                 MTLStoreAction::Store,
             )],
             (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
-            (stenc_tx, 0, MTLLoadAction::Clear, MTLStoreAction::DontCare),
             (
-                &self.model_depth_state,
+                stenc_tx,
+                BG_STENCIL_REF_VALUE,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
+            (
+                &self.depth_write_stencil_write_allow_all,
                 MODEL_STENCIL_REF_VALUE,
                 MODEL_STENCIL_REF_VALUE,
             ),
@@ -300,7 +305,7 @@ impl RendererDelgate for Delegate {
                 draw_model(&p, &self.model);
                 p.debug_group("Plane", || {
                     p.set_depth_stencil_state((
-                        &self.mirror_plane_depth_state,
+                        &self.depth_keep_stencil_write_allow_all,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
                     ));
@@ -315,7 +320,7 @@ impl RendererDelgate for Delegate {
                 });
                 p.debug_group("Model (mirrored)", || {
                     p.set_depth_stencil_state((
-                        &self.mirror_model_depth_state,
+                        &self.depth_write_stencil_keep_allow_equal,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
                     ));
@@ -339,7 +344,7 @@ impl RendererDelgate for Delegate {
                     "BG",
                     &self.bg_render_pipeline,
                     Some((
-                        &self.bg_depth_state,
+                        &self.depth_keep_stencil_keep_allow_equal,
                         BG_STENCIL_REF_VALUE,
                         BG_STENCIL_REF_VALUE,
                     )),
