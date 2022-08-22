@@ -58,8 +58,12 @@ impl RendererDelgate for Delegate {
                     let [cx, cy, cz, _] = center.neg().to_array();
                     let scale = 1. / size.reduce_max();
                     f32x4x4::scale(scale, scale, scale, 1.)
-                        * f32x4x4::y_rotate(PI)
-                        * f32x4x4::x_rotate(PI / 2.)
+                        // TODO: TEMPORARY
+                        // TODO: TEMPORARY
+                        // TODO: TEMPORARY
+                        // Remove rotation to make it easier to debug TriNormalsIndex optimizations
+                        // * f32x4x4::y_rotate(PI)
+                        // * f32x4x4::x_rotate(PI / 2.)
                         * f32x4x4::translate(cx, cy, cz)
                 },
             ),
