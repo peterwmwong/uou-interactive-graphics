@@ -82,10 +82,7 @@ pub fn main() {
     // TODO: Figure out a way to keep this in-sync with lib.rs
     let src_dir = Path::new(METAL_BUILD_MANIFEST_DIR).join("src");
     let header = src_dir.join("all_metal_types.h");
-    let mut deps = get_shader_deps(&concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/all_metal_types.metal"
-    ));
+    let mut deps = get_shader_deps(&concat!(env!("CARGO_MANIFEST_DIR"), "/src/shaders.metal"));
     deps.push(header.clone());
     let deps_refs: Vec<&dyn AsRef<Path>> = deps.iter().map(|a| a as _).collect();
 
