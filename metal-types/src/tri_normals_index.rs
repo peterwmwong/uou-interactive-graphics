@@ -1,4 +1,4 @@
-use super::all_metal_types::TriNormalsIndex;
+use super::all_metal_types::TriNormals;
 use std::{
     ffi::c_uint,
     simd::{f32x4, SimdFloat},
@@ -99,7 +99,7 @@ fn encode(v: &[f32], n0: usize, n1: usize, n2: usize) -> [c_uint; 2] {
     )
 }
 
-impl TriNormalsIndex {
+impl TriNormals {
     #[inline]
     pub fn from_indexed_raw_normals(
         raw_normals: &[f32],

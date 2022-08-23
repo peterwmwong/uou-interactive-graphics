@@ -14,7 +14,7 @@ pub enum AccelerationStructureUpdateStrategy {
     // Refit,
     Rebuild,
 }
-use metal_types::{f32x4x4, TriNormalsIndex};
+use metal_types::{f32x4x4, TriNormals};
 use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
@@ -154,7 +154,7 @@ impl ModelAccelerationStructure {
                     // Normals as primitive data. It is the non-indexed version of the
                     // `geometry_buffers.normals`.
                     {
-                        let primitive_data_buffer: TypedBuffer<TriNormalsIndex> =
+                        let primitive_data_buffer: TypedBuffer<TriNormals> =
                             TypedBuffer::with_capacity(
                                 "Normal Primitive Data",
                                 device.deref(),
@@ -171,11 +171,8 @@ impl ModelAccelerationStructure {
                             [(draw.index_byte_offset as usize / std::mem::size_of::<u32>())..];
                         let primitive_data = primitive_data_buffer.get_mut();
                         for i in 0..(draw.triangle_count as usize) {
-                            primitive_data[i] = TriNormalsIndex::from_indexed_raw_normals(
-                                raw_normals,
-                                raw_indices,
-                                i,
-                            );
+                            primitive_data[i] =
+                                TriNormals::from_indexed_raw_normals(raw_normals, raw_indices, i);
                         }
                         tri_as_desc.set_primitive_data_buffer(Some(&primitive_data_buffer.raw));
                         tri_as_desc.set_primitive_data_buffer_offset(0);

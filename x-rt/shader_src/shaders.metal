@@ -36,7 +36,7 @@ half4 main_fragment(
     inter.assume_geometry_type(geometry_type::triangle);
     auto hit = inter.intersect(r, accelerationStructure);
     if (hit.type == intersection_type::triangle) {
-        const auto p = (device TriNormalsIndex *) hit.primitive_data;
+        const auto p = (device TriNormals *) hit.primitive_data;
         return half4(p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[hit.geometry_id]), 1);
     }
     return 0;

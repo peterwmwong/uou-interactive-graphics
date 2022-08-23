@@ -961,32 +961,32 @@ fn bindgen_test_layout_ProjectedSpace() {
 }
 #[repr(C)]
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
-pub struct TriNormalsIndex {
+pub struct TriNormals {
     pub normals: [::std::os::raw::c_uint; 2usize],
 }
 #[test]
-fn bindgen_test_layout_TriNormalsIndex() {
+fn bindgen_test_layout_TriNormals() {
     assert_eq!(
-        ::std::mem::size_of::<TriNormalsIndex>(),
+        ::std::mem::size_of::<TriNormals>(),
         8usize,
-        concat!("Size of: ", stringify!(TriNormalsIndex))
+        concat!("Size of: ", stringify!(TriNormals))
     );
     assert_eq!(
-        ::std::mem::align_of::<TriNormalsIndex>(),
+        ::std::mem::align_of::<TriNormals>(),
         4usize,
-        concat!("Alignment of ", stringify!(TriNormalsIndex))
+        concat!("Alignment of ", stringify!(TriNormals))
     );
     fn test_field_normals() {
         assert_eq!(
             unsafe {
-                let uninit = ::std::mem::MaybeUninit::<TriNormalsIndex>::uninit();
+                let uninit = ::std::mem::MaybeUninit::<TriNormals>::uninit();
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).normals) as usize - ptr as usize
             },
             0usize,
             concat!(
                 "Offset of field: ",
-                stringify!(TriNormalsIndex),
+                stringify!(TriNormals),
                 "::",
                 stringify!(normals)
             )
@@ -1005,7 +1005,7 @@ fn test_metal_types_derive_copy() {
     HasCopyClone(PhantomData::<Material>);
     HasCopyClone(PhantomData::<ModelSpace>);
     HasCopyClone(PhantomData::<ProjectedSpace>);
-    HasCopyClone(PhantomData::<TriNormalsIndex>);
+    HasCopyClone(PhantomData::<TriNormals>);
     HasCopyClone(PhantomData::<float2>);
     HasCopyClone(PhantomData::<float3x3>);
     HasCopyClone(PhantomData::<float4>);

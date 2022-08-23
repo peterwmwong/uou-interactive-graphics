@@ -47,12 +47,7 @@ inline half3x3 decode(const uint n0, const uint n1) {
 // }
 #endif // __METAL_VERSION__
 
-
-// TODO: START HERE
-// TODO: START HERE
-// TODO: START HERE
-// Rename to TriNormals
-struct TriNormalsIndex {
+struct TriNormals {
     // 3 Normals packed/encoded into 2 32-bit (10 10 10 2)
     //          | X            | Y             | Z-sign
     // ---------|--------------|---------------|-------------------
@@ -62,9 +57,9 @@ struct TriNormalsIndex {
     unsigned int normals[2];
 
     #ifdef __METAL_VERSION__
-    // TODO: START HERE 2
-    // TODO: START HERE 2
-    // TODO: START HERE 2
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
     // Try making m_model_to_worlds a half3x3
     // - Does it reduce # instructions?
     // - Does it reduce # load instructions?
