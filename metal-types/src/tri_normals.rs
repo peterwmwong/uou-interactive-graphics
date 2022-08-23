@@ -230,7 +230,7 @@ mod test {
 #include <metal_stdlib>
 using namespace metal;
 "#,
-            include_str!("./tri_normals_index.h"),
+            include_str!("./tri_normals.h"),
             r#"
 [[kernel]]
 void test(
@@ -263,7 +263,7 @@ void test(
 #include <metal_stdlib>
 using namespace metal;
 "#,
-            include_str!("./tri_normals_index.h"),
+            include_str!("./tri_normals.h"),
             r#"
 [[kernel]]
 void test(

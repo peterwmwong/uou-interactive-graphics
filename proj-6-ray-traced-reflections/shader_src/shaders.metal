@@ -6,7 +6,7 @@
 #include "../../metal-types/src/model-space.h"
 #include "../../metal-types/src/projected-space.h"
 #include "../../metal-types/src/shading-mode.h"
-#include "../../metal-types/src/tri_normals_index.h"
+#include "../../metal-types/src/tri_normals.h"
 
 using namespace metal;
 using namespace raytracing;

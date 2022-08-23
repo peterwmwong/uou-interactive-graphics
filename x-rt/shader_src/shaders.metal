@@ -1,6 +1,6 @@
 #include <metal_stdlib>
 #include "../../metal-types/src/projected-space.h"
-#include "../../metal-types/src/tri_normals_index.h"
+#include "../../metal-types/src/tri_normals.h"
 
 using namespace metal;
 using namespace raytracing;

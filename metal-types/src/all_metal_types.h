@@ -9,4 +9,4 @@
 #include "./model-space.h"
 #include "./projected-space.h"
 #include "./shading-mode.h"
-#include "./tri_normals_index.h"
+#include "./tri_normals.h"

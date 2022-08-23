@@ -2,12 +2,12 @@
 #![feature(portable_simd)]
 mod all_metal_types;
 mod all_metal_types_list;
-mod tri_normals_index;
+mod tri_normals;
 
 pub use all_metal_types::*;
 pub use all_metal_types_list::*;
 use metal::{MTLPackedFloat3, MTLPackedFloat4x3};
-pub use tri_normals_index::*;
+pub use tri_normals::*;
 
 /**************************************************************************************************
  Helper methods and trait implementations make it easier to write and read Metal types.
