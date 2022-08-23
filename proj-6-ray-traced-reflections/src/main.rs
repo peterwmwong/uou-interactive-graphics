@@ -23,6 +23,12 @@ const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 8., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_POSITION: f32x4 = f32x4::from_array([0., 1., -1., 1.]);
 
+enum ShowDebugPath {
+    InitialHide,
+    Hide,
+    Show,
+}
+
 struct Delegate {
     bg_depth_state: DepthStencilState,
     bg_render_pipeline: RenderPipeline<1, bg_vertex, bg_fragment, (Depth, NoStencil)>,
@@ -32,7 +38,8 @@ struct Delegate {
     env_texture: Texture,
     depth_texture: DepthTexture,
     debug_path: TypedBuffer<DebugPath>,
-    has_debug_path: bool,
+    show_debug_path: ShowDebugPath,
+    update_debug_path: bool,
     device: Device,
     library: Library,
     main_render_pipeline: RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)>,
@@ -52,7 +59,7 @@ fn create_main_render_pipeline(
     device: &Device,
     library: &Library,
     shading_mode: ShadingModeSelector,
-    has_debug_path: bool,
+    update_debug_path: bool,
 ) -> RenderPipeline<1, main_vertex, main_fragment, (Depth, NoStencil)> {
     RenderPipeline::new(
         "Model",
@@ -65,7 +72,7 @@ fn create_main_render_pipeline(
             HasDiffuse: shading_mode.has_diffuse(),
             OnlyNormals: shading_mode.only_normals(),
             HasSpecular: shading_mode.has_specular(),
-            HasDebugPath: has_debug_path,
+            UpdateDebugPath: update_debug_path,
         },
         (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
     )
@@ -138,7 +145,7 @@ impl RendererDelgate for Delegate {
         );
 
         let shading_mode = ShadingModeSelector::DEFAULT;
-        let has_debug_path = false;
+        let update_debug_path = false;
         let ds = DepthStencilDescriptor::new();
         ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
         let library = device
@@ -176,7 +183,7 @@ impl RendererDelgate for Delegate {
                 &device,
                 &library,
                 shading_mode,
-                has_debug_path,
+                update_debug_path,
             ),
             m_model_to_world,
             m_mirror_plane_model_to_world,
@@ -201,7 +208,8 @@ impl RendererDelgate for Delegate {
             accel_struct,
             model,
             mirror_plane_model,
-            has_debug_path,
+            show_debug_path: ShowDebugPath::InitialHide,
+            update_debug_path,
             debug_path: TypedBuffer::from_data(
                 "DebugPath",
                 device.deref(),
@@ -294,7 +302,7 @@ impl RendererDelgate for Delegate {
                     Some(&self.bg_depth_state),
                     |p| {
                         p.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
-                        if self.has_debug_path {
+                        if matches!(self.show_debug_path, ShowDebugPath::Show) {
                             p.into_subpass("DebugPath", &self.dbg_render_pipeline, None, |p| {
                                 p.draw_primitives_with_binds(
                                     dbg_vertex_binds {
@@ -330,7 +338,7 @@ impl RendererDelgate for Delegate {
                 &self.device,
                 &self.library,
                 self.shading_mode,
-                self.has_debug_path,
+                self.update_debug_path,
             );
             self.needs_render = true;
         }
@@ -344,7 +352,7 @@ impl RendererDelgate for Delegate {
         let debug_path = &mut self.debug_path.get_mut()[0];
         match event {
             UserEvent::MouseDrag { position, .. } | UserEvent::MouseMoved { position }
-                if !debug_path.update_disabled =>
+                if self.update_debug_path =>
             {
                 let position = position / f32x2::splat(1.0);
                 debug_path.screen_pos = position.into();
@@ -355,18 +363,39 @@ impl RendererDelgate for Delegate {
                 modifier_keys,
                 ..
             } if key_code == UserEvent::KEY_CODE_P => {
+                let mut needs_render = self.needs_render;
+                let prev_update_debug_path = self.update_debug_path;
                 if modifier_keys.contains(ModifierKeys::SHIFT) {
-                    debug_path.update_disabled = !debug_path.update_disabled;
+                    self.update_debug_path = match self.show_debug_path {
+                        ShowDebugPath::InitialHide | ShowDebugPath::Hide => false,
+                        ShowDebugPath::Show => !self.update_debug_path,
+                    };
                 } else if modifier_keys.is_empty() {
-                    self.has_debug_path = !self.has_debug_path;
+                    match self.show_debug_path {
+                        ShowDebugPath::InitialHide => {
+                            self.update_debug_path = true;
+                            self.show_debug_path = ShowDebugPath::Show;
+                        }
+                        ShowDebugPath::Hide => {
+                            self.show_debug_path = ShowDebugPath::Show;
+                        }
+                        ShowDebugPath::Show => {
+                            self.update_debug_path = false;
+                            self.show_debug_path = ShowDebugPath::Hide;
+                        }
+                    }
+                    needs_render = true;
+                }
+                if prev_update_debug_path != self.update_debug_path {
                     self.main_render_pipeline = create_main_render_pipeline(
                         &self.device,
                         &self.library,
                         self.shading_mode,
-                        self.has_debug_path,
+                        self.update_debug_path,
                     );
-                    self.needs_render = true;
+                    needs_render = true;
                 }
+                self.needs_render = needs_render;
             }
             _ => {}
         }

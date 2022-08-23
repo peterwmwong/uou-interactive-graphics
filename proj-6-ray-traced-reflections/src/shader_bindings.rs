@@ -74,7 +74,7 @@ impl Binds for main_fragment_binds<'_> {
 
 #[allow(non_camel_case_types)]
 pub struct main_fragment {
-    pub HasDebugPath: bool,
+    pub UpdateDebugPath: bool,
     pub HasAmbient: bool,
     pub HasDiffuse: bool,
     pub OnlyNormals: bool,
@@ -86,7 +86,7 @@ impl metal_app::pipeline::function::Function for main_fragment {
     #[inline]
     fn get_function_constants(&self) -> Option<FunctionConstantValues> {
         let fcv = FunctionConstantValues::new();
-        fcv.set_constant_value_at_index((&self.HasDebugPath as *const _) as _, bool::MTL_DATA_TYPE, 4);
+        fcv.set_constant_value_at_index((&self.UpdateDebugPath as *const _) as _, bool::MTL_DATA_TYPE, 4);
         fcv.set_constant_value_at_index((&self.HasAmbient as *const _) as _, bool::MTL_DATA_TYPE, 0);
         fcv.set_constant_value_at_index((&self.HasDiffuse as *const _) as _, bool::MTL_DATA_TYPE, 1);
         fcv.set_constant_value_at_index((&self.OnlyNormals as *const _) as _, bool::MTL_DATA_TYPE, 2);
