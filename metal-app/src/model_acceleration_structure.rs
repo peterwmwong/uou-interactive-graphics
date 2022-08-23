@@ -233,10 +233,12 @@ impl ModelAccelerationStructure {
                 desc.set_size(prim_as_sizes.acceleration_structure_size);
                 device.new_heap(&desc)
             };
+            prim_as_heap.set_label("ModelAccelerationStructure Heap");
             // TODO: Why can't we use the Metal API `MTLHeap::makeAccelerationStructure(descriptor:)`?
             let prim_accel_struct = prim_as_heap
                 .new_acceleration_structure(size)
                 .expect("Failed to allocate acceleration structure");
+            prim_accel_struct.set_label("ModelAccelerationStructure");
             let prim_as_rebuild_buffer = device.new_buffer(
                 prim_as_sizes
                     .build_scratch_buffer_size

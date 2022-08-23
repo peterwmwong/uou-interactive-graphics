@@ -31,18 +31,18 @@ VertexOut main_vertex(         uint                 vertex_id [[vertex_id]],
 
 [[early_fragment_tests]]
 [[fragment]]
-half4 main_fragment(         VertexOut                 in                [[stage_in]],
-                    constant ProjectedSpace          & camera            [[buffer(0)]],
-                    constant float4                  & light_pos         [[buffer(1)]],
+half4 main_fragment(         VertexOut                 in                 [[stage_in]],
+                    constant ProjectedSpace          & camera             [[buffer(0)]],
+                    constant float4                  & light_pos          [[buffer(1)]],
                     // The goal is to transform the environment. When rendering the mirrored
                     // world, we need to transformed all the objects of the world, including
                     // the environment (flip the environment texture). Instead of creating a
                     // separate "mirrored" environment texture, we change the sampling
                     // direction achieving the same result.
-                    constant half3x3                * m_normal_to_worlds [[buffer(2)]],
-                    primitive_acceleration_structure   accel_struct      [[buffer(3)]],
-                    device   DebugPath               & dbg_path          [[buffer(4)]],
-                             texturecube<half>         env_texture       [[texture(0)]])
+                    constant half3x3                 * m_normal_to_worlds [[buffer(2)]],
+                    primitive_acceleration_structure   accel_struct       [[buffer(3)]],
+                    device   DebugPath               & dbg_path           [[buffer(4)]],
+                             texturecube<half>         env_texture        [[texture(0)]])
 {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);

@@ -177,6 +177,7 @@ pub fn load_cube_texture_asset_dir<P: AsRef<Path>>(device: &Device, cube_asset_d
         desc.set_height(height as _);
         device.new_texture(&desc)
     };
+    cube_texture.set_label("Cube Texture");
 
     let command_buffer = queue.new_command_buffer();
     for (face, face_file) in CUBE_ASSET_DIR_FILENAMES.iter().enumerate() {
