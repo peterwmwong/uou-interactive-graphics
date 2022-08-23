@@ -20,6 +20,10 @@ struct alignas(4) half2 {
     unsigned short xy[2];
 };
 
+struct alignas(8) half3 {
+    unsigned short xyz[3];
+};
+
 struct alignas(8) half4 {
     unsigned short xyzw[4];
 };
@@ -66,6 +70,10 @@ struct alignas(16) float4x3 {
 
 struct alignas(16) float4x4 {
     float columns[4][4];
+};
+
+struct alignas(8) half3x3 {
+    unsigned short columns[3][4];
 };
 
 #endif //__METAL_VERSION__

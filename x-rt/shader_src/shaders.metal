@@ -25,7 +25,7 @@ half4 main_fragment(
              VertexOut                         in                    [[stage_in]],
              primitive_acceleration_structure  accelerationStructure [[buffer(0)]],
     constant ProjectedSpace                  & camera                [[buffer(1)]],
-    constant MTLPackedFloat4x3               * m_model_to_worlds     [[buffer(2)]]
+    constant half3x3                         * m_normal_to_worlds    [[buffer(2)]]
 ) {
     const float4 pos_w = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const float3 pos   = pos_w.xyz / pos_w.w;
@@ -37,7 +37,7 @@ half4 main_fragment(
     auto hit = inter.intersect(r, accelerationStructure);
     if (hit.type == intersection_type::triangle) {
         const auto p = (device TriNormals *) hit.primitive_data;
-        return half4(p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[hit.geometry_id]), 1);
+        return half4(p->normal(hit.triangle_barycentric_coord, &m_normal_to_worlds[hit.geometry_id]), 1);
     }
     return 0;
 }

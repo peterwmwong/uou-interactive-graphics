@@ -107,6 +107,42 @@ fn bindgen_test_layout_half2() {
 #[repr(C)]
 #[repr(align(8))]
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
+pub struct half3 {
+    pub xyz: [::std::os::raw::c_ushort; 3usize],
+}
+#[test]
+fn bindgen_test_layout_half3() {
+    assert_eq!(
+        ::std::mem::size_of::<half3>(),
+        8usize,
+        concat!("Size of: ", stringify!(half3))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<half3>(),
+        8usize,
+        concat!("Alignment of ", stringify!(half3))
+    );
+    fn test_field_xyz() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<half3>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).xyz) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(half3),
+                "::",
+                stringify!(xyz)
+            )
+        );
+    }
+    test_field_xyz();
+}
+#[repr(C)]
+#[repr(align(8))]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub struct half4 {
     pub xyzw: [::std::os::raw::c_ushort; 4usize],
 }
@@ -487,6 +523,42 @@ fn bindgen_test_layout_float4x4() {
             concat!(
                 "Offset of field: ",
                 stringify!(float4x4),
+                "::",
+                stringify!(columns)
+            )
+        );
+    }
+    test_field_columns();
+}
+#[repr(C)]
+#[repr(align(8))]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
+pub struct half3x3 {
+    pub columns: [[::std::os::raw::c_ushort; 4usize]; 3usize],
+}
+#[test]
+fn bindgen_test_layout_half3x3() {
+    assert_eq!(
+        ::std::mem::size_of::<half3x3>(),
+        24usize,
+        concat!("Size of: ", stringify!(half3x3))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<half3x3>(),
+        8usize,
+        concat!("Alignment of ", stringify!(half3x3))
+    );
+    fn test_field_columns() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<half3x3>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).columns) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(half3x3),
                 "::",
                 stringify!(columns)
             )
@@ -1012,6 +1084,8 @@ fn test_metal_types_derive_copy() {
     HasCopyClone(PhantomData::<float4x3>);
     HasCopyClone(PhantomData::<float4x4>);
     HasCopyClone(PhantomData::<half2>);
+    HasCopyClone(PhantomData::<half3>);
+    HasCopyClone(PhantomData::<half3x3>);
     HasCopyClone(PhantomData::<half4>);
     HasCopyClone(PhantomData::<packed_float2>);
     HasCopyClone(PhantomData::<packed_float3>);

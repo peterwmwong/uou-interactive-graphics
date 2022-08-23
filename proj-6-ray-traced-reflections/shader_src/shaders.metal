@@ -39,7 +39,7 @@ half4 main_fragment(         VertexOut                 in                [[stage
                     // the environment (flip the environment texture). Instead of creating a
                     // separate "mirrored" environment texture, we change the sampling
                     // direction achieving the same result.
-                    constant MTLPackedFloat4x3       * m_model_to_worlds [[buffer(2)]],
+                    constant half3x3                * m_normal_to_worlds [[buffer(2)]],
                     primitive_acceleration_structure   accel_struct      [[buffer(3)]],
                     device   DebugPath               & dbg_path          [[buffer(4)]],
                              texturecube<half>         env_texture       [[texture(0)]])
@@ -71,7 +71,7 @@ half4 main_fragment(         VertexOut                 in                [[stage
             // intersection.
             r_origin = r_origin + (r_dir * half(hit.distance));
             const auto p = (device TriNormals *) hit.primitive_data;
-            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, &m_model_to_worlds[hit.geometry_id]));
+            r_dir = reflect(r_dir, p->normal(hit.triangle_barycentric_coord, &m_normal_to_worlds[hit.geometry_id]));
             if (UpdateDebugPath) dbg.add_point(r_origin);
         } else {
             break;

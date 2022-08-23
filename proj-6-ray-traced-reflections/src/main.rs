@@ -281,8 +281,8 @@ impl RendererDelgate for Delegate {
                         light_pos: Bind::Value(&LIGHT_POSITION.into()),
                         accel_struct: self.accel_struct.bind(),
                         env_texture: BindTexture(&self.env_texture),
-                        m_model_to_worlds: BindMany::buffer(
-                            &self.accel_struct.m_model_to_worlds_buffer,
+                        m_normal_to_worlds: BindMany::buffer(
+                            &self.accel_struct.m_normal_to_worlds_buffer,
                         ),
                         dbg_path: Bind::buffer(&self.debug_path),
                     },

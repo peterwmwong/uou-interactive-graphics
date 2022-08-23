@@ -25,20 +25,20 @@ impl PipelineFunction<VertexFunctionType> for main_vertex {}
 pub struct main_fragment_binds<'c> {
     pub accelerationStructure: BindAccelerationStructure<'c>,
     pub camera: Bind<'c, ProjectedSpace>,
-    pub m_model_to_worlds: BindMany<'c, MTLPackedFloat4x3>,
+    pub m_normal_to_worlds: BindMany<'c, half3x3>,
 }
 impl Binds for main_fragment_binds<'_> {
     const SKIP: Self = Self {
         accelerationStructure: BindAccelerationStructure::Skip,
         camera: Bind::Skip,
-        m_model_to_worlds: BindMany::Skip,
+        m_normal_to_worlds: BindMany::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.accelerationStructure.bind::<F>(encoder, 0);
         self.camera.bind::<F>(encoder, 1);
-        self.m_model_to_worlds.bind::<F>(encoder, 2);
+        self.m_normal_to_worlds.bind::<F>(encoder, 2);
     }
 }
 

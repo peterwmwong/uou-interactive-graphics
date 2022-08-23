@@ -63,7 +63,7 @@ struct TriNormals {
     // Try making m_model_to_worlds a half3x3
     // - Does it reduce # instructions?
     // - Does it reduce # load instructions?
-    inline half3 normal(const float2 barycentric_coord, const constant MTLPackedFloat4x3 *m) const device {
+    inline half3 normal(const float2 barycentric_coord, const constant half3x3 *m) const device {
         const half2   b2 = half2(barycentric_coord);
         const half3   b(1.0 - (b2.x + b2.y), b2.x, b2.y);
         const half3x3 n(decode(normals[0], normals[1]));
@@ -71,9 +71,7 @@ struct TriNormals {
 
         // IMPORTANT: Converting to float before normalize may seem redundant, but for models
         // like yoda, small half precision normals seems to cause normalize to go bonkers.
-        return half3(normalize(float3(
-            half3x3(half3((*m)[0]), half3((*m)[1]), half3((*m)[2])) * normal
-        )));
+        return half3(normalize(float3((*m) * normal)));
     }
     #endif // __METAL_VERSION__
 };

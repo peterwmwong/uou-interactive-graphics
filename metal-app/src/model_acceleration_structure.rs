@@ -14,7 +14,7 @@ pub enum AccelerationStructureUpdateStrategy {
     // Refit,
     Rebuild,
 }
-use metal_types::{f32x4x4, TriNormals};
+use metal_types::{f32x4x4, half3x3, TriNormals};
 use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
@@ -29,6 +29,7 @@ struct Draw {
 pub struct ModelAccelerationStructure {
     geometry_heap: Heap,
     pub m_model_to_worlds_buffer: TypedBuffer<MTLPackedFloat4x3>,
+    pub m_normal_to_worlds_buffer: TypedBuffer<half3x3>,
     prim_as_desc: PrimitiveAccelerationStructureDescriptor,
     prim_as_heap: Heap,
     prim_as_rebuild_buffer: Buffer,
@@ -82,17 +83,23 @@ impl ModelAccelerationStructure {
             };
             geometry_heap.set_label("geometry_heap");
 
-            let total_num_draws = geometries.iter().fold(0, |acc, g| acc + g.draws.len());
             let m_model_to_worlds_buffer: TypedBuffer<MTLPackedFloat4x3> =
                 TypedBuffer::with_capacity(
-                    "Triangle Transform Matrix",
+                    "Geometry Transform Matrix",
                     device,
-                    total_num_draws,
+                    geometries.len(),
                     MTLResourceOptions::StorageModeShared,
                 );
-
-            let mut m_model_to_world_i = 0;
+            let total_num_draws = geometries.iter().fold(0, |acc, g| acc + g.draws.len());
+            let m_normal_to_worlds_buffer: TypedBuffer<half3x3> = TypedBuffer::with_capacity(
+                "Normal Transform Matrix",
+                device,
+                total_num_draws,
+                MTLResourceOptions::StorageModeShared,
+            );
+            let mut m_normal_to_world_i = 0;
             let m_model_to_worlds = m_model_to_worlds_buffer.get_mut();
+            let m_normal_to_worlds = m_normal_to_worlds_buffer.get_mut();
 
             // ========================================
             // Define Primitive Acceleration Structures
@@ -122,15 +129,37 @@ impl ModelAccelerationStructure {
                         });
                     },
                 );
-                let m_model_to_world_i_for_first_draw = m_model_to_world_i;
                 let m_model_to_world: MTLPackedFloat4x3 =
                     init_m_model_to_world(&geometry.max_bounds, i).into();
+                m_model_to_worlds[i] = m_model_to_world;
+                let m_normal_to_world = half3x3 {
+                    columns: [
+                        [
+                            half::f16::from_f32(m_model_to_world.columns[0].0).to_bits(),
+                            half::f16::from_f32(m_model_to_world.columns[0].1).to_bits(),
+                            half::f16::from_f32(m_model_to_world.columns[0].2).to_bits(),
+                            half::f16::from_f32(0.).to_bits(),
+                        ],
+                        [
+                            half::f16::from_f32(m_model_to_world.columns[1].0).to_bits(),
+                            half::f16::from_f32(m_model_to_world.columns[1].1).to_bits(),
+                            half::f16::from_f32(m_model_to_world.columns[1].2).to_bits(),
+                            half::f16::from_f32(0.).to_bits(),
+                        ],
+                        [
+                            half::f16::from_f32(m_model_to_world.columns[2].0).to_bits(),
+                            half::f16::from_f32(m_model_to_world.columns[2].1).to_bits(),
+                            half::f16::from_f32(m_model_to_world.columns[2].2).to_bits(),
+                            half::f16::from_f32(0.).to_bits(),
+                        ],
+                    ],
+                };
 
                 let normals = geometry_buffers.normals.get();
                 let indices = geometry_buffers.indices.get();
                 tri_as_descs.extend(draws.into_iter().map(|draw| {
-                    m_model_to_worlds[m_model_to_world_i] = m_model_to_world;
-                    m_model_to_world_i += 1;
+                    m_normal_to_worlds[m_normal_to_world_i] = m_normal_to_world;
+                    m_normal_to_world_i += 1;
 
                     let tri_as_desc = AccelerationStructureTriangleGeometryDescriptor::descriptor();
                     tri_as_desc.set_vertex_format(MTLAttributeFormat::Float3);
@@ -146,14 +175,15 @@ impl ModelAccelerationStructure {
                     tri_as_desc
                         .set_transformation_matrix_buffer(Some(&m_model_to_worlds_buffer.raw));
                     tri_as_desc.set_transformation_matrix_buffer_offset(
-                        (m_model_to_worlds_buffer.element_size()
-                            * m_model_to_world_i_for_first_draw) as _,
+                        (m_model_to_worlds_buffer.element_size() * i) as _,
                     );
 
                     // TODO: Extract out, make it optional the caller can add whatever primitive data
                     // Normals as primitive data. It is the non-indexed version of the
                     // `geometry_buffers.normals`.
                     {
+                        // TODO: Create a *single* primitive data buffer
+                        // - Should be able to use a TypedBufferSizer and allocate on the heap.
                         let primitive_data_buffer: TypedBuffer<TriNormals> =
                             TypedBuffer::with_capacity(
                                 "Normal Primitive Data",
@@ -238,6 +268,7 @@ impl ModelAccelerationStructure {
             Self {
                 geometry_heap,
                 m_model_to_worlds_buffer,
+                m_normal_to_worlds_buffer,
                 prim_as_desc,
                 prim_as_heap,
                 prim_as: prim_accel_struct,
@@ -250,25 +281,24 @@ impl ModelAccelerationStructure {
         self.m_model_to_worlds_buffer.get()[i].into()
     }
 
+    // TODO: This no longer works given m_model_to_worlds_buffer is NOT an array indexed by model,
+    // but draw.
     pub fn update_model_to_world_matrix(
         &mut self,
-        i: usize,
-        transform_matrix_to_mul: f32x4x4,
-        cmd_queue: &CommandQueueRef,
+        _i: usize,
+        _transform_matrix_to_mul: f32x4x4,
+        _cmd_queue: &CommandQueueRef,
     ) {
-        let m = &mut self.m_model_to_worlds_buffer.get_mut()[i];
-        *m = (transform_matrix_to_mul * f32x4x4::from(*m)).into();
-        self.update(cmd_queue);
+        todo!("NEED TO REIMPLEMENT");
     }
 
     pub fn set_model_to_world_matrix(
         &mut self,
-        i: usize,
-        model_to_world_matrix: f32x4x4,
-        cmd_queue: &CommandQueueRef,
+        _i: usize,
+        _model_to_world_matrix: f32x4x4,
+        _cmd_queue: &CommandQueueRef,
     ) {
-        self.m_model_to_worlds_buffer.get_mut()[i] = model_to_world_matrix.into();
-        self.update(cmd_queue);
+        todo!("NEED TO REIMPLEMENT");
     }
 
     fn update(&mut self, cmd_queue: &CommandQueueRef) {

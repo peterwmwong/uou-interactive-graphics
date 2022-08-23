@@ -97,8 +97,8 @@ impl RendererDelgate for Delegate {
                     main_fragment_binds {
                         accelerationStructure: self.model_accel_struct.bind(),
                         camera: Bind::Value(&self.camera.projected_space),
-                        m_model_to_worlds: BindMany::buffer(
-                            &self.model_accel_struct.m_model_to_worlds_buffer,
+                        m_normal_to_worlds: BindMany::buffer(
+                            &self.model_accel_struct.m_normal_to_worlds_buffer,
                         ),
                     },
                     MTLPrimitiveType::Triangle,

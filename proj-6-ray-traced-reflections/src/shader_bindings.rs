@@ -46,7 +46,7 @@ impl PipelineFunction<VertexFunctionType> for main_vertex {}
 pub struct main_fragment_binds<'c> {
     pub camera: Bind<'c, ProjectedSpace>,
     pub light_pos: Bind<'c, float4>,
-    pub m_model_to_worlds: BindMany<'c, MTLPackedFloat4x3>,
+    pub m_normal_to_worlds: BindMany<'c, half3x3>,
     pub accel_struct: BindAccelerationStructure<'c>,
     pub dbg_path: Bind<'c, DebugPath>,
     pub env_texture: BindTexture<'c>,
@@ -55,7 +55,7 @@ impl Binds for main_fragment_binds<'_> {
     const SKIP: Self = Self {
         camera: Bind::Skip,
         light_pos: Bind::Skip,
-        m_model_to_worlds: BindMany::Skip,
+        m_normal_to_worlds: BindMany::Skip,
         accel_struct: BindAccelerationStructure::Skip,
         dbg_path: Bind::Skip,
         env_texture: BindTexture::Skip,
@@ -65,7 +65,7 @@ impl Binds for main_fragment_binds<'_> {
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.camera.bind::<F>(encoder, 0);
         self.light_pos.bind::<F>(encoder, 1);
-        self.m_model_to_worlds.bind::<F>(encoder, 2);
+        self.m_normal_to_worlds.bind::<F>(encoder, 2);
         self.accel_struct.bind::<F>(encoder, 3);
         self.dbg_path.bind::<F>(encoder, 4);
         self.env_texture.bind::<F>(encoder, 0);
