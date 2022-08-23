@@ -2,25 +2,25 @@
 
 #ifdef __METAL_VERSION__
 
-inline float3x3 decompress(const uint n0, const uint n1) {
-    const float3 a0 = unpack_unorm10a2_to_float(n0).xyz;
-    const float3 a1 = unpack_unorm10a2_to_float(n1).xyz;
+inline half3x3 decompress(const uint n0, const uint n1) {
+    const half3 a0 = unpack_unorm10a2_to_half(n0).xyz;
+    const half3 a1 = unpack_unorm10a2_to_half(n1).xyz;
     const auto n12z = n1 >> 30;
-    return float3x3(
-        float3(a0.x, a0.y, float(n0 >> 30)),
-        float3(a1.x, a1.y, float(n12z & 1)),
-        float3(a0.z, a1.z, float(n12z > 1))
+    return half3x3(
+        half3(a0.x, a0.y, half(n0 >> 30)),
+        half3(a1.x, a1.y, half(n12z & 1)),
+        half3(a0.z, a1.z, half(n12z > 1))
     );
 }
 
 // http://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html
-inline half3 decode_normal(float3 n)
+inline half3 decode_normal(half3 n)
 {
-    float3 o;
+    half3 o;
     o.x = n.x - n.y;
     o.y = n.x + n.y - 1.0;
     o.z = (n.z * 2.0 - 1.0) * (1.0 - abs(o.x) - abs(o.y));
-    return half3(normalize(o));
+    return normalize(o);
 }
 
 inline half3x3 decode(const uint n0, const uint n1) {
@@ -47,8 +47,11 @@ inline half3x3 decode(const uint n0, const uint n1) {
 // }
 #endif // __METAL_VERSION__
 
-// TODO: Use a more compact format for storing normals (Octohedron
-// See https://aras-p.info/texts/CompactNormalStorage.html
+
+// TODO: START HERE
+// TODO: START HERE
+// TODO: START HERE
+// Rename to TriNormals
 struct TriNormalsIndex {
     // 3 Normals packed/encoded into 2 32-bit (10 10 10 2)
     //          | X            | Y             | Z-sign
@@ -59,6 +62,12 @@ struct TriNormalsIndex {
     unsigned int normals[2];
 
     #ifdef __METAL_VERSION__
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // Try making m_model_to_worlds a half3x3
+    // - Does it reduce # instructions?
+    // - Does it reduce # load instructions?
     inline half3 normal(const float2 barycentric_coord, const constant MTLPackedFloat4x3 *m) const device {
         const half2   b2 = half2(barycentric_coord);
         const half3   b(1.0 - (b2.x + b2.y), b2.x, b2.y);

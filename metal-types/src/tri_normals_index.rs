@@ -120,18 +120,43 @@ impl TriNormalsIndex {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::packed_float3;
+    use crate::packed_half3;
     use metal::*;
     use std::marker::PhantomData;
 
     const COS_PI_4: f32 = 0.7071067811865476;
     const SIN_PI_4: f32 = 0.7071067811865475;
 
-    const TOLERANCE: f32 = 0.0021;
-    fn assert_eq_with_tolerance(left: f32, right: f32, msg: &'static str) {
-        if (left - right).abs() > TOLERANCE {
-            assert_eq!(left, right, "{msg}");
+    const DECOMPRESS_TOLERANCE: f32 = 0.000928;
+    const DECODE_TOLERANCE: f32 = 0.003005207;
+
+    fn assert_eq_with_tolerance(left: f32, right: u16, tolerance: f32, msg: &'static str) {
+        let right = half::f16::from_bits(right).to_f32();
+        let diff = (left - right).abs();
+        if diff > tolerance {
+            assert_eq!(left, right, "\n{msg}, diff = {diff}");
         }
+    }
+
+    fn assert_equalish(expected: &[f32], actual: &packed_half3, tolerance: f32) {
+        assert_eq_with_tolerance(
+            expected[0],
+            actual.xyz[0],
+            tolerance,
+            "x component is incorrect",
+        );
+        assert_eq_with_tolerance(
+            expected[1],
+            actual.xyz[1],
+            tolerance,
+            "y component is incorrect",
+        );
+        assert_eq_with_tolerance(
+            expected[2],
+            actual.xyz[2],
+            tolerance,
+            "z component is incorrect",
+        );
     }
 
     struct ComputeExecutor<I: Copy + Clone, O: Copy + Clone> {
@@ -200,7 +225,7 @@ mod test {
 
     #[test]
     pub fn compress_rs_decompress_metal() {
-        let c: ComputeExecutor<[c_uint; 2], [packed_float3; 3]> = ComputeExecutor::new(concat!(
+        let c: ComputeExecutor<[c_uint; 2], [packed_half3; 3]> = ComputeExecutor::new(concat!(
             r#"
 #include <metal_stdlib>
 using namespace metal;
@@ -210,7 +235,7 @@ using namespace metal;
 [[kernel]]
 void test(
     constant uint          * input  [[buffer(0)]],
-    device   packed_float3 * output [[buffer(1)]]
+    device   packed_half3 * output [[buffer(1)]]
 ) {
     auto v = decompress(input[0], input[1]);
     *(&output[0]) = v[0];
@@ -221,14 +246,9 @@ void test(
         ));
         let t = |input: [([f32; 2], bool); 3], expected: [[f32; 3]; 3]| {
             let actual = c.run(compress(input[0], input[1], input[2]));
-            let assert_equalish = |expected: [f32; 3], actual: &packed_float3| {
-                assert_eq_with_tolerance(expected[0], actual.xyz[0], "x");
-                assert_eq_with_tolerance(expected[1], actual.xyz[1], "y");
-                assert_eq_with_tolerance(expected[2], actual.xyz[2], "z");
-            };
-            assert_equalish(expected[0], &actual[0]);
-            assert_equalish(expected[1], &actual[1]);
-            assert_equalish(expected[2], &actual[2]);
+            assert_equalish(&expected[0], &actual[0], DECOMPRESS_TOLERANCE);
+            assert_equalish(&expected[1], &actual[1], DECOMPRESS_TOLERANCE);
+            assert_equalish(&expected[2], &actual[2], DECOMPRESS_TOLERANCE);
         };
         t(
             [([0.1, 0.3], true), ([0.2, 0.4], false), ([0.5, 0.6], true)],
@@ -238,7 +258,7 @@ void test(
 
     #[test]
     pub fn encode_rs_decode_metal() {
-        let c: ComputeExecutor<[c_uint; 2], [packed_float3; 3]> = ComputeExecutor::new(concat!(
+        let c: ComputeExecutor<[c_uint; 2], [packed_half3; 3]> = ComputeExecutor::new(concat!(
             r#"
 #include <metal_stdlib>
 using namespace metal;
@@ -247,26 +267,21 @@ using namespace metal;
             r#"
 [[kernel]]
 void test(
-    constant uint          * input  [[buffer(0)]],
-    device   packed_float3 * output [[buffer(1)]]
+    constant uint         * input  [[buffer(0)]],
+    device   packed_half3 * output [[buffer(1)]]
 ) {
     auto v = decode(input[0], input[1]);
-    *(&output[0]) = float3(v[0]);
-    *(&output[1]) = float3(v[1]);
-    *(&output[2]) = float3(v[2]);
+    *(&output[0]) = v[0];
+    *(&output[1]) = v[1];
+    *(&output[2]) = v[2];
 }
 "#
         ));
         let t = |input: [f32; 9]| {
             let actual = c.run(encode(&input, 0, 3, 6));
-            let assert_equalish = |expected: &[f32], actual: &packed_float3| {
-                assert_eq_with_tolerance(expected[0], actual.xyz[0], "x");
-                assert_eq_with_tolerance(expected[1], actual.xyz[1], "y");
-                assert_eq_with_tolerance(expected[2], actual.xyz[2], "z");
-            };
-            assert_equalish(&input[0..3], &actual[0]);
-            assert_equalish(&input[3..6], &actual[1]);
-            assert_equalish(&input[6..], &actual[2]);
+            assert_equalish(&input[0..3], &actual[0], DECODE_TOLERANCE);
+            assert_equalish(&input[3..6], &actual[1], DECODE_TOLERANCE);
+            assert_equalish(&input[6..], &actual[2], DECODE_TOLERANCE);
         };
         t([
             1., 0., 0., // 0

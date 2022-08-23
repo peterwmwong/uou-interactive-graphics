@@ -500,7 +500,6 @@ pub const DEBUG_PATH_MAX_NUM_POINTS: ::std::os::raw::c_uint = 8;
 pub struct DebugPath {
     pub points: [packed_float3; 8usize],
     pub screen_pos: float2,
-    pub update_disabled: bool,
     pub num_points: ::std::os::raw::c_uchar,
 }
 #[test]
@@ -549,23 +548,6 @@ fn bindgen_test_layout_DebugPath() {
         );
     }
     test_field_screen_pos();
-    fn test_field_update_disabled() {
-        assert_eq!(
-            unsafe {
-                let uninit = ::std::mem::MaybeUninit::<DebugPath>::uninit();
-                let ptr = uninit.as_ptr();
-                ::std::ptr::addr_of!((*ptr).update_disabled) as usize - ptr as usize
-            },
-            104usize,
-            concat!(
-                "Offset of field: ",
-                stringify!(DebugPath),
-                "::",
-                stringify!(update_disabled)
-            )
-        );
-    }
-    test_field_update_disabled();
     fn test_field_num_points() {
         assert_eq!(
             unsafe {
@@ -573,7 +555,7 @@ fn bindgen_test_layout_DebugPath() {
                 let ptr = uninit.as_ptr();
                 ::std::ptr::addr_of!((*ptr).num_points) as usize - ptr as usize
             },
-            105usize,
+            104usize,
             concat!(
                 "Offset of field: ",
                 stringify!(DebugPath),
