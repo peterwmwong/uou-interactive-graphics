@@ -5,14 +5,26 @@ lectures.
 
 **TODO: Thoroughly look back at lectures before lecture 25 (Volume Rendering) and find techniques worth of an X-Project**
 
+## Lecture 19 (Bump, Normal, Displacement, and Parallax Mapping)
+
+- Bump/Relief Mapping
+    1. Research current approaches
+        - Read https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-18-relaxed-cone-stepping-relief-mapping
+        - https://developer.amd.com/wordpress/media/2012/10/I3D2006-Tatarchuk-POM.pdf
+        - https://developer.amd.com/wordpress/media/2012/10/Tatarchuk-ParallaxOcclusionMapping-FINAL_Print.pdf
+        - https://apoorvaj.io/exploring-bump-mapping-with-webgl/
+    2. Based on #1, implement relief mapping
+
 ## Lecture 15 (Lights & Shadows)
 
+- Ambient Occlusion
+    - **TODO: Fill out details, what should be implemented**
 - Virtual Shadow Maps (VSM)
     1. What are VSMs?
     2. How does it relate to texture streaming and spare textures?
         - https://developer.apple.com/videos/play/tech-talks/10876/?time=620
         - Are these implementation details for VSMs?
-    3. Given answering/understanding #1/#2, implement VSMs
+    3. Based on #1/#2, implement VSMs
         - [Apple Metal's tech talk](https://developer.apple.com/videos/play/tech-talks/10876/?time=620)
           has a highl-level overall of the "Sparse Tiled Shadow Maps" technique
 
@@ -56,6 +68,9 @@ lectures.
 
 # metal-app
 
+- DebugPath
+    - Increase the line width
+    - Optionally render each line segment with the color accumulated at that segment
 - Geometry should optionally load/contain tx_coords
     - Look at Model's MaterialKind (Material and NoMaterial), very similar in nature
 - Delete everything RenderPipeline replaced :)
