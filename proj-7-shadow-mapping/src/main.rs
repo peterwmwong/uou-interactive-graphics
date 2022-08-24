@@ -18,7 +18,6 @@ use std::{
 };
 
 const DEFAULT_AMBIENT_AMOUNT: u32 = 15;
-const DEPTH_COMPARISON_BIAS: f32 = 4e-4;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 5., PI / 16.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -236,6 +235,7 @@ impl RendererDelgate for Delegate {
                 &self.depth_state,
                 &[&HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES)],
                 |p| {
+                    p.set_depth_bias(1.0, 15.0, 0.0);
                     p.bind(
                         main_vertex_binds {
                             model: Bind::Value(&self.model_shadow_space),
@@ -367,7 +367,7 @@ impl RendererDelgate for Delegate {
                     const PROJECTION_TO_TEXTURE_COORDINATE_SPACE: f32x4x4 = f32x4x4::new(
                         [0.5, 0.0, 0.0, 0.5],
                         [0.0, -0.5, 0.0, 0.5],
-                        [0.0, 0.0, 1.0, -DEPTH_COMPARISON_BIAS],
+                        [0.0, 0.0, 1.0, 0.0],
                         [0.0, 0.0, 0.0, 1.0],
                     );
                     #[cfg(debug_assertions)]
@@ -377,13 +377,8 @@ impl RendererDelgate for Delegate {
                             f32x4x4::scale_translate(1., -1., 1., 0., 1., 0.)
                                 * f32x4x4::scale_translate(
                                     // Convert from [-1, 1] -> [0, 1] for XY dimensions
-                                    0.5,
-                                    0.5,
-                                    1.0,
-                                    0.5,
-                                    0.5,
-                                    // Add Depth Comparison Bias
-                                    -DEPTH_COMPARISON_BIAS,
+                                    0.5, 0.5, 1.0, 0.5, 0.5, // Add Depth Comparison Bias
+                                    0.0,
                                 );
                         assert_eq!(
                             projection_to_texture_coordinate_space_derived.columns,

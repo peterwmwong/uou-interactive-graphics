@@ -230,6 +230,8 @@ lectures.
 
 ## proj-7
 
+- Moment Shadow Mapping
+    - Implementation example: https://github.com/fschutt/moment-shadow-mapping
 - Use hardware accelerated biasing
     - When rendering the shadow map (depth map), the render encoder can be configured to apply a slope scale bias
         - https://developer.apple.com/documentation/metal/mtlrendercommandencoder/1516269-setdepthbias

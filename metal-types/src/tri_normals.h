@@ -14,8 +14,7 @@ inline half3x3 decompress(const uint n0, const uint n1) {
 }
 
 // http://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html
-inline half3 decode_normal(half3 n)
-{
+inline half3 decode_normal(half3 n) {
     half3 o;
     o.x = n.x - n.y;
     o.y = n.x + n.y - 1.0;

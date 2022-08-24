@@ -475,6 +475,11 @@ impl<
     }
 
     #[inline]
+    pub fn set_depth_bias(&self, depth_bias: f32, slope_scale: f32, clamp: f32) {
+        self.encoder.set_depth_bias(depth_bias, slope_scale, clamp);
+    }
+
+    #[inline]
     pub fn draw_primitives<'b>(
         &'a self,
         primitive_type: MTLPrimitiveType,
