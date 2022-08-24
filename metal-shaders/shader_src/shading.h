@@ -101,7 +101,7 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     const half hn = dot(h, n);
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
-    const half ln = dot(l, n);
+    const half ln = max(dot(l, n), 0.h);
 
     const half Ia = material.ambient_amount();
     // Diffuse/Specular Light Intensity of 1.0 for camera facing surfaces, otherwise 0.0.
