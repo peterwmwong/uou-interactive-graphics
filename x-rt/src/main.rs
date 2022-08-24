@@ -127,7 +127,7 @@ impl RendererDelgate for Delegate {
                 };
                 self.model_accel_struct.update_model_to_world_matrix(
                     0,
-                    f32x4x4::translate(translate_x, 0., 0.),
+                    f32x4x4::y_rotate(translate_x),
                     &self.command_queue,
                 );
                 self.needs_render = true;

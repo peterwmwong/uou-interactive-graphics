@@ -19,6 +19,32 @@ use AccelerationStructureUpdateStrategy::*;
 
 const ACCELERATION_STRUCTURE_UPDATE_STRATEGY: AccelerationStructureUpdateStrategy = Rebuild;
 
+#[inline]
+fn to_half3x3(m: &MTLPackedFloat4x3) -> half3x3 {
+    half3x3 {
+        columns: [
+            [
+                half::f16::from_f32(m.columns[0].0).to_bits(),
+                half::f16::from_f32(m.columns[0].1).to_bits(),
+                half::f16::from_f32(m.columns[0].2).to_bits(),
+                half::f16::from_f32(0.).to_bits(),
+            ],
+            [
+                half::f16::from_f32(m.columns[1].0).to_bits(),
+                half::f16::from_f32(m.columns[1].1).to_bits(),
+                half::f16::from_f32(m.columns[1].2).to_bits(),
+                half::f16::from_f32(0.).to_bits(),
+            ],
+            [
+                half::f16::from_f32(m.columns[2].0).to_bits(),
+                half::f16::from_f32(m.columns[2].1).to_bits(),
+                half::f16::from_f32(m.columns[2].2).to_bits(),
+                half::f16::from_f32(0.).to_bits(),
+            ],
+        ],
+    }
+}
+
 struct Draw {
     name: String,
     vertex_byte_offset: u32,
@@ -34,6 +60,7 @@ pub struct ModelAccelerationStructure {
     prim_as_heap: Heap,
     prim_as_rebuild_buffer: Buffer,
     prim_as: AccelerationStructure,
+    m_normal_to_world_start_indices: Vec<usize>,
 }
 
 impl ModelAccelerationStructure {
@@ -83,6 +110,7 @@ impl ModelAccelerationStructure {
             };
             geometry_heap.set_label("geometry_heap");
 
+            let mut m_normal_to_world_start_indices = Vec::with_capacity(geometries.len());
             let m_model_to_worlds_buffer: TypedBuffer<MTLPackedFloat4x3> =
                 TypedBuffer::with_capacity(
                     "Geometry Transform Matrix",
@@ -132,28 +160,8 @@ impl ModelAccelerationStructure {
                 let m_model_to_world: MTLPackedFloat4x3 =
                     init_m_model_to_world(&geometry.max_bounds, i).into();
                 m_model_to_worlds[i] = m_model_to_world;
-                let m_normal_to_world = half3x3 {
-                    columns: [
-                        [
-                            half::f16::from_f32(m_model_to_world.columns[0].0).to_bits(),
-                            half::f16::from_f32(m_model_to_world.columns[0].1).to_bits(),
-                            half::f16::from_f32(m_model_to_world.columns[0].2).to_bits(),
-                            half::f16::from_f32(0.).to_bits(),
-                        ],
-                        [
-                            half::f16::from_f32(m_model_to_world.columns[1].0).to_bits(),
-                            half::f16::from_f32(m_model_to_world.columns[1].1).to_bits(),
-                            half::f16::from_f32(m_model_to_world.columns[1].2).to_bits(),
-                            half::f16::from_f32(0.).to_bits(),
-                        ],
-                        [
-                            half::f16::from_f32(m_model_to_world.columns[2].0).to_bits(),
-                            half::f16::from_f32(m_model_to_world.columns[2].1).to_bits(),
-                            half::f16::from_f32(m_model_to_world.columns[2].2).to_bits(),
-                            half::f16::from_f32(0.).to_bits(),
-                        ],
-                    ],
-                };
+                m_normal_to_world_start_indices.push(m_normal_to_world_i);
+                let m_normal_to_world = to_half3x3(&m_model_to_world);
 
                 let normals = geometry_buffers.normals.get();
                 let indices = geometry_buffers.indices.get();
@@ -271,6 +279,7 @@ impl ModelAccelerationStructure {
                 geometry_heap,
                 m_model_to_worlds_buffer,
                 m_normal_to_worlds_buffer,
+                m_normal_to_world_start_indices,
                 prim_as_desc,
                 prim_as_heap,
                 prim_as: prim_accel_struct,
@@ -285,22 +294,37 @@ impl ModelAccelerationStructure {
 
     // TODO: This no longer works given m_model_to_worlds_buffer is NOT an array indexed by model,
     // but draw.
+    #[inline]
     pub fn update_model_to_world_matrix(
         &mut self,
-        _i: usize,
-        _transform_matrix_to_mul: f32x4x4,
-        _cmd_queue: &CommandQueueRef,
+        i: usize,
+        transform_matrix_to_mul: f32x4x4,
+        cmd_queue: &CommandQueueRef,
     ) {
-        todo!("NEED TO REIMPLEMENT");
+        let m = &mut self.m_model_to_worlds_buffer.get_mut()[i];
+        self.set_model_to_world_matrix(i, transform_matrix_to_mul * f32x4x4::from(*m), cmd_queue);
     }
 
+    #[inline]
     pub fn set_model_to_world_matrix(
         &mut self,
-        _i: usize,
-        _model_to_world_matrix: f32x4x4,
-        _cmd_queue: &CommandQueueRef,
+        i: usize,
+        model_to_world_matrix: f32x4x4,
+        cmd_queue: &CommandQueueRef,
     ) {
-        todo!("NEED TO REIMPLEMENT");
+        let m = model_to_world_matrix.into();
+        self.m_model_to_worlds_buffer.get_mut()[i] = m;
+        let m_normal_to_worlds = self.m_normal_to_worlds_buffer.get_mut();
+        let start = self.m_normal_to_world_start_indices[i];
+        let len = m_normal_to_worlds.len();
+        let &end = self
+            .m_normal_to_world_start_indices
+            .get(i + 1)
+            .unwrap_or(&len);
+        for n_i in start..end {
+            m_normal_to_worlds[n_i] = to_half3x3(&m);
+        }
+        self.update(cmd_queue);
     }
 
     fn update(&mut self, cmd_queue: &CommandQueueRef) {
