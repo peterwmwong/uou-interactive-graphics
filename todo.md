@@ -51,6 +51,11 @@ lectures.
     3. Additional #1: Apply Alpha Distribution
         - http://www.cemyuksel.com/research/alphadistribution/
 
+## Lecture 25 (Volume Rendering)
+
+- Volume Rendering
+    - Render some smoke? I dunno man
+
 # asset-compiler
 
 - Model asset
@@ -225,6 +230,17 @@ lectures.
 
 ## proj-7
 
+- Use hardware accelerated biasing
+    - When rendering the shadow map (depth map), the render encoder can be configured to apply a slope scale bias
+        - https://developer.apple.com/documentation/metal/mtlrendercommandencoder/1516269-setdepthbias
+    - When rendering the scene and sampling the shadow map, because the shadow map is already biased no biasing needs to happen here!
+        - Currently, **uniform** bias is applied during sampling by adjusting `light_space.m_world_to_projection` with `DEPTH_COMPARISON_BIAS`
+        - BUT, this doesn't apply slope to the bias which would improves the quality of shadowing.
+        - Slope applies a non-fixed amount of bias based on the angle the surface is facing the light.
+        - For better quality, we need less bias when the surface is flat (facing dead on to the light), but more bias when the surface is angled away from the light.
+            - A nice visualization of slope scaled depth bias: https://github.com/MicrosoftDocs/win32/blob/docs/desktop-src/DxTechArts/common-techniques-to-improve-shadow-depth-maps.md#slope-scale-depth-bias
+    1. The `DEPTH_COMPARISON_BIAS` can be removed from the `light_space.m_world_to_projection` calculation
+    2. When rendering the shadow map, use `encoder.setDepthBias`
 - Look into methods of more realistically blurring the shadows based on distance
 - Review [Real-Time Polygonal-Light Shading with Linearly Transformed Cosines](https://eheitzresearch.wordpress.com/415-2/)
 - Review [Combining Analytic Direct Illumination and Stochastic Shadows](https://eheitzresearch.wordpress.com/705-2/)
