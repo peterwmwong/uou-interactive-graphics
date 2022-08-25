@@ -19,6 +19,11 @@ lectures.
 
 - Ambient Occlusion
     - **TODO: Fill out details, what should be implemented**
+- Area Lights
+    - Soft Shadows
+        - **TODO: Fill out details, what should be implemented**
+    - Reflections
+        - **TODO: Fill out details, what should be implemented**
 - Virtual Shadow Maps (VSM)
     1. What are VSMs?
     2. How does it relate to texture streaming and spare textures?
@@ -55,6 +60,11 @@ lectures.
 
 - Volume Rendering
     - Render some smoke? I dunno man
+
+## Lecture 26 (GPU Ray Tracing)
+
+- Monte Carlo Sampling
+- Denoising
 
 # asset-compiler
 
