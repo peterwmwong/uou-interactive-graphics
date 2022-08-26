@@ -6,44 +6,35 @@ inline half3x3 decompress(const uint n0, const uint n1) {
     const half3 a0 = unpack_unorm10a2_to_half(n0).xyz;
     const half3 a1 = unpack_unorm10a2_to_half(n1).xyz;
     const auto n12z = n1 >> 30;
+
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // -What if we encode the xs closer together?
+    // - What about heterogeneous encoding a0 is 1010102, but a1 is something else?
     return half3x3(
-        half3(a0.x, a0.y, half(n0 >> 30)),
-        half3(a1.x, a1.y, half(n12z & 1)),
-        half3(a0.z, a1.z, half(n12z > 1))
+        half3(a0.x, a1.x, a0.z),
+        half3(a0.y, a1.y, a1.z),
+        half3(half(n0 >> 30), half(n12z & 1), half(n12z > 1))
     );
 }
 
 // http://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html
-inline half3 decode_normal(half3 n) {
-    half3 o;
-    o.x = n.x - n.y;
-    o.y = n.x + n.y - 1.0;
-    o.z = (n.z * 2.0 - 1.0) * (1.0 - abs(o.x) - abs(o.y));
-    return normalize(o);
+inline half3x3 decode_normal(half3 xs, half3 ys, half3 zs) {
+    half3 oxs = xs - ys;
+    half3 oys = xs + ys - 1.0;
+    half3 ozs = (zs * 2.0 - 1.0) * (1.0 - abs(oxs) - abs(oys));
+    return half3x3(
+        normalize(half3(oxs.x, oys.x, ozs.x)),
+        normalize(half3(oxs.y, oys.y, ozs.y)),
+        normalize(half3(oxs.z, oys.z, ozs.z))
+    );
 }
 
 inline half3x3 decode(const uint n0, const uint n1) {
     const auto ns = decompress(n0, n1);
-    return half3x3(
-        decode_normal(ns[0]),
-        decode_normal(ns[1]),
-        decode_normal(ns[2])
-    );
+    return decode_normal(ns[0], ns[1], ns[2]);
 }
-
-// TODO: Can we vectorize this be decode 3 normals at once?
-// Idea: Instead of encoding 3 encoded normals as ([xy], [xy], [xy])... but ([xxx], [yyy])
-// inline half3x3 decode_2(float3 xs, float3 ys, float3 zs)
-// {
-//     const float3 nx = xs - ys;
-//     const float3 ny = xs + ys - 1.0;
-//     const float3 nz = (zs * 2.0 - 1.0) * (1.0 - abs(nx) - abs(ny));
-//     return half3x3(
-//         half3(normalize(float3(nx.x, ny.x, nz.x))),
-//         half3(normalize(float3(nx.y, ny.y, nz.y))),
-//         half3(normalize(float3(nx.z, ny.z, nz.z)))
-//     );
-// }
 #endif // __METAL_VERSION__
 
 struct TriNormals {
