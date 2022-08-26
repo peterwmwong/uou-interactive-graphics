@@ -18,12 +18,22 @@ lectures.
 ## Lecture 15 (Lights & Shadows)
 
 - Ambient Occlusion
-    - **TODO: Fill out details, what should be implemented**
-- Area Lights
-    - Soft Shadows
-        - **TODO: Fill out details, what should be implemented**
-    - Reflections
-        - **TODO: Fill out details, what should be implemented**
+    1. Survey approaches and determine "best" approach (or approaches) to implement
+        - Bent Normals https://graphics.tudelft.nl/Publications-new/2012/KRES12/paper.pdf
+    2. Based on #1, implement.
+- Area/Polygonal Lights
+    - Read/Implement Representative Area Lights
+        - https://wickedengine.net/2017/09/07/area-lights/
+        - https://alextardif.com/arealights.html
+    - Read/Implement Analytic Method
+        - "Real-Time Polygonal-Light Shading with Linearly Transformed Cosines" https://eheitzresearch.wordpress.com/415-2/
+        - "Combining Analytic Direct Illumination and Stochastic Shadows" https://eheitzresearch.wordpress.com/705-2/
+        - https://advances.realtimerendering.com/s2018/s2018_real_time_correct_soft_shadows.pdf
+    - ReSTIR seems to handle it all... maybe just do this
+- Soft Shadows
+    - PCF
+    - Moment Shadow Mapping
+        - See rtr 2022-08-24
 - Virtual Shadow Maps (VSM)
     1. What are VSMs?
     2. How does it relate to texture streaming and spare textures?
