@@ -12,12 +12,8 @@
     ],
     "triggerTaskOnSave.tasks": {
         "metal-compile-and-emit-asm": [
-            "metal-shaders/shader_src/*",
-            "metal-build/test_shader_src/**",
-            "metal-types/src/**/*.metal",
-            "metal-types/src/**/*.h",
-            "proj-*/shader_src/*",
-            "x-rt/shader_src/*",
+            "*.h",
+            "*.metal"
         ]
     },
     "git.autoRepositoryDetection": false

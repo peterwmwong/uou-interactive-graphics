@@ -329,10 +329,10 @@ impl metal_app::pipeline::function::Function for test_fragment {
 impl PipelineFunction<FragmentFunctionType> for test_fragment {}
 "#;
             let shader_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("test_shader_src")
+                .join("test_src")
                 .join("shader_fn")
                 .canonicalize()
-                .expect("Failed to canonicalize path to test_shader_src/deps directory");
+                .expect("Failed to canonicalize path to test_src/deps directory");
             let shader_file = shader_dir.join("shaders.metal");
             let mut actual = Vec::<u8>::new();
             generate_shader_function_bindings(shader_file, &mut actual);
@@ -360,7 +360,7 @@ impl PipelineFunction<FragmentFunctionType> for test_fragment {}
 TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x14d874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x14d830f20 '__metal_intersection_query_t'
-|-ImportDecl 0x14d874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-ImportDecl 0x14d874928 <metal-build/test_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
 |-UsingDirectiveDecl 0x13d87ef50 <line:3:1, col:17> col:17 Namespace 0x14d8749f0 'metal'
 |-FunctionDecl 0x13da41288 <line:12:1, line:14:15> line:12:8 test 'float4 ()'
 | |-CompoundStmt 0x13da413f0 <line:14:3, col:15>
@@ -467,7 +467,7 @@ impl PipelineFunction<VertexFunctionType> for test {}
 TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x14d874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x14d830f20 '__metal_intersection_query_t'
-|-ImportDecl 0x14d874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-ImportDecl 0x14d874928 <metal-build/test_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
 |-UsingDirectiveDecl 0x13d87ef50 <line:3:1, col:17> col:17 Namespace 0x14d8749f0 'metal'
 |-FunctionDecl 0x13da41288 <line:12:1, line:14:15> line:12:8 {fn_name} 'float4 ({address_space} metal::{data_type} {multiplicity})'
 | |-ParmVarDecl 0x13d88d0c8 <line:13:5, col:24> col:24 {bind_name} '{address_space} metal::{data_type} {multiplicity}'

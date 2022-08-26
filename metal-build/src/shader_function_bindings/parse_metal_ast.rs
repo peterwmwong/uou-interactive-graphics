@@ -552,7 +552,7 @@ mod test {
 TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x14c874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x14c830f20 '__metal_intersection_query_t'
-|-ImportDecl 0x14c874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-ImportDecl 0x14c874928 <metal-build/test_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
 |-VarDecl 0x1358cfdf0 <line:5:1, col:27> col:27 A_Bool 'const constant bool' constexpr
 | `-MetalFunctionConstantAttr 0x1358cfe50 <col:40, col:59>
 |   `-IntegerLiteral 0x1358cfda0 <col:58> 'int' 9
@@ -712,7 +712,7 @@ TranslationUnitDecl 0x1598302e8 <<invalid sloc>> <invalid sloc>
 TranslationUnitDecl 0x14c8302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x14c874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x14c830f20 '__metal_intersection_query_t'
-|-ImportDecl 0x14c874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-ImportDecl 0x14c874928 <metal-build/test_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
 |-UsingDirectiveDecl 0x14c931f50 <line:3:1, col:17> col:17 Namespace 0x14c8749f0 'metal'
 |-FunctionDecl 0x14c932498 <line:6:1, line:8:15> line:6:8 test 'float4 (uint)'
 | |-ParmVarDecl 0x14c932338 <line:7:5, col:10> col:10 vertex_id 'uint':'unsigned int'
@@ -814,7 +814,7 @@ TranslationUnitDecl 0x1260302e8 <<invalid sloc>> <invalid sloc>
 | `-BuiltinType 0x126030f20 '__metal_intersection_query_t'
 |-ImportDecl 0x1260756f0 <<built-in>:1:1> col:1 implicit metal_types
 |-UsingDirectiveDecl 0x126134150 <line:6:1, col:17> col:17 Namespace 0x126075828 'metal'
-|-UsingDirectiveDecl 0x1261349e8 <metal-build/test_shader_src/shader_fn/shaders.metal:4:1, col:17> col:17 Namespace 0x126075828 'metal'
+|-UsingDirectiveDecl 0x1261349e8 <metal-build/test_src/shader_fn/shaders.metal:4:1, col:17> col:17 Namespace 0x126075828 'metal'
 |-UsingDecl 0x126149d48 <line:5:1, col:19> col:19 raytracing::instance_acceleration_structure
 |-UsingShadowDecl 0x126149d98 <col:19> col:19 implicit TypeAlias 0x126134ae8 'instance_acceleration_structure'
 | `-TypedefType 0x126149c10 'metal::raytracing::instance_acceleration_structure' sugar imported
@@ -911,7 +911,7 @@ TranslationUnitDecl 0x1428302e8 <<invalid sloc>> <invalid sloc>
 
         #[test]
         fn test_no_binds() {
-            for path in ["line", "proj-2-transformations/shader_src/shaders.metal"] {
+            for path in ["line", "proj-2-transformations/src/shaders.metal"] {
                 for (metal_attr, expected_shader_type) in [
                     ("MetalVertexAttr", FunctionType::Vertex),
                     ("MetalFragmentAttr", FunctionType::Fragment),
@@ -968,7 +968,7 @@ TranslationUnitDecl 0x11f0302e8 <<invalid sloc>> <invalid sloc>
 TranslationUnitDecl 0x14d8302e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x14d874860 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x14d830f20 '__metal_intersection_query_t'
-|-ImportDecl 0x14d874928 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-ImportDecl 0x14d874928 <metal-build/test_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
 |-UsingDirectiveDecl 0x13d87ef50 <line:3:1, col:17> col:17 Namespace 0x14d8749f0 'metal'
 |-FunctionDecl 0x13da41288 <line:12:1, line:14:15> line:12:8 test 'float4 ({address_space} metal::float4x4 {buffer_bind_multiplicity})'
 | |-ParmVarDecl 0x13d88d0c8 <line:13:5, col:24> col:24{used} buf0 '{address_space} metal::float4x4 {buffer_bind_multiplicity}'
@@ -1143,7 +1143,7 @@ TranslationUnitDecl 0x12a8302e8 <<invalid sloc>> <invalid sloc>
 TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
 |-TypedefDecl 0x13d841e60 <<invalid sloc>> <invalid sloc> implicit __metal_intersection_query_t '__metal_intersection_query_t'
 | `-BuiltinType 0x13d819f20 '__metal_intersection_query_t'
-|-ImportDecl 0x13d841f28 <metal-build/test_shader_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
+|-ImportDecl 0x13d841f28 <metal-build/test_src/shader_fn/shaders.metal:1:1> col:1 implicit metal_stdlib
 |-UsingDirectiveDecl 0x13d8ff950 <line:3:1, col:17> col:17 Namespace 0x13d841ff0 'metal'
 |-FunctionDecl 0x13d8ffd78 <line:26:14, col:79> col:21 test_vertex 'float4 (const constant int *)'
 | |-ParmVarDecl 0x13d8ffc10 <col:33, col:47> col:47 buf0 'const constant int *'
@@ -1339,10 +1339,10 @@ TranslationUnitDecl 0x13d8192e8 <<invalid sloc>> <invalid sloc>
             ];
 
             let shader_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("test_shader_src")
+                .join("test_src")
                 .join("shader_fn")
                 .canonicalize()
-                .expect("Failed to canonicalize path to test_shader_src/deps directory");
+                .expect("Failed to canonicalize path to test_src/deps directory");
             let shader_file = shader_dir.join("shaders.metal");
             let (actual_fn_consts, actual_fns) = generate_metal_ast(shader_file, |stdout| {
                 parse_shader_functions_from_reader(stdout)

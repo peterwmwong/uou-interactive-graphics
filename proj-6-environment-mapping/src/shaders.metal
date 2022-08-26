@@ -1,5 +1,5 @@
 #include <metal_stdlib>
-#include "../../metal-shaders/shader_src/shading.h"
+#include "../../metal-shaders/src/shading.h"
 #include "../../metal-types/src/geometry-no-tx-coords.h"
 #include "../../metal-types/src/macros.h"
 #include "../../metal-types/src/model-space.h"
