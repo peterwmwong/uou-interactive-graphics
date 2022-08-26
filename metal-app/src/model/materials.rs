@@ -227,6 +227,9 @@ impl<'a, T: Sized + Copy + Clone> Materials<'a, T> {
         let arguments_buffer = self.arguments_sizer.allocate("Materials", heap.deref());
         let arguments = arguments_buffer.get_mut();
 
+        // TODO: gpuHandle has been deprecated!
+        // - https://developer.apple.com/documentation/macos-release-notes/macos-13-release-notes#Metal
+        // - Switch to gpuResourceID....
         let gpu_handle_sel = sel!(gpuHandle);
         let mut texture_cache: HashMap<MaterialSourceKey<'a>, Texture> =
             HashMap::with_capacity(self.sources.len());
