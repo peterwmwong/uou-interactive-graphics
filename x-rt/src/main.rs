@@ -25,6 +25,7 @@ const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/s
 
 struct Delegate {
     camera: Camera,
+    m_projection_to_world: float4x4,
     command_queue: CommandQueue,
     device: Device,
     model_accel_struct: ModelAccelerationStructure,
@@ -50,6 +51,7 @@ impl RendererDelgate for Delegate {
                 false,
                 0.,
             ),
+            m_projection_to_world: f32x4x4::identity().into(),
             model_accel_struct: ModelAccelerationStructure::from_file(
                 model_file,
                 &device,
@@ -93,7 +95,9 @@ impl RendererDelgate for Delegate {
             &[&self.model_accel_struct.resource()],
             |p| {
                 p.draw_primitives_with_binds(
-                    NoBinds,
+                    main_vertex_binds {
+                        m_projection_to_world: Bind::Value(&self.m_projection_to_world),
+                    },
                     main_fragment_binds {
                         accelerationStructure: self.model_accel_struct.bind(),
                         camera: Bind::Value(&self.camera.projected_space),
@@ -112,6 +116,12 @@ impl RendererDelgate for Delegate {
 
     fn on_event(&mut self, event: UserEvent) {
         if self.camera.on_event(event) {
+            self.m_projection_to_world = self
+                .camera
+                .projected_space
+                .m_world_to_projection
+                .inverse()
+                .into();
             self.needs_render = true;
         }
 

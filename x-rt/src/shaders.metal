@@ -8,16 +8,22 @@ using namespace raytracing;
 struct VertexOut
 {
     float4 position [[position]];
+    half3  raydir;
 };
 
 [[vertex]]
 VertexOut main_vertex(
-    uint vertex_id [[vertex_id]]
+             uint       vertex_id             [[vertex_id]],
+    constant float4x4 & m_projection_to_world [[buffer(0)]]
 ) {
-    return  (vertex_id == 0) ? VertexOut { .position = float4(-3,  1, 0, 1) }
-          : (vertex_id == 1) ? VertexOut { .position = float4( 1,  1, 0, 1) }
-          : (vertex_id == 2) ? VertexOut { .position = float4( 1, -3, 0, 1) }
-          : VertexOut { .position = float4(0) };
+    VertexOut out;
+    switch (vertex_id) {
+        case 0: out.position = float4(-3,  1, 1, 1); break;
+        case 1: out.position = float4( 1,  1, 1, 1); break;
+        case 2: out.position = float4( 1, -3, 1, 1); break;
+    }
+    out.raydir = half3((m_projection_to_world * out.position).xyz);
+    return out;
 }
 
 [[fragment]]
@@ -27,9 +33,7 @@ half4 main_fragment(
     constant ProjectedSpace                  & camera                [[buffer(1)]],
     constant half3x3                         * m_normal_to_worlds    [[buffer(2)]]
 ) {
-    const float4 pos_w = camera.m_screen_to_world * float4(in.position.xyz, 1);
-    const float3 pos   = pos_w.xyz / pos_w.w;
-    const ray    r(camera.position_world.xyz, normalize(pos - camera.position_world.xyz));
+    const ray r(camera.position_world.xyz, float3(normalize(in.raydir)));
 
     intersector<triangle_data> inter;
     inter.set_triangle_cull_mode(triangle_cull_mode::back);

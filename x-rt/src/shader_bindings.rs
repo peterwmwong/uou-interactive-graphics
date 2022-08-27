@@ -14,10 +14,25 @@ use metal_app::{metal::*, metal_types::*, pipeline::*};
 *****************/
 
 #[allow(non_camel_case_types)]
+pub struct main_vertex_binds<'c> {
+    pub m_projection_to_world: Bind<'c, float4x4>,
+}
+impl Binds for main_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        m_projection_to_world: Bind::Skip,
+    };
+
+    #[inline(always)]
+    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
+        self.m_projection_to_world.bind::<F>(encoder, 0);
+    }
+}
+
+#[allow(non_camel_case_types)]
 pub struct main_vertex;
 impl metal_app::pipeline::function::Function for main_vertex {
     const FUNCTION_NAME: &'static str = "main_vertex";
-    type Binds<'c> = NoBinds;
+    type Binds<'c> = main_vertex_binds<'c>;
 }
 impl PipelineFunction<VertexFunctionType> for main_vertex {}
 
