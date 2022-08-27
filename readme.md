@@ -97,6 +97,8 @@ Alternate implementation of Project 7 using Ray Tracing.
 
 - Basic Ray Tracing (Primary Ray) rendering a model's normals
 - Uses an Acceleration Structure with embedded normals for each triangle primitive
+- Normals (3) are encoded as 2 u32's (unorm 10 10 10 2) with Signed Octohedral encoding
+  - http://johnwhite3d.blogspot.com/2017/10/signed-octahedron-normal-encoding.html
 - Goals
     - Learn the basics of using the Metal Ray Tracing APIs and XCode's Acceleration Structure tooling.
     - Develop [`metal-app/ModelAccelerationStructure`](./metal-app/src/model_acceleration_structure.rs)
