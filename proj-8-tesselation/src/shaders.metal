@@ -14,12 +14,11 @@ struct VertexOut
 };
 
 [[patch(quad, 4)]]
-[[vertex]] VertexOut
-main_vertex(         float2     patch_coord                [[position_in_patch]],
-            constant float4x4 & m_world_to_projection [[buffer(0)]],
-            constant float    & displacement_scale         [[buffer(1)]],
-            texture2d<half>     disp_tx                    [[texture(0)]])
-{
+[[vertex]]
+VertexOut main_vertex(         float2     patch_coord           [[position_in_patch]],
+                      constant float4x4 & m_world_to_projection [[buffer(0)]],
+                      constant float    & displacement_scale    [[buffer(1)]],
+                      texture2d<half>     disp_tx               [[texture(0)]]) {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_edge, min_filter::linear);
     const float disp_amount = is_null_texture(disp_tx)
                                 ? 0
@@ -41,15 +40,13 @@ main_vertex(         float2     patch_coord                [[position_in_patch]]
     };
 }
 
-[[fragment]] half4
-main_fragment(         VertexOut        in        [[stage_in]],
-              constant ProjectedSpace & camera    [[buffer(0)]],
-              constant ProjectedSpace & light     [[buffer(1)]],
-              constant bool           & shade_tri [[buffer(2)]],
-              texture2d<half>           normal_tx [[texture(0)]],
-              depth2d<float,
-                      access::sample>   shadow_tx [[texture(1)]])
-{
+[[fragment]]
+half4 main_fragment(         VertexOut               in        [[stage_in]],
+                    constant ProjectedSpace        & camera    [[buffer(0)]],
+                    constant ProjectedSpace        & light     [[buffer(1)]],
+                    constant bool                  & shade_tri [[buffer(2)]],
+                    texture2d<half>                  normal_tx [[texture(0)]],
+                    depth2d<float, access::sample>   shadow_tx [[texture(1)]]) {
     if (shade_tri) return half4(1, 1, 0, 1);
 
     constexpr sampler tx_sampler(mag_filter::linear,
@@ -90,11 +87,10 @@ struct LightVertexOut
     float2 tx_coord;
 };
 
-vertex LightVertexOut
-light_vertex(        uint       vertex_id                  [[vertex_id]],
-            constant float4x4 & m_model_to_projection [[buffer(0)]],
-            constant Geometry & geometry                   [[buffer(1)]])
-{
+[[vertex]]
+LightVertexOut light_vertex(         uint       vertex_id             [[vertex_id]],
+                            constant float4x4 & m_model_to_projection [[buffer(0)]],
+                            constant Geometry & geometry              [[buffer(1)]]) {
     const uint idx = geometry.indices[vertex_id];
     return {
         .position = m_model_to_projection * float4(geometry.positions[idx], 1.0),
@@ -102,10 +98,9 @@ light_vertex(        uint       vertex_id                  [[vertex_id]],
     };
 }
 
-fragment half4
-light_fragment(         LightVertexOut   in       [[stage_in]],
-               constant Material       & material [[buffer(1)]])
-{
+[[fragment]]
+half4 light_fragment(         LightVertexOut   in       [[stage_in]],
+                     constant Material       & material [[buffer(1)]]) {
     constexpr sampler tx_sampler(mag_filter::linear, address::repeat, min_filter::linear);
     return material.ambient_texture.sample(tx_sampler, in.tx_coord);
 };

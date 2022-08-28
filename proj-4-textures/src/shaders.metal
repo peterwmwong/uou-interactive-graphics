@@ -15,11 +15,10 @@ struct VertexOut
     float2 tx_coord;
 };
 
-vertex VertexOut
-main_vertex(         uint         vertex_id [[vertex_id]],
-            constant Geometry   & geometry  [[buffer(0)]],
-            constant ModelSpace & model     [[buffer(1)]])
-{
+[[vertex]]
+VertexOut main_vertex(         uint         vertex_id [[vertex_id]],
+                      constant Geometry   & geometry  [[buffer(0)]],
+                      constant ModelSpace & model     [[buffer(1)]]) {
     const uint   idx      = geometry.indices[vertex_id];
     const float4 position = float4(geometry.positions[idx], 1.0);
     const float3 normal   = geometry.normals[idx];
@@ -32,12 +31,11 @@ main_vertex(         uint         vertex_id [[vertex_id]],
     };
 }
 
-fragment half4
-main_fragment(         VertexOut        in        [[stage_in]],
-              constant Material       & material  [[buffer(0)]],
-              constant ProjectedSpace & camera    [[buffer(1)]],
-              constant float4         & light_pos [[buffer(2)]])
-{
+[[fragment]]
+half4 main_fragment(         VertexOut        in        [[stage_in]],
+                    constant Material       & material  [[buffer(0)]],
+                    constant ProjectedSpace & camera    [[buffer(1)]],
+                    constant float4         & light_pos [[buffer(2)]]) {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     float4 pos = camera.m_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;
@@ -62,19 +60,17 @@ struct LightVertexOut {
     float  size     [[point_size]];
 };
 
-vertex LightVertexOut
-light_vertex(constant ProjectedSpace & camera    [[buffer(0)]],
-             constant float4         & light_pos [[buffer(1)]])
-{
+[[vertex]]
+LightVertexOut light_vertex(constant ProjectedSpace & camera    [[buffer(0)]],
+                            constant float4         & light_pos [[buffer(1)]]) {
     return {
         .position = camera.m_world_to_projection * light_pos,
         .size = 50,
     };
 }
 
-fragment half4
-light_fragment(const float2 point_coord [[point_coord]])
-{
+[[fragment]]
+half4 light_fragment(const float2 point_coord [[point_coord]]) {
     half dist_from_center = length(half2(point_coord) - 0.5h);
     if (dist_from_center > 0.5) discard_fragment();
     return half4(1);

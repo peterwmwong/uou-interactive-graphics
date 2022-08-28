@@ -14,31 +14,29 @@ struct VertexOut
     float3 normal;
 };
 
-vertex VertexOut
-main_vertex(         uint                 vertex_id [[vertex_id]],
-            constant GeometryNoTxCoords & geometry  [[buffer(0)]],
-            constant ProjectedSpace     & camera    [[buffer(1)]],
-            constant ModelSpace         & model     [[buffer(2)]])
-{
+[[vertex]]
+VertexOut main_vertex(         uint                 vertex_id [[vertex_id]],
+                      constant GeometryNoTxCoords & geometry  [[buffer(0)]],
+                      constant ProjectedSpace     & camera    [[buffer(1)]],
+                      constant ModelSpace         & model     [[buffer(2)]]) {
     const uint idx      = geometry.indices[vertex_id];
     const float4 pos    = model.m_model_to_projection * float4(geometry.positions[idx], 1.0);
     const float3 normal = model.m_normal_to_world     * float3(geometry.normals[idx]);
     return { .position = pos, .normal = normal };
 }
 
-fragment half4
-main_fragment(         VertexOut           in          [[stage_in]],
-              constant ProjectedSpace    & camera      [[buffer(0)]],
-              constant float4            & light_pos   [[buffer(1)]],
-              // The goal is to transform the environment. When rendering the mirrored
-              // world, we need to transformed all the objects of the world, including
-              // the environment (flip the environment texture). Instead of creating a
-              // separate "mirrored" environment texture, we change the sampling
-              // direction achieving the same result.
-              constant float3x3          & m_env  [[buffer(2)]],
-              constant float             & darken      [[buffer(3)]],
-                       texturecube<half>   env_texture [[texture(0)]])
-{
+[[fragment]]
+half4 main_fragment(         VertexOut           in          [[stage_in]],
+                    constant ProjectedSpace    & camera      [[buffer(0)]],
+                    constant float4            & light_pos   [[buffer(1)]],
+                    // The goal is to transform the environment. When rendering the mirrored
+                    // world, we need to transformed all the objects of the world, including
+                    // the environment (flip the environment texture). Instead of creating a
+                    // separate "mirrored" environment texture, we change the sampling
+                    // direction achieving the same result.
+                    constant float3x3          & m_env  [[buffer(2)]],
+                    constant float             & darken      [[buffer(3)]],
+                             texturecube<half>   env_texture [[texture(0)]]) {
     // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
     const float4 pos_w      = camera.m_screen_to_world * float4(in.position.xyz, 1);
     const half3  pos        = half3(pos_w.xyz / pos_w.w);
@@ -74,9 +72,8 @@ struct BGVertexOut {
     float4 position [[position]];
 };
 
-vertex BGVertexOut
-bg_vertex(uint vertex_id [[vertex_id]])
-{
+[[vertex]]
+BGVertexOut bg_vertex(uint vertex_id [[vertex_id]]) {
     constexpr const float2 plane_triange_strip_vertices[3] = {
         {-1.h,  1.h}, // Top    Left
         {-1.h, -3.h}, // Bottom Left
@@ -86,11 +83,10 @@ bg_vertex(uint vertex_id [[vertex_id]])
     return { .position = float4(position2d, 1, 1) };
 }
 
-fragment half4
-bg_fragment(         BGVertexOut         in          [[stage_in]],
-            constant ProjectedSpace    & camera      [[buffer(0)]],
-                     texturecube<half>   env_texture [[texture(0)]])
-{
+[[fragment]]
+half4 bg_fragment(         BGVertexOut         in          [[stage_in]],
+                  constant ProjectedSpace    & camera      [[buffer(0)]],
+                           texturecube<half>   env_texture [[texture(0)]]) {
     constexpr sampler tx_sampler(mag_filter::linear, address::clamp_to_zero, min_filter::linear);
     const float4 pos   = camera.m_screen_to_world * float4(in.position.xy, 1, 1);
     const half4  color = env_texture.sample(tx_sampler, pos.xyz);

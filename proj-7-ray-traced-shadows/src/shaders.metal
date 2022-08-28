@@ -16,11 +16,10 @@ struct VertexOut
     float2 tx_coord;
 };
 
-vertex VertexOut
-main_vertex(         uint         vertex_id [[vertex_id]],
-            constant ModelSpace & model     [[buffer(0)]],
-            constant Geometry   & geometry  [[buffer(1)]])
-{
+[[vertex]]
+VertexOut main_vertex(         uint         vertex_id [[vertex_id]],
+                      constant ModelSpace & model     [[buffer(0)]],
+                      constant Geometry   & geometry  [[buffer(1)]]) {
     const uint idx = geometry.indices[vertex_id];
     return {
         .position = model.m_model_to_projection * float4(geometry.positions[idx], 1.0),
@@ -29,13 +28,12 @@ main_vertex(         uint         vertex_id [[vertex_id]],
     };
 }
 
-fragment half4
-main_fragment(         VertexOut                 in           [[stage_in]],
-              constant ProjectedSpace          & camera       [[buffer(0)]],
-              constant float4                  & light_pos    [[buffer(1)]],
-              constant Material                & material     [[buffer(2)]],
-              primitive_acceleration_structure   accel_struct [[buffer(3)]]
-)
+[[fragment]]
+half4 main_fragment(         VertexOut                 in           [[stage_in]],
+                    constant ProjectedSpace          & camera       [[buffer(0)]],
+                    constant float4                  & light_pos    [[buffer(1)]],
+                    constant Material                & material     [[buffer(2)]],
+                    primitive_acceleration_structure   accel_struct [[buffer(3)]])
 {
     float4 pos = camera.m_screen_to_world * float4(in.position.xyz, 1);
            pos = pos / pos.w;

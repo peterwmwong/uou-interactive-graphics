@@ -56,11 +56,10 @@ struct VertexOut
 // Shader. For performance, this should be done once (not for every vertex) on the CPU and passed to
 // the Vertex Shader as a buffer (see subsequent projects). It is done in the Vertex Shader for this
 // project as a personal excercise to become more familar with the Metal Shading Language.
-vertex VertexOut
-main_vertex(         uint                vertex_id [[vertex_id]],
-            constant VertexInput       & in        [[buffer(0)]],
-            constant GeometryPositions & geometry  [[buffer(1)]])
-{
+[[vertex]]
+VertexOut main_vertex(         uint                vertex_id [[vertex_id]],
+                      constant VertexInput       & in        [[buffer(0)]],
+                      constant GeometryPositions & geometry  [[buffer(1)]]) {
     const float4 model_position = float4(geometry.positions[geometry.indices[vertex_id]], 1.0); // Make homogenous coordinate
     const float4 mins           = in.mins;
     const float4 maxs           = in.maxs;
@@ -159,10 +158,9 @@ main_vertex(         uint                vertex_id [[vertex_id]],
     };
 }
 
-fragment half4
-main_fragment(      VertexOut in          [[stage_in]],
-              const float2    point_coord [[point_coord]])
-{
+[[fragment]]
+half4 main_fragment(      VertexOut in          [[stage_in]],
+                    const float2    point_coord [[point_coord]]) {
     // OPTIONAL: Metal renders Point primitives as... squares, instead render them as un-shaded
     // spheres.
     const float dist_from_center = length(point_coord - float2(0.5));

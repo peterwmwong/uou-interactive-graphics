@@ -8,7 +8,7 @@ struct CheckerboardVertexOut
     float4 position [[position]];
 };
 
-vertex
+[[vertex]]
 CheckerboardVertexOut checkerboard_vertex(uint vertex_id [[vertex_id]])
 {
     constexpr const float2 plane_triange_strip_vertices[4] = {
@@ -21,7 +21,7 @@ CheckerboardVertexOut checkerboard_vertex(uint vertex_id [[vertex_id]])
     return { .position = float4(position2d, 0, 1) };
 }
 
-fragment
+[[fragment]]
 half4 checkerboard_fragment(CheckerboardVertexOut in [[stage_in]])
 {
     const float square_size = 8.0;
