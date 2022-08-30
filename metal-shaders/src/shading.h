@@ -98,7 +98,7 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
         return half4(n.xy, n.z * -1, 1);
     }
 
-    const half hn = dot(h, n);
+    const half hn = max(dot(h, n), 0.h);
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
     const half ln = max(dot(l, n), 0.h);
@@ -115,7 +115,7 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     half4 color = 0;
     if (p.has_specular) {
         const half4 Ks = material.specular_color();
-        color += Il * pow(hn * Ks, material.specular_shineness());
+        color += Il * Ks * powr(hn, material.specular_shineness());
     }
     if (p.has_diffuse) {
         const half4 Kd = material.diffuse_color();

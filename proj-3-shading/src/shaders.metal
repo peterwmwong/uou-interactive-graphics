@@ -81,7 +81,7 @@ half4 main_fragment(         VertexOut        in        [[stage_in]],
     const float  s        = 200; // Specular Shineness
     const float3 specular = select(
                                 0,
-                                Il * pow(dot(h, n) * Ks, s),
+                                Il * Ks * powr(max(dot(h, n), 0.f), s),
                                 HasSpecular
                             );
 
