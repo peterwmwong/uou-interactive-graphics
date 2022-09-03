@@ -262,6 +262,7 @@ impl RendererDelgate for Delegate {
             ),
             NoStencil,
             &self.model_depth_state,
+            MTLCullMode::Back,
             &[
                 &HeapUsage(
                     &self.model.heap,
@@ -300,21 +301,28 @@ impl RendererDelgate for Delegate {
                     "BG",
                     &self.bg_render_pipeline,
                     Some(&self.bg_depth_state),
+                    None,
                     |p| {
                         p.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
                         if matches!(self.show_debug_path, ShowDebugPath::Show) {
-                            p.into_subpass("DebugPath", &self.dbg_render_pipeline, None, |p| {
-                                p.draw_primitives_with_binds(
-                                    dbg_vertex_binds {
-                                        dbg_path: Bind::buffer(&self.debug_path),
-                                        ..dbg_vertex_binds::SKIP
-                                    },
-                                    NoBinds,
-                                    MTLPrimitiveType::LineStrip,
-                                    0,
-                                    DEBUG_PATH_MAX_NUM_POINTS as _,
-                                )
-                            });
+                            p.into_subpass(
+                                "DebugPath",
+                                &self.dbg_render_pipeline,
+                                None,
+                                None,
+                                |p| {
+                                    p.draw_primitives_with_binds(
+                                        dbg_vertex_binds {
+                                            dbg_path: Bind::buffer(&self.debug_path),
+                                            ..dbg_vertex_binds::SKIP
+                                        },
+                                        NoBinds,
+                                        MTLPrimitiveType::LineStrip,
+                                        0,
+                                        DEBUG_PATH_MAX_NUM_POINTS as _,
+                                    )
+                                },
+                            );
                         }
                     },
                 );

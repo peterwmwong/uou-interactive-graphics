@@ -277,6 +277,7 @@ impl RendererDelgate for Delegate {
                 MODEL_STENCIL_REF_VALUE,
                 MODEL_STENCIL_REF_VALUE,
             ),
+            MTLCullMode::Back,
             &[
                 &HeapUsage(
                     &self.model.heap,
@@ -319,6 +320,7 @@ impl RendererDelgate for Delegate {
                     draw_model(&p, &self.mirror_plane_model);
                 });
                 p.debug_group("Model (mirrored)", || {
+                    p.set_cull_mode(MTLCullMode::Front);
                     p.set_depth_stencil_state((
                         &self.depth_write_stencil_keep_allow_equal,
                         MIRROR_PLANE_STENCIL_REF_VALUE,
@@ -348,6 +350,7 @@ impl RendererDelgate for Delegate {
                         BG_STENCIL_REF_VALUE,
                         BG_STENCIL_REF_VALUE,
                     )),
+                    None,
                     |p| {
                         p.draw_primitives_with_binds(
                             NoBinds,

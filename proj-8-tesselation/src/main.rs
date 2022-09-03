@@ -261,6 +261,7 @@ impl RendererDelgate for Delegate {
             ),
             NoStencil,
             &self.depth_state,
+            MTLCullMode::None,
             &[
                 &HeapUsage(
                     &self.light_model.heap,

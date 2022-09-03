@@ -195,6 +195,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
             (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
             NoStencil,
             &self.depth_state,
+            MTLCullMode::Back,
             &[&HeapUsage(
                 &self.model.heap,
                 MTLRenderStages::Vertex | MTLRenderStages::Fragment,
@@ -232,7 +233,7 @@ impl<const RENDER_LIGHT: bool> RendererDelgate for Delegate<RENDER_LIGHT> {
                     });
                 }
                 if RENDER_LIGHT {
-                    p.into_subpass("Light", &self.light_pipeline, None, |p| {
+                    p.into_subpass("Light", &self.light_pipeline, None, None, |p| {
                         p.draw_primitives_with_binds(
                             light_vertex_binds {
                                 camera: Bind::Value(&self.camera.projected_space),

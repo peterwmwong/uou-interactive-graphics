@@ -16,5 +16,9 @@
             "*.metal"
         ]
     },
-    "git.autoRepositoryDetection": false
+    "git.autoRepositoryDetection": false,
+    "files.associations": {
+        "*.metal": "metal",
+        "*.h": "metal"
+    }
 }

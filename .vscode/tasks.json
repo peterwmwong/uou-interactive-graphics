@@ -83,9 +83,12 @@
                 "panel": "dedicated",
                 "showReuseMessage": true,
                 "clear": true,
-                "close": false
+                "close": false,
+                "revealProblems": "onProblem"
             },
-            "problemMatcher": [],
+            "problemMatcher": [
+                "$gcc"
+            ],
             "command": "xcrun -sdk macosx metal -std=metal3.0 -S -emit-llvm -o /tmp/uou-shader-tmp.ll ${fileDirname}/shaders.metal && mv /tmp/uou-shader-tmp.ll /tmp/uou-shader.ll"
         },
         {

@@ -228,6 +228,7 @@ impl RendererDelgate for Delegate {
             (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
             NoStencil,
             &self.depth_state,
+            MTLCullMode::None,
             &[
                 &HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES),
                 &HeapUsage(&self.model_plane.model.heap, USAGE_RENDER_STAGES),

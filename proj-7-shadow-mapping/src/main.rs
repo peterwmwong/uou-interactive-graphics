@@ -233,6 +233,7 @@ impl RendererDelgate for Delegate {
                 (shadow_tx, 1., MTLLoadAction::Clear, MTLStoreAction::Store),
                 NoStencil,
                 &self.depth_state,
+                MTLCullMode::None,
                 &[&HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES)],
                 |p| {
                     p.set_depth_bias(1.0, 15.0, 0.0);
@@ -270,6 +271,7 @@ impl RendererDelgate for Delegate {
             (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
             NoStencil,
             &self.depth_state,
+            MTLCullMode::None,
             &[
                 &HeapUsage(&self.model.model.heap, USAGE_RENDER_STAGES),
                 &HeapUsage(&self.model_plane.model.heap, USAGE_RENDER_STAGES),

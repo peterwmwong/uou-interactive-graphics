@@ -514,10 +514,17 @@ impl<
         debug_group: &str,
         subpass_pipeline: &'b RenderPipeline<NUM_COLOR_ATTACHMENTS, VNew, FNew, DS>,
         new_depth_state: Option<DS::DepthStencilState<'b>>,
+        // TODO: None vs Some(MTLCullMode::None) could be confusing/error-prone
+        // - Consider a different enum (not Option)
+        //   - Ex. `CullMode::UsePrevious` vs `CullMode::UsNew(MTLCullMode::None)`
+        new_cull_mode: Option<MTLCullMode>,
         fun: PF,
     ) {
         let encoder = self.encoder;
         self.debug_group(debug_group, || {
+            if let Some(cull_mode) = new_cull_mode {
+                self.set_cull_mode(cull_mode);
+            }
             encoder.set_render_pipeline_state(&subpass_pipeline.pipeline);
             if let Some(depth_state) = new_depth_state {
                 depth_state.setup_render_pass(encoder)
@@ -566,6 +573,11 @@ impl<
     #[inline]
     pub fn set_depth_stencil_state(&self, ds: DS::DepthStencilState<'_>) {
         ds.setup_render_pass(&self.encoder)
+    }
+
+    #[inline]
+    pub fn set_cull_mode(&self, mode: MTLCullMode) {
+        self.encoder.set_cull_mode(mode);
     }
 }
 
@@ -671,6 +683,7 @@ impl<
         depth_attachment: <DS::DepthKind as DepthKind>::RenderPassDesc<'b>,
         stencil_attachment: <DS::StencilKind as StencilKind>::RenderPassDesc<'b>,
         depth_stencil_state: DS::DepthStencilState<'b>,
+        cull_mode: MTLCullMode,
         resources: &[&dyn ResourceUsage],
         fun: PF,
     ) where
@@ -693,12 +706,14 @@ impl<
         }
         encoder.set_render_pipeline_state(&self.pipeline);
         depth_stencil_state.setup_render_pass(encoder);
-        fun(RenderPass {
+        let pass = RenderPass {
             encoder,
             _vertex: PhantomData,
             _fragment: PhantomData,
             _depth_stencil: PhantomData,
-        });
+        };
+        pass.set_cull_mode(cull_mode);
+        fun(pass);
         encoder.end_encoding();
     }
 }

@@ -95,6 +95,7 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
             NoDepthStencilState,
+            MTLCullMode::Back,
             &[],
             |p| {
                 p.bind(

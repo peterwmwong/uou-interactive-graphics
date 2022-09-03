@@ -45,29 +45,29 @@ half4 main_fragment(         VertexOut        in        [[stage_in]],
 
     Ambient + Geometry Term (Diffuse    + Specular)
     -------   ------------- ----------   -------------------------------
-    Ia Kd   + Il cos(a)     (Kd F(l, c) + (cos(t) Ks F(l, c))^s / cos(a))
-    Ia Kd   + Il cos(a)     (Kd         + (cos(t) Ks)^s         / cos(a))
-    Ia Kd   + Il l.n        (Kd         + (h.n Ks)^s            / l.n)
+    Ia Kd   + Il cos(a)     (Kd F(l, c) + Ks (cos(t) F(l, c))^s / cos(a))
+    Ia Kd   + Il cos(a)     (Kd         + Ks cos(t)^s           / cos(a))
+    Ia Kd   + Il (l·n)      (Kd         + Ks (h·n)^s            / (l·n))
 
     ...distribute the Geometry Term...
 
-    Ambient + Diffuse   + Specular
-    -------   ---------   ---------------
-    Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
+    Ambient + Diffuse     + Specular
+    -------   -----------   -------------
+    Ia Kd   + Il (l·n) Kd + Il Ks (h·n)^s
     */
     const float3 l  = normalize(light_pos.xyz - pos);             // Light  - world space direction from fragment to light
     const float3 c  = normalize(camera.position_world.xyz - pos); // Camera - world space direction from fragment to camera
     const float3 h  = normalize(l + c);                           // Half   - half-way vector between Light and Camera
 
+    const float hn = max(dot(h, n), 0.f);
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
-    const float ln = max(dot(l, n), 0.);
+    const float ln = max(dot(l, n), 0.f);
     // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
     // - Using the XCode Shader Profiler, this performed the best compared to...
     //      - ceil(saturate(v))
     //      - trunc(fma(v, .5h, 1.h))
-    const float cn = step(0., dot(c, n));
-    const float Il = 1 * cn;
+    const float Il = 1;
 
 
     const float3 Kd       = float3(1, 0, 0); // Diffuse Material Color
@@ -81,7 +81,7 @@ half4 main_fragment(         VertexOut        in        [[stage_in]],
     const float  s        = 200; // Specular Shineness
     const float3 specular = select(
                                 0,
-                                Il * Ks * powr(max(dot(h, n), 0.f), s),
+                                Il * Ks * powr(hn, s),
                                 HasSpecular
                             );
 

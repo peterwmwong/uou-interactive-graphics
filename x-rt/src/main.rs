@@ -92,6 +92,7 @@ impl RendererDelgate for Delegate {
             NoDepth,
             NoStencil,
             NoDepthStencilState,
+            MTLCullMode::None,
             &[&self.model_accel_struct.resource()],
             |p| {
                 p.draw_primitives_with_binds(
