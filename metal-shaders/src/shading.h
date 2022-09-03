@@ -71,15 +71,15 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
 
     Ambient + Geometry Term (Diffuse    + Specular)
     -------   ------------- ----------   -------------------------------
-    Ia Kd   + Il cos(a)     (Kd F(l, c) + (cos(t) Ks F(l, c))^s / cos(a))
-    Ia Kd   + Il cos(a)     (Kd         + (cos(t) Ks)^s         / cos(a))
-    Ia Kd   + Il l.n        (Kd         + (h.n Ks)^s            / l.n)
+    Ia Kd   + Il cos(a)     (Kd F(l, c) + Ks (cos(t) F(l, c))^s / cos(a))
+    Ia Kd   + Il cos(a)     (Kd         + Ks cos(t)^s           / cos(a))
+    Ia Kd   + Il (l·n)      (Kd         + Ks (h·n)^s            / (l·n))
 
     ...distribute the Geometry Term...
 
-    Ambient + Diffuse   + Specular
-    -------   ---------   ---------------
-    Ia Kd   + Il l.n Kd   + Il (h.n Ks)^s
+    Ambient + Diffuse     + Specular
+    -------   -----------   -------------
+    Ia Kd   + Il (l·n) Kd + Il Ks (h·n)^s
     */
 
     // TODO: START HERE
@@ -104,12 +104,7 @@ inline half4 shade_phong_blinn(const ShadePhongBlinParams p,
     const half ln = max(dot(l, n), 0.h);
 
     const half Ia = material.ambient_amount();
-    // Diffuse/Specular Light Intensity of 1.0 for camera facing surfaces, otherwise 0.0.
-    // - Use Cosine angle between Camera and Normal (positive <90d, negative >90d)
-    // - Using the XCode Shader Profiler, this performed the best compared to...
-    //      - ceil(saturate(v))
-    //      - trunc(fma(v, .5h, 1.h))
-    const half Il = step(0.h, dot(c, n)) * (1. - Ia);
+    const half Il = 1. - Ia;
     const half Id = Il * ln;
 
     half4 color = 0;
