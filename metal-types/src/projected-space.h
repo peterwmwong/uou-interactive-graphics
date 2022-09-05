@@ -26,5 +26,6 @@ struct ProjectedSpace {
     // Put another way...
     //     position_world = m_world_to_projection.inverse() * float4(0, 0, 0, 0);
     //     position_world = position_world / position_world.w;
+    // TODO: This should be float3
     float4   position_world;
 };
