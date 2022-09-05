@@ -1,6 +1,6 @@
 use super::texture_and_config::TextureAndConfig;
 use crate::UserEvent;
-use metal::{DeviceRef, MTLPixelFormat, MTLStorageMode, MTLTextureUsage, TextureRef};
+use metal::{DeviceRef, MTLPixelFormat, MTLResourceOptions, MTLTextureUsage, TextureRef};
 
 pub struct DepthTexture(TextureAndConfig);
 impl DepthTexture {
@@ -10,22 +10,7 @@ impl DepthTexture {
             label,
             format,
             texture: None,
-            storage_mode: MTLStorageMode::Memoryless,
-            usage: MTLTextureUsage::RenderTarget,
-        })
-    }
-
-    #[inline]
-    pub fn new_with_storage_mode(
-        label: &'static str,
-        format: MTLPixelFormat,
-        storage_mode: MTLStorageMode,
-    ) -> Self {
-        Self(TextureAndConfig {
-            label,
-            format,
-            texture: None,
-            storage_mode,
+            resource_options: MTLResourceOptions::StorageModePrivate,
             usage: MTLTextureUsage::RenderTarget,
         })
     }

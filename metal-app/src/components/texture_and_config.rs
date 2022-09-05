@@ -1,6 +1,6 @@
 use crate::UserEvent;
 use metal::{
-    DeviceRef, MTLPixelFormat, MTLStorageMode, MTLTextureUsage, Texture, TextureDescriptor,
+    DeviceRef, MTLPixelFormat, MTLResourceOptions, MTLTextureUsage, Texture, TextureDescriptor,
     TextureRef,
 };
 use std::simd::u32x2;
@@ -9,7 +9,7 @@ pub(crate) struct TextureAndConfig {
     pub(crate) label: &'static str,
     pub(crate) format: MTLPixelFormat,
     pub(crate) texture: Option<Texture>,
-    pub(crate) storage_mode: MTLStorageMode,
+    pub(crate) resource_options: MTLResourceOptions,
     pub(crate) usage: MTLTextureUsage,
 }
 
@@ -33,11 +33,11 @@ impl TextureAndConfig {
                     desc.set_width(size[0] as _);
                     desc.set_height(size[1] as _);
                     desc.set_pixel_format(self.format);
-                    desc.set_storage_mode(self.storage_mode);
                     desc.set_usage(self.usage);
-                    let depth_texture = device.new_texture(&desc);
-                    depth_texture.set_label(self.label);
-                    self.texture = Some(depth_texture);
+                    desc.set_resource_options(self.resource_options);
+                    let texture = device.new_texture(&desc);
+                    texture.set_label(self.label);
+                    self.texture = Some(texture);
                     return true;
                 }
             }

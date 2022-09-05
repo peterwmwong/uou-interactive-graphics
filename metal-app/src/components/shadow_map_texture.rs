@@ -1,6 +1,6 @@
 use super::texture_and_config::TextureAndConfig;
 use crate::{math_helpers::round_up_pow_of_2, UserEvent};
-use metal::{DeviceRef, MTLPixelFormat, MTLStorageMode, MTLTextureUsage, TextureRef};
+use metal::{DeviceRef, MTLPixelFormat, MTLResourceOptions, MTLTextureUsage, TextureRef};
 use std::simd::u32x2;
 
 const MAX_TEXTURE_SIZE: u16 = 16384;
@@ -13,7 +13,7 @@ impl ShadowMapTexture {
             label,
             format,
             texture: None,
-            storage_mode: MTLStorageMode::Private,
+            resource_options: MTLResourceOptions::StorageModePrivate,
             usage: MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead,
         })
     }

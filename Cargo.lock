@@ -663,6 +663,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "proj-3-camera-space"
+version = "0.1.0"
+dependencies = [
+ "metal-app",
+ "metal-build",
+]
+
+[[package]]
 name = "proj-3-shading"
 version = "0.1.0"
 dependencies = [
