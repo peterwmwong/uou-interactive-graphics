@@ -11,7 +11,7 @@
         "settings set target.source-map /rustc/335ffbfa547df94ac236f5c56130cecf99c8d82b/ /Users/pwong/.rustup/toolchains/nightly-aarch64-apple-darwin/lib/rustlib/src/rust/"
     ],
     "triggerTaskOnSave.tasks": {
-        "metal-compile-and-emit-asm": [
+        "build": [
             "*.h",
             "*.metal"
         ]

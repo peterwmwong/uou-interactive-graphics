@@ -4,6 +4,26 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "type": "cargo",
+            "command": "build",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "hide": true,
+            "label": "build",
+            "dependsOn": [
+                "metal-compile-and-emit-asm"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
             "label": "asm after",
             "type": "shell",
             "presentation": {
