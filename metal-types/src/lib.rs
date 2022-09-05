@@ -58,6 +58,21 @@ transmute_from_to!(float2, packed_float2);
 transmute_from_to!(float4, packed_float4);
 transmute_from_to!(u16x2, ushort2);
 
+impl From<float4> for float3 {
+    fn from(f: float4) -> Self {
+        let [x, y, z, ..] = f.xyzw;
+        Self { xyz: [x, y, z] }
+    }
+}
+
+impl From<f32x4> for float3 {
+    fn from(f: f32x4) -> Self {
+        Self {
+            xyz: [f[0], f[1], f[2]],
+        }
+    }
+}
+
 #[allow(non_camel_case_types)]
 pub trait f32x4_extras {
     fn length(&self) -> f32;

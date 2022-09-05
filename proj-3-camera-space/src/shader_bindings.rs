@@ -17,17 +17,23 @@ use metal_app::{metal::*, metal_types::*, pipeline::*};
 pub struct gbuf_vertex_binds<'c> {
     pub geometry: Bind<'c, GeometryNoTxCoords>,
     pub model: Bind<'c, ModelSpace>,
+    pub m_model_to_world: Bind<'c, float4x4>,
+    pub m_world_to_camera: Bind<'c, float4x4>,
 }
 impl Binds for gbuf_vertex_binds<'_> {
     const SKIP: Self = Self {
         geometry: Bind::Skip,
         model: Bind::Skip,
+        m_model_to_world: Bind::Skip,
+        m_world_to_camera: Bind::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.geometry.bind::<F>(encoder, 0);
         self.model.bind::<F>(encoder, 1);
+        self.m_model_to_world.bind::<F>(encoder, 2);
+        self.m_world_to_camera.bind::<F>(encoder, 3);
     }
 }
 
@@ -48,28 +54,43 @@ impl metal_app::pipeline::function::Function for gbuf_fragment {
 impl PipelineFunction<FragmentFunctionType> for gbuf_fragment {}
 
 #[allow(non_camel_case_types)]
+pub struct lighting_vertex_binds<'c> {
+    pub m_projection_to_camera: Bind<'c, float4x4>,
+}
+impl Binds for lighting_vertex_binds<'_> {
+    const SKIP: Self = Self {
+        m_projection_to_camera: Bind::Skip,
+    };
+
+    #[inline(always)]
+    fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
+        self.m_projection_to_camera.bind::<F>(encoder, 0);
+    }
+}
+
+#[allow(non_camel_case_types)]
 pub struct lighting_vertex;
 impl metal_app::pipeline::function::Function for lighting_vertex {
     const FUNCTION_NAME: &'static str = "lighting_vertex";
-    type Binds<'c> = NoBinds;
+    type Binds<'c> = lighting_vertex_binds<'c>;
 }
 impl PipelineFunction<VertexFunctionType> for lighting_vertex {}
 
 #[allow(non_camel_case_types)]
 pub struct lighting_fragment_binds<'c> {
     pub camera: Bind<'c, ProjectedSpace>,
-    pub light_pos: Bind<'c, float4>,
+    pub light_pos_cam: Bind<'c, float3>,
 }
 impl Binds for lighting_fragment_binds<'_> {
     const SKIP: Self = Self {
         camera: Bind::Skip,
-        light_pos: Bind::Skip,
+        light_pos_cam: Bind::Skip,
     };
 
     #[inline(always)]
     fn bind<F: PipelineFunctionType>(self, encoder: &F::CommandEncoder) {
         self.camera.bind::<F>(encoder, 0);
-        self.light_pos.bind::<F>(encoder, 1);
+        self.light_pos_cam.bind::<F>(encoder, 1);
     }
 }
 

@@ -9,52 +9,80 @@ using namespace metal;
 struct GBufVertex
 {
     float4 position [[position]];
+    float3 position_in_camera_space;
     float3 normal;
 };
 
 [[vertex]]
 GBufVertex gbuf_vertex(
-             uint                 vertex_id [[vertex_id]],
-    constant GeometryNoTxCoords & geometry  [[buffer(0)]],
-    constant ModelSpace         & model     [[buffer(1)]]
+             uint                 vertex_id         [[vertex_id]],
+    constant GeometryNoTxCoords & geometry          [[buffer(0)]],
+    constant ModelSpace         & model             [[buffer(1)]],
+    constant float4x4           & m_model_to_world  [[buffer(2)]],
+    constant float4x4           & m_world_to_camera [[buffer(3)]]
 ) {
     const uint   idx      = geometry.indices[vertex_id];
     const float4 position = float4(geometry.positions[idx], 1.0);
     const float3 normal   = geometry.normals[idx];
+    // TODO: START HERE
+    // TODO: START HERE
+    // TODO: START HERE
+    // 1. Precalculate as much as possible (matrices)
+    // 2. Can we reduce the position_in_camera_space down to just z?
+    //    a. GBufVertex storage
+    //    b. Calculation, we should be able to just send a vec3 or vec4 right? not a whole matrix
+    const float4 position_cam = m_world_to_camera * m_model_to_world * position;
+    const float3x3 normal_to_camera = float3x3(m_world_to_camera[0].xyz, m_world_to_camera[1].xyz, m_world_to_camera[2].xyz);
     return {
-        .position  = model.m_model_to_projection * position,
-        .normal    = normalize(model.m_normal_to_world * normal)
+        .position                 = model.m_model_to_projection * position,
+        .position_in_camera_space = position_cam.xyz,
+        .normal                   = normalize(normal_to_camera * model.m_normal_to_world * normal),
     };
 }
 
 struct GBuf {
-    half4 color  [[color(0), raster_order_group(0)]];
-    half4 normal [[color(1), raster_order_group(1)]];
-    float depth  [[color(2), raster_order_group(1)]];
+    half4 color     [[color(0), raster_order_group(0)]];
+    half4 normal    [[color(1), raster_order_group(1)]];
+    float neg_depth [[color(2), raster_order_group(1)]];
 };
 
 [[fragment]]
 GBuf gbuf_fragment(GBufVertex in [[stage_in]]) {
     return GBuf {
         .normal = half4(half3(normalize(in.normal)), 1.),
-        .depth  = in.position.z
+        .neg_depth  = -in.position_in_camera_space.z
     };
 }
 
-
 struct LightingVertex {
     float4 position [[position]];
+    float2 position_in_camera_space;
 };
 
 [[vertex]]
-LightingVertex lighting_vertex(uint vertex_id [[vertex_id]]) {
+LightingVertex lighting_vertex(
+             uint       vertex_id              [[vertex_id]],
+    constant float4x4 & m_projection_to_camera [[buffer(0)]]
+) {
+    float4 position = 0;
+
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // TODO: START HERE 2
+    // Can we do a single giant triangle?
     switch (vertex_id) {
-        case 0: return { float4(-1,  1, 0, 1) };
-        case 1: return { float4( 1,  1, 0, 1) };
-        case 2: return { float4(-1, -1, 0, 1) };
-        case 3: return { float4( 1, -1, 0, 1) };
+        case 0: position = float4(-1,  1, 0, 1); break;
+        case 1: position = float4( 1,  1, 0, 1); break;
+        case 2: position = float4(-1, -1, 0, 1); break;
+        case 3: position = float4( 1, -1, 0, 1); break;
     }
-    return {0};
+
+    // TODO: START HERE 3
+    // TODO: START HERE 3
+    // TODO: START HERE 3
+    // Since we're calculating just for the xy, is there a reduced 3x3 matrix (or even smaller)?
+    const float4 position_in_camera_space = m_projection_to_camera * position;
+    return { position, position_in_camera_space.xy / position_in_camera_space.z };
 }
 
 struct LightingFragment {
@@ -63,17 +91,16 @@ struct LightingFragment {
 
 [[fragment]]
 LightingFragment lighting_fragment(
-             LightingVertex   in        [[stage_in]],
-    constant ProjectedSpace & camera    [[buffer(0)]],
-    constant float4         & light_pos [[buffer(1)]],
+             LightingVertex   in            [[stage_in]],
+    constant ProjectedSpace & camera        [[buffer(0)]],
+    constant float3         & light_pos_cam [[buffer(1)]],
              GBuf             gbuf
 ) {
+    const float  neg_depth = float(gbuf.neg_depth);
+    const float3 pos_cam   = float3(in.position_in_camera_space * neg_depth, neg_depth);
+
     const float3 n = normalize(float3(gbuf.normal.xyz)); // Normal - unit vector, world space direction perpendicular to surface
     if (OnlyNormals) return { half4(half3(n), 1) };
-
-    // Calculate the fragment's World Space position from a Metal Viewport Coordinate (screen).
-    const float4 pos_w = camera.m_screen_to_world * float4(in.position.xy, gbuf.depth, 1);
-    const float3 pos   = pos_w.xyz / pos_w.w;
 
     /*
     ================================================================
@@ -94,9 +121,9 @@ LightingFragment lighting_fragment(
     -------   -----------   -------------
     Ia Kd   + Il (l·n) Kd + Il Ks (h·n)^s
     */
-    const float3 l  = normalize(light_pos.xyz - pos);             // Light  - world space direction from fragment to light
-    const float3 c  = normalize(camera.position_world.xyz - pos); // Camera - world space direction from fragment to camera
-    const float3 h  = normalize(l + c);                           // Half   - half-way vector between Light and Camera
+    const float3 l  = normalize(light_pos_cam.xyz + pos_cam); // Light  - world space direction from fragment to light
+    const float3 c  = normalize(pos_cam);                     // Camera - world space direction from fragment to camera
+    const float3 h  = normalize(l + c);                       // Half   - half-way vector between Light and Camera
 
     const float hn = max(dot(h, n), 0.f);
     // Cosine angle between Light and Normal

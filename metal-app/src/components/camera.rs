@@ -12,6 +12,7 @@ const INITIAL_CAMERA_DISTANCE: f32 = 1.0;
 const N: f32 = 0.1;
 const F: f32 = 100000.0;
 const Z_RANGE: f32 = F - N;
+const F_Z_RANGE: f32 = F / Z_RANGE;
 
 pub struct CameraUpdate {
     pub position_world: f32x4,
@@ -26,6 +27,7 @@ pub struct Camera<const DRAG_SCALE: usize = 250> {
     pub min_distance: f32,
     pub on_mouse_drag_modifier_keys: ModifierKeys,
     pub projected_space: ProjectedSpace,
+    pub m_projection_to_camera: f32x4x4,
     pub rotation_xy: f32x2,
     pub screen_size: f32x2,
 }
@@ -48,6 +50,7 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
                 m_screen_to_world: f32x4x4::identity(),
                 position_world: float4 { xyzw: [0.; 4] },
             },
+            m_projection_to_camera: f32x4x4::identity(),
             invert_drag,
             min_distance,
             screen_size: f32x2::from_array([1.; 2]),
@@ -137,8 +140,9 @@ impl<const DRAG_SCALE: usize> Camera<DRAG_SCALE> {
         let position_world = m_camera_to_world * f32x4::from_array([0., 0., 0., 1.]);
 
         let aspect_ratio = self.screen_size[0] / self.screen_size[1];
-        let m_world_to_projection =
-            calc_m_camera_to_projection(aspect_ratio, 60_f32.to_radians()) * m_world_to_camera;
+        let m_camera_to_projection = calc_m_camera_to_projection(aspect_ratio, 60_f32.to_radians());
+        let m_world_to_projection = m_camera_to_projection * m_world_to_camera;
+        self.m_projection_to_camera = m_camera_to_projection.inverse();
 
         let scale_xy = f32x2::splat(2.) / self.screen_size;
         let m_screen_to_projection =
@@ -203,7 +207,7 @@ pub fn calc_m_camera_to_projection(aspect_ratio: f32, fov: f32) -> f32x4x4 {
     f32x4x4::new(
         [sx, 0., 0., 0.],
         [0., sy, 0., 0.],
-        [0., 0., F / Z_RANGE, -N * F / Z_RANGE],
+        [0., 0., F_Z_RANGE, -N * F_Z_RANGE],
         [0., 0., 1., 0.],
     )
 }

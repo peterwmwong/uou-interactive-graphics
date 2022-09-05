@@ -85,7 +85,7 @@ half4 main_fragment(         VertexOut        in        [[stage_in]],
                                 HasSpecular
                             );
 
-    const float  Ia       = 0.1; // Ambient Intensity
+    const float  Ia       = 0; // Ambient Intensity
     const float3 Ka       = Kd;  // Ambient Material Color
     const float3 ambient  = select(
                                 0,

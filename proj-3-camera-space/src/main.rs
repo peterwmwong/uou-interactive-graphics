@@ -6,6 +6,7 @@ use metal_app::components::{Camera, DepthTexture, ScreenSizeTexture, ShadingMode
 use metal_app::{metal::*, metal_types::*, pipeline::*, *};
 use shader_bindings::*;
 use std::ops::Neg;
+use std::simd::f32x4;
 use std::{
     f32::consts::PI,
     path::PathBuf,
@@ -23,12 +24,13 @@ const PIPELINE_COLORS: [(MTLPixelFormat, BlendMode); 3] = [
     (GBUF_DEPTH_PIXEL_FORMAT, BlendMode::NoBlend),
 ];
 
-const GBUF_NORMAL_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::RGBA8Snorm;
+const GBUF_NORMAL_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::RGBA16Snorm;
 const GBUF_DEPTH_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::R32Float;
 
+// const INITIAL_CAMERA_DISTANCE: f32 = 0.868125;
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., -PI / 3.]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., PI / 2.1]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
@@ -91,8 +93,8 @@ impl RendererDelgate for Delegate {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("common-assets")
-            .join("teapot")
-            .join("teapot.obj");
+            .join("plane")
+            .join("plane.obj");
         let model = Model::from_file(
             teapot_file,
             &device,
@@ -145,7 +147,7 @@ impl RendererDelgate for Delegate {
             },
             depth: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
             gbuf_normal: ScreenSizeTexture::new_memoryless_render_target(
-                "gbuf_normal_shadow",
+                "gbuf_normal",
                 GBUF_NORMAL_PIXEL_FORMAT,
             ),
             gbuf_depth: ScreenSizeTexture::new_memoryless_render_target(
@@ -234,7 +236,11 @@ impl RendererDelgate for Delegate {
                     p.draw_primitives_with_binds(
                         gbuf_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(draw.geometry),
-                            ..Binds::SKIP
+                            model: Bind::Skip,
+                            m_model_to_world: Bind::Value(&self.m_model_to_world),
+                            m_world_to_camera: Bind::Value(
+                                &self.camera.get_world_to_camera_transform(),
+                            ),
                         },
                         NoBinds,
                         MTLPrimitiveType::Triangle,
@@ -250,11 +256,17 @@ impl RendererDelgate for Delegate {
                     Some(&self.depth_state_nowrite_allow_less),
                     None,
                     |p| {
+                        let light_pos_in_camera_space = self.camera.get_world_to_camera_transform()
+                            * f32x4::from(self.light.projected_space.position_world);
                         p.draw_primitives_with_binds(
-                            NoBinds,
+                            lighting_vertex_binds {
+                                m_projection_to_camera: Bind::Value(
+                                    &self.camera.m_projection_to_camera,
+                                ),
+                            },
                             lighting_fragment_binds {
                                 camera: Bind::Value(&self.camera.projected_space),
-                                light_pos: Bind::Value(&self.light.projected_space.position_world),
+                                light_pos_cam: Bind::Value(&light_pos_in_camera_space.into()),
                             },
                             MTLPrimitiveType::TriangleStrip,
                             0,

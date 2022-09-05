@@ -40,6 +40,42 @@ fn bindgen_test_layout_float2() {
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Default, Copy, Clone, PartialEq)]
+pub struct float3 {
+    pub xyz: [f32; 3usize],
+}
+#[test]
+fn bindgen_test_layout_float3() {
+    assert_eq!(
+        ::std::mem::size_of::<float3>(),
+        16usize,
+        concat!("Size of: ", stringify!(float3))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<float3>(),
+        16usize,
+        concat!("Alignment of ", stringify!(float3))
+    );
+    fn test_field_xyz() {
+        assert_eq!(
+            unsafe {
+                let uninit = ::std::mem::MaybeUninit::<float3>::uninit();
+                let ptr = uninit.as_ptr();
+                ::std::ptr::addr_of!((*ptr).xyz) as usize - ptr as usize
+            },
+            0usize,
+            concat!(
+                "Offset of field: ",
+                stringify!(float3),
+                "::",
+                stringify!(xyz)
+            )
+        );
+    }
+    test_field_xyz();
+}
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Default, Copy, Clone, PartialEq)]
 pub struct float4 {
     pub xyzw: [f32; 4usize],
 }
@@ -1079,6 +1115,7 @@ fn test_metal_types_derive_copy() {
     HasCopyClone(PhantomData::<ProjectedSpace>);
     HasCopyClone(PhantomData::<TriNormals>);
     HasCopyClone(PhantomData::<float2>);
+    HasCopyClone(PhantomData::<float3>);
     HasCopyClone(PhantomData::<float3x3>);
     HasCopyClone(PhantomData::<float4>);
     HasCopyClone(PhantomData::<float4x3>);

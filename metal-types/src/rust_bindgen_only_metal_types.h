@@ -12,6 +12,10 @@ struct alignas(8) float2 {
     float xy[2];
 };
 
+struct alignas(16) float3 {
+    float xyz[3];
+};
+
 struct alignas(16) float4 {
     float xyzw[4];
 };

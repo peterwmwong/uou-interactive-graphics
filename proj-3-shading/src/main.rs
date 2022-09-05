@@ -13,8 +13,8 @@ use std::{
 };
 
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
-const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([-PI / 6., 0.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([-PI / 4., 0.]);
+const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., -PI / 3.]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., PI / 2.1]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
@@ -61,8 +61,8 @@ impl RendererDelgate for Delegate {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("common-assets")
-            .join("teapot")
-            .join("teapot.obj");
+            .join("plane")
+            .join("plane.obj");
         let model = Model::from_file(
             teapot_file,
             &device,
