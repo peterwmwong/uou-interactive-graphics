@@ -31,15 +31,15 @@ GBufVertex gbuf_vertex(
 }
 
 struct GBuf {
-    half4 color     [[color(0), raster_order_group(0)]];
-    half4 normal    [[color(1), raster_order_group(1)]];
-    half  neg_depth [[color(2), raster_order_group(1)]];
+    half4  color     [[color(0), raster_order_group(0)]];
+    float4 normal    [[color(1), raster_order_group(1)]];
+    half   neg_depth [[color(2), raster_order_group(1)]];
 };
 
 [[fragment]]
 GBuf gbuf_fragment(GBufVertex in [[stage_in]]) {
     return GBuf {
-        .normal    =  half4(half3(normalize(in.normal)), 1.),
+        .normal    = float4(normalize(in.normal), 1),
         .neg_depth = -half(in.position_cam_z)
     };
 }
@@ -75,10 +75,9 @@ LightingFragment lighting_fragment(
     constant float3         & light_pos_cam [[buffer(1)]],
              GBuf             gbuf
 ) {
-    const float  neg_depth = float(gbuf.neg_depth);
-    const float3 pos_cam   = float3(float2(in.position_cam), 1) * neg_depth;
+    const half3 neg_pos_cam  = half3(in.position_cam, 1) * gbuf.neg_depth;
 
-    const float3 n = normalize(float3(gbuf.normal.xyz)); // Normal - unit vector, world space direction perpendicular to surface
+    const float3 n = gbuf.normal.xyz; // Normal - unit vector, world space direction perpendicular to surface
     if (OnlyNormals) return { half4(half3(n), 1) };
 
     /*
@@ -100,39 +99,32 @@ LightingFragment lighting_fragment(
     -------   -----------   -------------
     Ia Kd   + Il (l·n) Kd + Il Ks (h·n)^s
     */
-    const float3 l  = normalize(light_pos_cam.xyz + pos_cam); // Light  - world space direction from fragment to light
-    const float3 c  = normalize(pos_cam);                     // Camera - world space direction from fragment to camera
-    const float3 h  = normalize(l + c);                       // Half   - half-way vector between Light and Camera
+    const float3 l  = float3(normalize(half3(light_pos_cam.xyz) + neg_pos_cam)); // Light  - world space direction from fragment to light
+    const half3  c  = normalize(neg_pos_cam);                            // Camera - world space direction from fragment to camera
+    const float3 h  = normalize(l + float3(c));                  // Half   - half-way vector between Light and Camera
+    const float  hn = max(dot(h, n), 0.f);
+    const half   ln = half(max(dot(half3(l), half3(n)), 0.h));
 
-    const float hn = max(dot(h, n), 0.f);
-    // Cosine angle between Light and Normal
-    // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
-    const float ln = max(dot(l, n), 0.f);
-    // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
-    // - Using the XCode Shader Profiler, this performed the best compared to...
-    //      - ceil(saturate(v))
-    //      - trunc(fma(v, .5h, 1.h))
-    const float Il = 1;
+    const half   Ia = 0.1;     // Ambient Intensity
+    const half   Il = 1. - Ia; // Diffuse/Specular Intensity
 
-
-    const float3 Kd       = float3(1, 0, 0); // Diffuse Material Color
-    const float3 diffuse  = select(
+    const half3 Kd       = half3(1, 0, 0); // Diffuse Material Color
+    const half3 diffuse  = select(
                                 0,
                                 Il * ln * Kd,
                                 HasDiffuse
                             );
 
-    const float3 Ks       = 1;   // Specular Material Color
-    const float  s        = 200; // Specular Shineness
-    const float3 specular = select(
-                                0,
-                                Il * Ks * powr(hn, s),
+    const half3 Ks       = 1;   // Specular Material Color
+    const float s        = 200; // Specular Shineness
+    const half3 specular = Il * Ks * half(select(
+                                0.f,
+                                powr(hn, s),
                                 HasSpecular
-                            );
+                            ));
 
-    const float  Ia       = 0.1; // Ambient Intensity
-    const float3 Ka       = Kd;  // Ambient Material Color
-    const float3 ambient  = select(
+    const half3 Ka       = Kd;  // Ambient Material Color
+    const half3 ambient  = select(
                                 0,
                                 Ia * Ka,
                                 HasAmbient

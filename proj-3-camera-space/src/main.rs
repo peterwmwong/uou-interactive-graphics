@@ -28,7 +28,7 @@ const GBUF_DEPTH_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::R16Float;
 
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., -PI / 3.]);
-const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., PI / 2.1]);
+const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., 0.]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 

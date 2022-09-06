@@ -63,12 +63,8 @@ half4 main_fragment(         VertexOut        in        [[stage_in]],
     // Cosine angle between Light and Normal
     // - max() to remove Diffuse/Specular when the Light is hitting the back of the surface.
     const float ln = max(dot(l, n), 0.f);
-    // - step() to remove Diffuse/Specular when the Camera is viewing the back of the surface
-    // - Using the XCode Shader Profiler, this performed the best compared to...
-    //      - ceil(saturate(v))
-    //      - trunc(fma(v, .5h, 1.h))
-    const float Il = 1;
-
+    const float Ia = 0.1;    // Ambient Intensity
+    const float Il = 1 - Ia; // Diffuse/Specular Intensity
 
     const float3 Kd       = float3(1, 0, 0); // Diffuse Material Color
     const float3 diffuse  = select(
@@ -85,7 +81,6 @@ half4 main_fragment(         VertexOut        in        [[stage_in]],
                                 HasSpecular
                             );
 
-    const float  Ia       = 0; // Ambient Intensity
     const float3 Ka       = Kd;  // Ambient Material Color
     const float3 ambient  = select(
                                 0,
