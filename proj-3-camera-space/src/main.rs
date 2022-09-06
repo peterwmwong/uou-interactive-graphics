@@ -2,7 +2,7 @@
 #![feature(portable_simd)]
 mod shader_bindings;
 
-use metal_app::components::{Camera, DepthTexture, ScreenSizeTexture, ShadingModeSelector};
+use metal_app::components::{Camera, ScreenSizeTexture, ShadingModeSelector};
 use metal_app::{metal::*, metal_types::*, pipeline::*, *};
 use shader_bindings::*;
 use std::ops::Neg;
@@ -25,9 +25,8 @@ const PIPELINE_COLORS: [(MTLPixelFormat, BlendMode); 3] = [
 ];
 
 const GBUF_NORMAL_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::RGBA16Snorm;
-const GBUF_DEPTH_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::R32Float;
+const GBUF_DEPTH_PIXEL_FORMAT: MTLPixelFormat = MTLPixelFormat::R16Float;
 
-// const INITIAL_CAMERA_DISTANCE: f32 = 0.868125;
 const INITIAL_CAMERA_DISTANCE: f32 = 1.;
 const INITIAL_CAMERA_ROTATION: f32x2 = f32x2::from_array([0., -PI / 3.]);
 const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., PI / 2.1]);
@@ -39,7 +38,7 @@ struct Delegate {
     command_queue: CommandQueue,
     depth_state: DepthStencilState,
     depth_state_nowrite_allow_less: DepthStencilState,
-    depth: DepthTexture,
+    depth: ScreenSizeTexture,
     device: Device,
     gbuf_depth: ScreenSizeTexture,
     gbuf_normal: ScreenSizeTexture,
@@ -50,7 +49,7 @@ struct Delegate {
     lighting_pipeline: LightingPipelineType,
     m_model_to_world: f32x4x4,
     model: Model<GeometryNoTxCoords, NoMaterial>,
-    model_space: ModelSpace,
+    model_space: ModelSpace2,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
 }
@@ -93,8 +92,8 @@ impl RendererDelgate for Delegate {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("common-assets")
-            .join("plane")
-            .join("plane.obj");
+            .join("teapot")
+            .join("teapot.obj");
         let model = Model::from_file(
             teapot_file,
             &device,
@@ -145,7 +144,7 @@ impl RendererDelgate for Delegate {
                 desc.set_depth_write_enabled(false);
                 device.new_depth_stencil_state(&desc)
             },
-            depth: DepthTexture::new("Depth", DEFAULT_DEPTH_FORMAT),
+            depth: ScreenSizeTexture::new_depth(),
             gbuf_normal: ScreenSizeTexture::new_memoryless_render_target(
                 "gbuf_normal",
                 GBUF_NORMAL_PIXEL_FORMAT,
@@ -174,9 +173,9 @@ impl RendererDelgate for Delegate {
             model,
             gbuf_pipeline: create_gbuf_pipeline(&device, &library),
             lighting_pipeline: create_lighting_pipeline(&device, &library, shading_mode),
-            model_space: ModelSpace {
+            model_space: ModelSpace2 {
                 m_model_to_projection: f32x4x4::identity(),
-                m_normal_to_world: m_model_to_world.into(),
+                m_model_to_camera: f32x4x4::identity(),
             },
             needs_render: false,
             shading_mode,
@@ -237,10 +236,6 @@ impl RendererDelgate for Delegate {
                         gbuf_vertex_binds {
                             geometry: Bind::buffer_with_rolling_offset(draw.geometry),
                             model: Bind::Skip,
-                            m_model_to_world: Bind::Value(&self.m_model_to_world),
-                            m_world_to_camera: Bind::Value(
-                                &self.camera.get_world_to_camera_transform(),
-                            ),
                         },
                         NoBinds,
                         MTLPrimitiveType::Triangle,
@@ -295,8 +290,12 @@ impl RendererDelgate for Delegate {
 
     fn on_event(&mut self, event: UserEvent) {
         if self.camera.on_event(event) {
-            self.model_space.m_model_to_projection =
-                self.camera.projected_space.m_world_to_projection * self.m_model_to_world;
+            self.model_space = ModelSpace2 {
+                m_model_to_projection: self.camera.projected_space.m_world_to_projection
+                    * self.m_model_to_world,
+                m_model_to_camera: self.camera.get_world_to_camera_transform()
+                    * self.m_model_to_world,
+            };
             self.needs_render = true;
         }
         if self.light.on_event(event) {
