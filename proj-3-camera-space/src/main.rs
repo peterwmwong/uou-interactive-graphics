@@ -92,8 +92,8 @@ impl RendererDelgate for Delegate {
         let teapot_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("common-assets")
-            .join("teapot")
-            .join("teapot.obj");
+            .join("plane")
+            .join("plane.obj");
         let model = Model::from_file(
             teapot_file,
             &device,
@@ -263,9 +263,9 @@ impl RendererDelgate for Delegate {
                                 camera: Bind::Value(&self.camera.projected_space),
                                 light_pos_cam: Bind::Value(&light_pos_in_camera_space.into()),
                             },
-                            MTLPrimitiveType::TriangleStrip,
+                            MTLPrimitiveType::Triangle,
                             0,
-                            4,
+                            3,
                         );
                         p.into_subpass("Draw Light", &self.light_pipeline, None, None, |p| {
                             p.draw_primitives_with_binds(

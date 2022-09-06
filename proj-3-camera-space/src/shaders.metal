@@ -51,28 +51,17 @@ struct LightingVertex {
 
 [[vertex]]
 LightingVertex lighting_vertex(
-             uint       vertex_id              [[vertex_id]],
+             ushort     vertex_id              [[vertex_id]],
     constant float4x4 & m_projection_to_camera [[buffer(0)]]
 ) {
-    float4 position = 0;
-
-    // TODO: START HERE 2
-    // TODO: START HERE 2
-    // TODO: START HERE 2
-    // Can we do a single giant triangle?
+    float2 position = 0;
     switch (vertex_id) {
-        case 0: position = float4(-1,  1, 0, 1); break;
-        case 1: position = float4( 1,  1, 0, 1); break;
-        case 2: position = float4(-1, -1, 0, 1); break;
-        case 3: position = float4( 1, -1, 0, 1); break;
+        case 0: position = float2(-3,  1); break;
+        case 1: position = float2( 1,  1); break;
+        case 2: position = float2( 1, -3); break;
     }
-
-    // TODO: START HERE 3
-    // TODO: START HERE 3
-    // TODO: START HERE 3
-    // Since we're calculating just for the xy, is there a reduced 3x3 matrix (or even smaller)?
-    const float4 position_cam = m_projection_to_camera * position;
-    return { position, half2(position_cam.xy / position_cam.z) };
+    const float2x2 m_xy_projection_to_camera = float2x2(m_projection_to_camera[0].xy, m_projection_to_camera[1].xy);
+    return { float4(position, 0, 1), half2(m_xy_projection_to_camera * position) };
 }
 
 struct LightingFragment {
@@ -87,7 +76,7 @@ LightingFragment lighting_fragment(
              GBuf             gbuf
 ) {
     const float  neg_depth = float(gbuf.neg_depth);
-    const float3 pos_cam   = float3(float2(in.position_cam) * neg_depth, neg_depth);
+    const float3 pos_cam   = float3(float2(in.position_cam), 1) * neg_depth;
 
     const float3 n = normalize(float3(gbuf.normal.xyz)); // Normal - unit vector, world space direction perpendicular to surface
     if (OnlyNormals) return { half4(half3(n), 1) };
