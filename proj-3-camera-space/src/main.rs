@@ -13,10 +13,9 @@ use std::{
     simd::{f32x2, SimdFloat},
 };
 
-type GBufPipelineType = RenderPipeline<3, gbuf_vertex, gbuf_fragment, (Depth, NoStencil)>;
-type LightingPipelineType =
-    RenderPipeline<3, lighting_vertex, lighting_fragment, (Depth, NoStencil)>;
-type DrawLightPipelineType = RenderPipeline<3, light_vertex, light_fragment, (Depth, NoStencil)>;
+type GBufPipelineType = RenderPipeline<3, gbuf_vertex, gbuf_fragment, (Depth, Stencil)>;
+type LightingPipelineType = RenderPipeline<3, lighting_vertex, lighting_fragment, (Depth, Stencil)>;
+type DrawLightPipelineType = RenderPipeline<3, light_vertex, light_fragment, (Depth, Stencil)>;
 
 const PIPELINE_COLORS: [(MTLPixelFormat, BlendMode); 3] = [
     (DEFAULT_COLOR_FORMAT, BlendMode::NoBlend),
@@ -33,36 +32,42 @@ const INITIAL_LIGHT_ROTATION: f32x2 = f32x2::from_array([0., PI / 2.1]);
 const LIBRARY_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
 const LIGHT_DISTANCE: f32 = INITIAL_CAMERA_DISTANCE / 2.;
 
+const STENCIL_TEXTURE_FORMAT: MTLPixelFormat = MTLPixelFormat::Stencil8;
+const STENCIL_VALUE_CLEAR: u32 = 0;
+const STENCIL_VALUE_GBUFFER: u32 = 128;
+
 struct Delegate {
     camera: Camera,
     command_queue: CommandQueue,
-    depth_state: DepthStencilState,
-    depth_state_nowrite_allow_less: DepthStencilState,
+    depth_write_less_stencil_write_always: DepthStencilState,
+    depth_keep_always_stencil_keep_equal: DepthStencilState,
+    depth_keep_less_stencil_keep_always: DepthStencilState,
     depth: ScreenSizeTexture,
     device: Device,
     gbuf_depth: ScreenSizeTexture,
     gbuf_normal: ScreenSizeTexture,
     gbuf_pipeline: GBufPipelineType,
     library: Library,
-    light: Camera,
     light_pipeline: DrawLightPipelineType,
+    light: Camera,
     lighting_pipeline: LightingPipelineType,
     m_model_to_world: f32x4x4,
-    model: Model<GeometryNoTxCoords, NoMaterial>,
     model_space: ModelSpace2,
+    model: Model<GeometryNoTxCoords, NoMaterial>,
     needs_render: bool,
     shading_mode: ShadingModeSelector,
+    stencil: ScreenSizeTexture,
 }
 
 fn create_gbuf_pipeline(device: &Device, library: &Library) -> GBufPipelineType {
     RenderPipeline::new(
-        "GBuf Pipeline",
+        "GBuf",
         device,
         library,
         PIPELINE_COLORS,
         gbuf_vertex,
         gbuf_fragment,
-        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
+        (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
     )
 }
 
@@ -72,7 +77,7 @@ fn create_lighting_pipeline(
     shading_mode: ShadingModeSelector,
 ) -> LightingPipelineType {
     RenderPipeline::new(
-        "Lighting Pipeline",
+        "Lighting",
         device,
         library,
         PIPELINE_COLORS,
@@ -83,7 +88,7 @@ fn create_lighting_pipeline(
             OnlyNormals: shading_mode.only_normals(),
             HasSpecular: shading_mode.has_specular(),
         },
-        (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
+        (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
     )
 }
 
@@ -125,8 +130,8 @@ impl RendererDelgate for Delegate {
         let shading_mode = ShadingModeSelector::DEFAULT;
 
         // Setup Render Pipeline Descriptor used for rendering the teapot and light
-        let desc = DepthStencilDescriptor::new();
-        desc.set_depth_compare_function(MTLCompareFunction::LessEqual);
+        let ds = DepthStencilDescriptor::new();
+        let s = StencilDescriptor::new();
         Self {
             camera: Camera::new(
                 INITIAL_CAMERA_DISTANCE,
@@ -136,23 +141,49 @@ impl RendererDelgate for Delegate {
                 0.,
             ),
             command_queue: device.new_command_queue(),
-            depth_state: {
-                desc.set_depth_write_enabled(true);
-                device.new_depth_stencil_state(&desc)
-            },
-            depth_state_nowrite_allow_less: {
-                desc.set_depth_write_enabled(false);
-                device.new_depth_stencil_state(&desc)
-            },
             depth: ScreenSizeTexture::new_depth(),
-            gbuf_normal: ScreenSizeTexture::new_memoryless_render_target(
-                "gbuf_normal",
-                GBUF_NORMAL_PIXEL_FORMAT,
-            ),
+            depth_write_less_stencil_write_always: {
+                ds.set_depth_write_enabled(true);
+                ds.set_depth_compare_function(MTLCompareFunction::LessEqual);
+                {
+                    s.set_stencil_compare_function(MTLCompareFunction::Always);
+                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Replace);
+                    ds.set_front_face_stencil(Some(&s));
+                    ds.set_back_face_stencil(Some(&s));
+                }
+                device.new_depth_stencil_state(&ds)
+            },
+            depth_keep_always_stencil_keep_equal: {
+                ds.set_depth_write_enabled(false);
+                ds.set_depth_compare_function(MTLCompareFunction::Always);
+                {
+                    s.set_stencil_compare_function(MTLCompareFunction::Equal);
+                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Keep);
+                    ds.set_front_face_stencil(Some(&s));
+                    ds.set_back_face_stencil(Some(&s));
+                }
+                device.new_depth_stencil_state(&ds)
+            },
+            depth_keep_less_stencil_keep_always: {
+                ds.set_depth_write_enabled(false);
+                ds.set_depth_compare_function(MTLCompareFunction::Less);
+                {
+                    s.set_stencil_compare_function(MTLCompareFunction::Always);
+                    s.set_depth_stencil_pass_operation(MTLStencilOperation::Keep);
+                    ds.set_front_face_stencil(Some(&s));
+                    ds.set_back_face_stencil(Some(&s));
+                }
+                device.new_depth_stencil_state(&ds)
+            },
             gbuf_depth: ScreenSizeTexture::new_memoryless_render_target(
                 "gbuf_depth",
                 GBUF_DEPTH_PIXEL_FORMAT,
             ),
+            gbuf_normal: ScreenSizeTexture::new_memoryless_render_target(
+                "gbuf_normal",
+                GBUF_NORMAL_PIXEL_FORMAT,
+            ),
+            gbuf_pipeline: create_gbuf_pipeline(&device, &library),
             light: Camera::new(
                 LIGHT_DISTANCE,
                 INITIAL_LIGHT_ROTATION,
@@ -161,24 +192,30 @@ impl RendererDelgate for Delegate {
                 0.,
             ),
             light_pipeline: RenderPipeline::new(
-                "Render Light Pipeline",
+                "Draw Light",
                 &device,
                 &library,
                 PIPELINE_COLORS,
                 light_vertex,
                 light_fragment,
-                (Depth(DEFAULT_DEPTH_FORMAT), NoStencil),
+                (Depth(DEFAULT_DEPTH_FORMAT), Stencil(STENCIL_TEXTURE_FORMAT)),
             ),
+            lighting_pipeline: create_lighting_pipeline(&device, &library, shading_mode),
             m_model_to_world,
             model,
-            gbuf_pipeline: create_gbuf_pipeline(&device, &library),
-            lighting_pipeline: create_lighting_pipeline(&device, &library, shading_mode),
             model_space: ModelSpace2 {
                 m_model_to_projection: f32x4x4::identity(),
                 m_model_to_camera: f32x4x4::identity(),
             },
             needs_render: false,
             shading_mode,
+            stencil: ScreenSizeTexture::new(
+                "Stencil",
+                STENCIL_TEXTURE_FORMAT,
+                MTLResourceOptions::StorageModeMemoryless
+                    | MTLResourceOptions::HazardTrackingModeUntracked,
+                MTLTextureUsage::RenderTarget,
+            ),
             device,
             library,
         }
@@ -216,9 +253,18 @@ impl RendererDelgate for Delegate {
                 ),
             ],
             (depth_tx, 1., MTLLoadAction::Clear, MTLStoreAction::DontCare),
-            NoStencil,
-            &self.depth_state,
-            MTLCullMode::None,
+            (
+                self.stencil.texture(),
+                STENCIL_VALUE_CLEAR,
+                MTLLoadAction::Clear,
+                MTLStoreAction::DontCare,
+            ),
+            (
+                &self.depth_write_less_stencil_write_always,
+                STENCIL_VALUE_GBUFFER,
+                STENCIL_VALUE_GBUFFER,
+            ),
+            MTLCullMode::Back,
             &[&HeapUsage(
                 &self.model.heap,
                 MTLRenderStages::Vertex | MTLRenderStages::Fragment,
@@ -243,12 +289,14 @@ impl RendererDelgate for Delegate {
                         draw.vertex_count,
                     );
                 }
-                // TODO: Need a depth/stencil strategy so lighting does NOT run on every pixel (ex. bg)
-                // - Look at the Apple Deferred Lighting sample.
                 p.into_subpass(
                     "Lighting",
                     &self.lighting_pipeline,
-                    Some(&self.depth_state_nowrite_allow_less),
+                    Some((
+                        &self.depth_keep_always_stencil_keep_equal,
+                        STENCIL_VALUE_GBUFFER,
+                        STENCIL_VALUE_GBUFFER,
+                    )),
                     None,
                     |p| {
                         let light_pos_in_camera_space = self.camera.get_world_to_camera_transform()
@@ -267,20 +315,30 @@ impl RendererDelgate for Delegate {
                             0,
                             3,
                         );
-                        p.into_subpass("Draw Light", &self.light_pipeline, None, None, |p| {
-                            p.draw_primitives_with_binds(
-                                light_vertex_binds {
-                                    camera: Bind::Value(&self.camera.projected_space),
-                                    light_pos: Bind::Value(
-                                        &self.light.projected_space.position_world,
-                                    ),
-                                },
-                                NoBinds,
-                                MTLPrimitiveType::Point,
-                                0,
-                                1,
-                            )
-                        });
+                        p.into_subpass(
+                            "Draw Light",
+                            &self.light_pipeline,
+                            Some((
+                                &self.depth_keep_less_stencil_keep_always,
+                                STENCIL_VALUE_GBUFFER,
+                                STENCIL_VALUE_GBUFFER,
+                            )),
+                            None,
+                            |p| {
+                                p.draw_primitives_with_binds(
+                                    light_vertex_binds {
+                                        camera: Bind::Value(&self.camera.projected_space),
+                                        light_pos: Bind::Value(
+                                            &self.light.projected_space.position_world,
+                                        ),
+                                    },
+                                    NoBinds,
+                                    MTLPrimitiveType::Point,
+                                    0,
+                                    1,
+                                )
+                            },
+                        );
                     },
                 );
             },
@@ -313,6 +371,9 @@ impl RendererDelgate for Delegate {
             self.needs_render = true;
         }
         if self.depth.on_event(event, &self.device) {
+            self.needs_render = true;
+        }
+        if self.stencil.on_event(event, &self.device) {
             self.needs_render = true;
         }
     }
