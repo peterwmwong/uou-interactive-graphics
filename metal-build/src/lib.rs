@@ -205,6 +205,7 @@ fn compile_shaders<P: AsRef<Path>>(metal_shaders_file: P) {
         "-frecord-sources",
         "-o",
         &shaders_metallib_path,
+        "-std=metal3.0",
         &shaders_air_path,
     ]));
 
